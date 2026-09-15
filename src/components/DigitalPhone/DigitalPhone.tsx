@@ -252,6 +252,40 @@ export const DigitalPhone: React.FC = () => {
     };
   }, [analyser, isMuted]);
 
+  // Helper to broadcast phone signals (calls and SMS) across local tabs and Supabase network
+  const sendPhoneSignal = (payload: any) => {
+    try {
+      const localChan = new BroadcastChannel('wd_phone_channel');
+      localChan.postMessage(payload);
+      localChan.close();
+    } catch {}
+
+    const sbClient = payClient || posClient;
+    if (sbClient) {
+      try {
+        sbClient.channel('wd_phone_signals').send({
+          type: 'broadcast',
+          event: 'phone_signal',
+          payload
+        }).catch(() => {});
+      } catch {}
+    }
+  };
+
+  // Ringtone sound effect loop during active dialing or incoming calls
+  useEffect(() => {
+    let ringInterval: any = null;
+    if (callState === 'calling' || callState === 'incoming') {
+      try { AudioFX.bell(); } catch {}
+      ringInterval = setInterval(() => {
+        try { AudioFX.bell(); } catch {}
+      }, 1800);
+    }
+    return () => {
+      if (ringInterval) clearInterval(ringInterval);
+    };
+  }, [callState]);
+
   const startLiveCall = async (partnerId: string, partnerName: string, partnerPhone: string, partnerRole?: string) => {
     playClick();
     setCallingContact({ name: partnerName, phone: partnerPhone, role: partnerRole || 'Bellen...' });
@@ -266,20 +300,16 @@ export const DigitalPhone: React.FC = () => {
       ...prev.slice(0, 9)
     ]);
 
-    try { AudioFX.bell(); } catch {}
     await requestMicAccess();
 
-    try {
-      const channel = new BroadcastChannel('wd_phone_channel');
-      channel.postMessage({
-        type: 'CALL_DIAL',
-        fromId: myId,
-        fromName: myName,
-        fromPhone: myPhone,
-        toId: partnerId
-      });
-      channel.close();
-    } catch {}
+    sendPhoneSignal({
+      type: 'CALL_DIAL',
+      fromId: myId,
+      fromName: myName,
+      fromPhone: myPhone,
+      fromRole: myRole,
+      toId: partnerId
+    });
   };
 
   const startCall = async (name: string, phone: string, role?: string) => {
@@ -288,7 +318,6 @@ export const DigitalPhone: React.FC = () => {
     setCallState('calling');
     setCallTimer(0);
 
-    try { AudioFX.bell(); } catch {}
     await requestMicAccess();
 
     setTimeout(() => {
@@ -305,15 +334,13 @@ export const DigitalPhone: React.FC = () => {
     if (callIntervalRef.current) {
       clearInterval(callIntervalRef.current);
     }
-    try {
-      const channel = new BroadcastChannel('wd_phone_channel');
-      channel.postMessage({
+    if (callPartnerId) {
+      sendPhoneSignal({
         type: 'CALL_HANGUP',
         fromId: myId,
         toId: callPartnerId
       });
-      channel.close();
-    } catch {}
+    }
     setCallState('idle');
     setCallTimer(0);
     setCallingContact(null);
@@ -351,139 +378,159 @@ export const DigitalPhone: React.FC = () => {
     localStorage.setItem('wd_phone_sms_history', JSON.stringify(updatedContacts));
   };
 
-  // Synchronous Cross-Tab Real-Time SMS and Calling Protocol
+  // Synchronous Cross-Tab & Supabase Real-Time Phone Signals Protocol (SMS + Calling)
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const phoneChannel = new BroadcastChannel('wd_phone_channel');
-      phoneChannel.onmessage = (event) => {
-        if (!event.data) return;
 
-        const { type } = event.data;
+    const processSignal = (data: any) => {
+      if (!data || !data.type) return;
 
-        // 1. REAL-TIME SMS PROTOCOL
-        if (type === 'SMS_RECEIVED') {
-          const { senderId, senderName, text, targetId, avatar, role } = event.data;
-          
-          // Only process if it is sent to me
-          if (targetId !== myId) return;
+      const { type } = data;
 
-          setContacts(prev => {
-            const existing = prev.find(c => c.id === senderId);
-            const now = new Date();
-            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-            const newMsg: SMSMessage = {
-              id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
-              sender: 'them',
-              text,
-              timestamp: timeStr,
-              read: false
+      // 1. REAL-TIME SMS PROTOCOL
+      if (type === 'SMS_RECEIVED') {
+        const { senderId, senderName, text, targetId, avatar, role } = data;
+        
+        // Only process if it is sent to me
+        if (targetId !== myId) return;
+
+        setContacts(prev => {
+          const existing = prev.find(c => c.id === senderId);
+          const now = new Date();
+          const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+          const newMsg: SMSMessage = {
+            id: Date.now().toString() + '_' + Math.random().toString(36).substring(2, 5),
+            sender: 'them',
+            text,
+            timestamp: timeStr,
+            read: false
+          };
+
+          let nextContacts: SMSContact[] = [];
+
+          if (existing) {
+            nextContacts = prev.map(c => {
+              if (c.id === senderId) {
+                return {
+                  ...c,
+                  messages: [...c.messages, newMsg],
+                  unread: activeContactId !== senderId
+                };
+              }
+              return c;
+            });
+          } else {
+            const newContact: SMSContact = {
+              id: senderId,
+              name: senderName,
+              avatar: avatar || '👤',
+              role: role || 'Collegiaal Contact',
+              phone: '06-LIVE-CHAT',
+              unread: activeContactId !== senderId,
+              messages: [newMsg],
+              isCustom: true
             };
+            nextContacts = [...prev, newContact];
+          }
 
-            let nextContacts: SMSContact[] = [];
+          saveSmsToStorage(nextContacts);
+          return nextContacts;
+        });
 
-            if (existing) {
-              nextContacts = prev.map(c => {
-                if (c.id === senderId) {
-                  return {
-                    ...c,
-                    messages: [...c.messages, newMsg],
-                    unread: activeContactId !== senderId
-                  };
-                }
-                return c;
-              });
-            } else {
-              const newContact: SMSContact = {
-                id: senderId,
-                name: senderName,
-                avatar: avatar || '👤',
-                role: role || 'Collegiaal Contact',
-                phone: '06-LIVE-CHAT',
-                unread: activeContactId !== senderId,
-                messages: [newMsg],
-                isCustom: true
-              };
-              nextContacts = [...prev, newContact];
-            }
-
-            saveSmsToStorage(nextContacts);
-            return nextContacts;
+        if (!isOpen || activeApp !== 'messages' || activeContactId !== senderId) {
+          setNotification({
+            title: `SMS van ${senderName}`,
+            body: text
           });
-
-          if (!isOpen || activeApp !== 'messages' || activeContactId !== senderId) {
-            setNotification({
-              title: `SMS van ${senderName}`,
-              body: text
-            });
-            try { AudioFX.bell(); } catch {}
-          }
+          try { AudioFX.bell(); } catch {}
         }
+      }
 
-        // 2. REAL-TIME CALLING PROTOCOL
-        // 2.1 CALL_DIAL: Someone is calling me
-        if (type === 'CALL_DIAL') {
-          const { fromId, fromName, fromPhone, toId } = event.data;
-          
-          if (toId === myId) {
-            // I am being called!
-            setCallState('incoming');
-            setCallingContact({
-              name: fromName,
-              phone: fromPhone,
-              role: 'Inkomende oproep'
-            });
-            setCallPartnerId(fromId);
-            setActiveApp('phone'); // Switch to phone app to show incoming call overlay
-            setIsOpen(true); // Open the phone so they see it
-            try { AudioFX.bell(); } catch {}
-          }
+      // 2. REAL-TIME CALLING PROTOCOL
+      // 2.1 CALL_DIAL: Someone is calling me
+      if (type === 'CALL_DIAL') {
+        const { fromId, fromName, fromPhone, fromRole, toId } = data;
+        
+        if (toId === myId || toId.toLowerCase() === myId.toLowerCase()) {
+          // I am being called!
+          setCallState('incoming');
+          setCallingContact({
+            name: fromName,
+            phone: fromPhone || ('06-' + fromId),
+            role: fromRole || 'Inkomende oproep'
+          });
+          setCallPartnerId(fromId);
+          setActiveApp('phone'); // Switch to phone app to show incoming call overlay
+          setIsOpen(true); // Open the phone so they see it
         }
+      }
 
-        // 2.2 CALL_ACCEPT: Caller receives acceptance from recipient
-        if (type === 'CALL_ACCEPT') {
-          const { fromId, toId } = event.data;
-          if (toId === myId && callPartnerId === fromId) {
-            setCallState('connected');
-            setCallTimer(0);
-            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
-            callIntervalRef.current = setInterval(() => {
-              setCallTimer(prev => prev + 1);
-            }, 1000);
-            try { AudioFX.bell(); } catch {}
-          }
+      // 2.2 CALL_ACCEPT: Caller receives acceptance from recipient
+      if (type === 'CALL_ACCEPT') {
+        const { fromId, toId } = data;
+        if (toId === myId && (callPartnerId === fromId || !callPartnerId)) {
+          setCallPartnerId(fromId);
+          setCallState('connected');
+          setCallTimer(0);
+          if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+          callIntervalRef.current = setInterval(() => {
+            setCallTimer(prev => prev + 1);
+          }, 1000);
         }
+      }
 
-        // 2.3 CALL_DECLINE: Caller or recipient gets rejected
-        if (type === 'CALL_DECLINE') {
-          const { fromId, toId } = event.data;
-          if (toId === myId && callPartnerId === fromId) {
-            setCallState('idle');
-            setCallTimer(0);
-            setCallingContact(null);
-            setCallPartnerId(null);
-            stopMicAccess();
-            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
-            alert('Gesprek geweigerd of beëindigd door de ander.');
-          }
+      // 2.3 CALL_DECLINE: Caller or recipient gets rejected
+      if (type === 'CALL_DECLINE') {
+        const { fromId, toId } = data;
+        if (toId === myId) {
+          setCallState('idle');
+          setCallTimer(0);
+          setCallingContact(null);
+          setCallPartnerId(null);
+          stopMicAccess();
+          if (callIntervalRef.current) clearInterval(callIntervalRef.current);
         }
+      }
 
-        // 2.4 CALL_HANGUP: Partner hung up
-        if (type === 'CALL_HANGUP') {
-          const { fromId, toId } = event.data;
-          if (toId === myId && callPartnerId === fromId) {
-            setCallState('idle');
-            setCallTimer(0);
-            setCallingContact(null);
-            setCallPartnerId(null);
-            stopMicAccess();
-            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
-          }
+      // 2.4 CALL_HANGUP: Partner hung up
+      if (type === 'CALL_HANGUP') {
+        const { fromId, toId } = data;
+        if (toId === myId) {
+          setCallState('idle');
+          setCallTimer(0);
+          setCallingContact(null);
+          setCallPartnerId(null);
+          stopMicAccess();
+          if (callIntervalRef.current) clearInterval(callIntervalRef.current);
         }
-      };
-      return () => phoneChannel.close();
+      }
+    };
+
+    // Listen via local BroadcastChannel
+    let localChan: BroadcastChannel | null = null;
+    try {
+      localChan = new BroadcastChannel('wd_phone_channel');
+      localChan.onmessage = (event) => processSignal(event.data);
     } catch {}
-  }, [isOpen, activeApp, activeContactId, myId, callPartnerId]);
+
+    // Listen via Supabase Realtime Broadcast channel
+    const sbClient = payClient || posClient;
+    let sbSignalChan: any = null;
+    if (sbClient) {
+      try {
+        sbSignalChan = sbClient.channel('wd_phone_signals')
+          .on('broadcast', { event: 'phone_signal' }, ({ payload }: any) => {
+            processSignal(payload);
+          })
+          .subscribe();
+      } catch {}
+    }
+
+    return () => {
+      if (localChan) localChan.close();
+      if (sbSignalChan && sbClient) sbClient.removeChannel(sbSignalChan);
+    };
+  }, [payClient, posClient, isOpen, activeApp, activeContactId, myId, callPartnerId]);
 
   // Supabase phone_messages Database Sync & Realtime Subscription
   useEffect(() => {
@@ -644,20 +691,16 @@ export const DigitalPhone: React.FC = () => {
       }).then(() => {}).catch(() => {});
     }
 
-    // 2. Broadcast SMS to other tabs / devices via unified channel
-    try {
-      const channel = new BroadcastChannel('wd_phone_channel');
-      channel.postMessage({
-        type: 'SMS_RECEIVED',
-        senderId: myId,
-        senderName: myName,
-        text,
-        targetId: contactId,
-        avatar: myAvatar,
-        role: myRole
-      });
-      channel.close();
-    } catch {}
+    // 2. Broadcast SMS to other tabs / devices via dual-channel (BroadcastChannel + Supabase)
+    sendPhoneSignal({
+      type: 'SMS_RECEIVED',
+      senderId: myId,
+      senderName: myName,
+      text,
+      targetId: contactId,
+      avatar: myAvatar,
+      role: myRole
+    });
   };
 
   // Delete/Clear all messages for a contact
@@ -1641,15 +1684,13 @@ export const DigitalPhone: React.FC = () => {
                           <button
                             onClick={async () => {
                               playClick();
-                              try {
-                                const channel = new BroadcastChannel('wd_phone_channel');
-                                channel.postMessage({
+                              if (callPartnerId) {
+                                sendPhoneSignal({
                                   type: 'CALL_DECLINE',
                                   fromId: myId,
                                   toId: callPartnerId
                                 });
-                                channel.close();
-                              } catch {}
+                              }
                               setCallState('idle');
                               setCallingContact(null);
                               setCallPartnerId(null);
@@ -1665,15 +1706,13 @@ export const DigitalPhone: React.FC = () => {
                             onClick={async () => {
                               playClick();
                               await requestMicAccess();
-                              try {
-                                const channel = new BroadcastChannel('wd_phone_channel');
-                                channel.postMessage({
+                              if (callPartnerId) {
+                                sendPhoneSignal({
                                   type: 'CALL_ACCEPT',
                                   fromId: myId,
                                   toId: callPartnerId
                                 });
-                                channel.close();
-                              } catch {}
+                              }
                               setCallState('connected');
                               setCallTimer(0);
                               if (callIntervalRef.current) clearInterval(callIntervalRef.current);
