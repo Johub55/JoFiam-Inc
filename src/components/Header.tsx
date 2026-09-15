@@ -152,18 +152,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             <span>WerkPay Bank</span>
           </button>
 
-          <button
-            onClick={() => setAppMode('split')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-              appMode === 'split'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-            }`}
-            title="Kassa links + WerkPay rechts tegelijk"
-          >
-            <Columns className="w-4 h-4" />
-            <span className="hidden md:inline">Split Testmodus</span>
-          </button>
+
         </div>
 
         {/* Right Status Bars: Supabase Live Dot & User Status */}

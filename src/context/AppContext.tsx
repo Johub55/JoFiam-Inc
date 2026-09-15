@@ -112,6 +112,7 @@ interface AppContextType {
   // Product & Inventory Actions
   createProduct: (product: Omit<Product, 'id'>) => Promise<void>;
   updateProduct: (product: Product) => Promise<void>;
+  deleteProduct: (id: number) => Promise<void>;
   toggleProductSale: (id: number) => Promise<void>;
   resetProductsToDefault: () => void;
   buyInventory: (id: number, amount: number) => void;
@@ -143,6 +144,7 @@ interface AppContextType {
   transferWerkPay: (to: string, amount: number, note?: string) => Promise<{ success: boolean; message: string }>;
   changeWerkPayPin: (newPin: string) => Promise<{ success: boolean; message: string }>;
   saveBankAccount: (acc: Partial<BankAccount> & { id?: number | string }) => Promise<void>;
+  deleteBankAccount: (id: number | string) => Promise<void>;
   quickMoneyAccount: (id: number | string, delta: number) => Promise<void>;
 
   // Receipt Modal State
@@ -1172,10 +1174,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const updateOrderItemStage = async (orderNum: number, itemIndex: number, stage: OrderItemStage) => {
     const now = Date.now();
-    let nextItemsToSave: any[] | null = null;
-    setOrders(prev => prev.map(o => {
-      if (o.no !== orderNum) return o;
-      const nextItems = [...o.items];
+    let nextItems: any[] | null = null;
+
+    setOrders(prev => {
+      const targetOrder = prev.find(o => o.no === orderNum);
+      if (!targetOrder) return prev;
+
+      nextItems = [...targetOrder.items];
       if (nextItems[itemIndex]) {
         nextItems[itemIndex] = {
           ...nextItems[itemIndex],
@@ -1183,32 +1188,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           done: stage === 'klaar'
         };
       }
-      nextItemsToSave = nextItems;
-      return { ...o, items: nextItems, updatedAt: now };
-    }));
 
-    if (nextItemsToSave) {
-      recordLocalOrderMutation(orderNum, { items: nextItemsToSave });
-      broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItemsToSave, updatedAt: now });
-      if (posClient) {
+      // Sync to LocalStorage inside the state updater so we are guaranteed to have the correct state
+      const currentStored = localStorage.getItem('wd_orders');
+      if (currentStored) {
         try {
-          const { error } = await posClient.from('orders').update({ items: nextItemsToSave }).eq('order_no', orderNum);
-          if (error) {
-            console.warn('⚠️ Supabase order item stage update niet opgeslagen:', error.message);
-          }
-        } catch (err) {
-          console.warn('Supabase order item stage update error:', err);
+          const parsed: Order[] = JSON.parse(currentStored);
+          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          localStorage.setItem('wd_orders', JSON.stringify(updated));
+        } catch {}
+      }
+
+      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+    });
+
+    // Run this in the next microtask or slightly deferred so we have the calculated nextItems
+    setTimeout(async () => {
+      if (nextItems) {
+        recordLocalOrderMutation(orderNum, { items: nextItems });
+        broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+        if (posClient) {
+          try {
+            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+          } catch {}
         }
       }
-    }
+    }, 10);
   };
 
   const toggleOrderItemDone = async (orderNum: number, itemIndex: number) => {
     const now = Date.now();
-    let nextItemsToSave: any[] | null = null;
-    setOrders(prev => prev.map(o => {
-      if (o.no !== orderNum) return o;
-      const nextItems = [...o.items];
+    let nextItems: any[] | null = null;
+
+    setOrders(prev => {
+      const targetOrder = prev.find(o => o.no === orderNum);
+      if (!targetOrder) return prev;
+
+      nextItems = [...targetOrder.items];
       if (nextItems[itemIndex]) {
         const nextDone = !nextItems[itemIndex].done;
         nextItems[itemIndex] = {
@@ -1217,24 +1233,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           stage: nextDone ? 'klaar' : 'wachten'
         };
       }
-      nextItemsToSave = nextItems;
-      return { ...o, items: nextItems, updatedAt: now };
-    }));
 
-    if (nextItemsToSave) {
-      recordLocalOrderMutation(orderNum, { items: nextItemsToSave });
-      broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItemsToSave, updatedAt: now });
-      if (posClient) {
+      const currentStored = localStorage.getItem('wd_orders');
+      if (currentStored) {
         try {
-          const { error } = await posClient.from('orders').update({ items: nextItemsToSave }).eq('order_no', orderNum);
-          if (error) {
-            console.warn('⚠️ Supabase order items update fout:', error.message);
-          }
-        } catch (err) {
-          console.warn('Supabase order items update error:', err);
+          const parsed: Order[] = JSON.parse(currentStored);
+          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          localStorage.setItem('wd_orders', JSON.stringify(updated));
+        } catch {}
+      }
+
+      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+    });
+
+    setTimeout(async () => {
+      if (nextItems) {
+        recordLocalOrderMutation(orderNum, { items: nextItems });
+        broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+        if (posClient) {
+          try {
+            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+          } catch {}
         }
       }
-    }
+    }, 10);
   };
 
   const toggleOrderPrio = async (orderNum: number) => {
@@ -1251,29 +1273,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const setAllOrderItemsDone = async (orderNum: number, done: boolean) => {
     const now = Date.now();
-    let nextItemsToSave: any[] | null = null;
+    let nextItems: any[] | null = null;
     const nextStage: OrderItemStage = done ? 'klaar' : 'wachten';
-    setOrders(prev => prev.map(o => {
-      if (o.no !== orderNum) return o;
-      const nextItems = o.items.map(it => ({ ...it, done, stage: nextStage }));
-      nextItemsToSave = nextItems;
-      return { ...o, items: nextItems, updatedAt: now };
-    }));
 
-    if (nextItemsToSave) {
-      recordLocalOrderMutation(orderNum, { items: nextItemsToSave });
-      broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItemsToSave, updatedAt: now });
-      if (posClient) {
+    setOrders(prev => {
+      const targetOrder = prev.find(o => o.no === orderNum);
+      if (!targetOrder) return prev;
+
+      nextItems = targetOrder.items.map(it => ({ ...it, done, stage: nextStage }));
+
+      const currentStored = localStorage.getItem('wd_orders');
+      if (currentStored) {
         try {
-          const { error } = await posClient.from('orders').update({ items: nextItemsToSave }).eq('order_no', orderNum);
-          if (error) {
-            console.warn('⚠️ Supabase all order items update fout:', error.message);
-          }
-        } catch (err) {
-          console.warn('Supabase all order items update error:', err);
+          const parsed: Order[] = JSON.parse(currentStored);
+          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          localStorage.setItem('wd_orders', JSON.stringify(updated));
+        } catch {}
+      }
+
+      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+    });
+
+    setTimeout(async () => {
+      if (nextItems) {
+        recordLocalOrderMutation(orderNum, { items: nextItems });
+        broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+        if (posClient) {
+          try {
+            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+          } catch {}
         }
       }
-    }
+    }, 10);
   };
 
   const cancelOrder = async (orderNum: number) => {
@@ -1590,10 +1621,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const saveBankAccount = async (acc: Partial<BankAccount> & { id?: number | string }) => {
+    let updatedAcc: BankAccount | null = null;
     if (acc.id) {
-      setBankAccounts(prev => prev.map(a => a.id === acc.id ? { ...a, ...acc } as BankAccount : a));
+      setBankAccounts(prev => {
+        const next = prev.map(a => {
+          if (a.id === acc.id) {
+            updatedAcc = { ...a, ...acc } as BankAccount;
+            return updatedAcc;
+          }
+          return a;
+        });
+        return next;
+      });
       if (currentBankAccount && currentBankAccount.id === acc.id) {
         setCurrentBankAccount(prev => prev ? { ...prev, ...acc } as BankAccount : null);
+      }
+
+      // Sync with Supabase
+      const client = payClient || posClient;
+      if (client && updatedAcc) {
+        try {
+          const dbPayload = {
+            username: (updatedAcc as BankAccount).username,
+            account_holder: (updatedAcc as BankAccount).account_holder,
+            card_uid: (updatedAcc as BankAccount).card_uid,
+            pin_code: (updatedAcc as BankAccount).pin_code,
+            balance: Number((updatedAcc as BankAccount).balance),
+            is_admin: Boolean((updatedAcc as BankAccount).is_admin)
+          };
+          if (typeof (updatedAcc as BankAccount).id === 'number' && ((updatedAcc as BankAccount).id as number) < 10000000000) {
+            await client.from('bank_accounts').update(dbPayload).eq('id', (updatedAcc as BankAccount).id);
+          } else {
+            await client.from('bank_accounts').update(dbPayload).eq('username', (updatedAcc as BankAccount).username);
+          }
+        } catch {}
       }
     } else {
       const newAcc: BankAccount = {
@@ -1607,7 +1668,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         is_admin: Boolean(acc.is_admin)
       };
       setBankAccounts(prev => [...prev, newAcc]);
+
+      // Sync with Supabase
+      const client = payClient || posClient;
+      if (client) {
+        try {
+          const { data, error } = await client.from('bank_accounts').insert({
+            username: newAcc.username,
+            password: newAcc.password,
+            account_holder: newAcc.account_holder,
+            card_uid: newAcc.card_uid,
+            pin_code: newAcc.pin_code,
+            balance: newAcc.balance,
+            is_admin: newAcc.is_admin
+          }).select('*');
+          if (!error && data && data.length > 0) {
+            const dbAcc = data[0];
+            setBankAccounts(prev => prev.map(a => a.username === newAcc.username ? { ...a, id: dbAcc.id } : a));
+          }
+        } catch {}
+      }
     }
+    // Sync cross-tab
+    setTimeout(() => {
+      broadcastSync('SYNC_BANK_ACCOUNTS', bankAccounts);
+    }, 200);
+  };
+
+  const deleteBankAccount = async (id: number | string) => {
+    const accountToDelete = bankAccounts.find(a => a.id === id);
+    if (!accountToDelete) return;
+
+    setBankAccounts(prev => prev.filter(a => a.id !== id));
+    if (currentBankAccount && currentBankAccount.id === id) {
+      setCurrentBankAccount(null);
+    }
+
+    const client = payClient || posClient;
+    if (client) {
+      try {
+        if (typeof id === 'number' && id < 10000000000) {
+          await client.from('bank_accounts').delete().eq('id', id);
+        } else {
+          await client.from('bank_accounts').delete().eq('username', accountToDelete.username);
+        }
+      } catch {}
+    }
+    // Sync cross-tab
+    setTimeout(() => {
+      broadcastSync('SYNC_BANK_ACCOUNTS', bankAccounts.filter(a => a.id !== id));
+    }, 200);
   };
 
   const quickMoneyAccount = async (id: number | string, delta: number) => {
@@ -1832,6 +1942,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const deleteProduct = async (id: number) => {
+    setProducts(prev => prev.filter(x => x.id !== id));
+    if (posClient) {
+      try {
+        await posClient.from('products').delete().eq('id', id);
+      } catch {}
+    }
+  };
+
   const toggleProductSale = async (id: number) => {
     setProducts(prev => prev.map(p => p.id === id ? { ...p, onSale: !p.onSale } : p));
   };
@@ -2008,6 +2127,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         rejectCashRequest,
         createProduct,
         updateProduct,
+        deleteProduct,
         toggleProductSale,
         resetProductsToDefault,
         buyInventory,
@@ -2033,6 +2153,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         transferWerkPay,
         changeWerkPayPin,
         saveBankAccount,
+        deleteBankAccount,
         quickMoneyAccount,
         activeReceiptOrder,
         setActiveReceiptOrder,

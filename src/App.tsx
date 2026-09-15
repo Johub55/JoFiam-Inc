@@ -15,6 +15,7 @@ import { ManagerAccountsScreen } from './components/WerkPayBank/ManagerAccountsS
 import { StaffCashRequestNotifier } from './components/WerkdonaldsPOS/StaffCashRequestNotifier';
 import { SupabaseModal } from './components/SupabaseModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
+import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -95,6 +96,7 @@ const MainLayout: React.FC = () => {
         <SupabaseModal onClose={() => setAppMode('pos')} />
       )}
       <GitHubExportModal isOpen={showGithubModal} onClose={() => setShowGithubModal(false)} />
+      <DigitalPhone />
     </div>
   );
 };

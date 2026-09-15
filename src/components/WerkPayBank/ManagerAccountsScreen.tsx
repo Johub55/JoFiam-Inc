@@ -21,6 +21,7 @@ export const ManagerAccountsScreen: React.FC = () => {
   const { 
     bankAccounts, 
     saveBankAccount, 
+    deleteBankAccount,
     quickMoneyAccount, 
     currentBankAccount 
   } = useApp();
@@ -234,6 +235,17 @@ export const ManagerAccountsScreen: React.FC = () => {
                         title="Bewerken"
                       >
                         <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Weet je zeker dat je de bankrekening van ${acc.account_holder} (@${acc.username}) wilt verwijderen?`)) {
+                            deleteBankAccount(acc.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-950/60 text-rose-400 hover:text-rose-200 border border-slate-800 hover:border-rose-800 transition"
+                        title="Verwijder account"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>

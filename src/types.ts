@@ -26,6 +26,7 @@ export interface CartItem {
 
 export type OrderStatus =
   | 'wachten'
+  | 'bereiden'
   | 'oven_grill'
   | 'frituren'
   | 'inpakken'

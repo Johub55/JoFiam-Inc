@@ -430,13 +430,7 @@ VALUES
   ('joas', 'admin123', 'Joas Thorig', '4129 8831 5504 9012', '0000', 999999.00, TRUE),
   ('klant01', 'klant123', 'Daan de Vries', '5542 1198 3320 4411', '1234', 45.50, FALSE),
   ('emma', 'emma123', 'Emma Bakker', '4890 2214 7731 9904', '4321', 28.75, FALSE)
-ON CONFLICT (username) DO UPDATE SET
-  password = EXCLUDED.password,
-  account_holder = EXCLUDED.account_holder,
-  card_uid = EXCLUDED.card_uid,
-  pin_code = EXCLUDED.pin_code,
-  balance = EXCLUDED.balance,
-  is_admin = EXCLUDED.is_admin;
+ON CONFLICT (username) DO NOTHING;
 
 -- 6.2 POS Medewerkers
 INSERT INTO public.pos_users (name, username, password, perms, is_admin)

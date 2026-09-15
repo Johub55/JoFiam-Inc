@@ -32,7 +32,8 @@ export const OrderTrackingScreen: React.FC = () => {
     setPosScreen,
     getUserOrders,
     forceSyncNow,
-    syncStatus
+    syncStatus,
+    updateOrderStatus
   } = useApp();
 
   const [hasPlayedChime, setHasPlayedChime] = useState<boolean>(false);
@@ -260,16 +261,43 @@ export const OrderTrackingScreen: React.FC = () => {
 
               <p className="text-xs sm:text-sm text-slate-300 mt-1.5 max-w-2xl leading-relaxed">
                 {isReady ? (
-                  <span>
-                    Meld je nu bij de afhaalbalie met bestelnummer <strong className="text-emerald-300 font-mono font-bold">#{order.no}</strong>. 
-                    {order.identifier ? ` Geregistreerd op: "${order.identifier}".` : ''} Eet smakelijk!
-                  </span>
+                  order.orderType === 'dine_in' ? (
+                    <span>
+                      Meld je nu bij de afhaalbalie om je bestelling op te halen om <strong className="text-emerald-300 font-bold">hier heerlijk op te eten</strong>! Vergeet je dienblad niet. Eet smakelijk!
+                    </span>
+                  ) : (
+                    <span>
+                      Meld je nu bij de afhaalbalie om je bestelling <strong className="text-emerald-300 font-bold">in te pakken en mee te nemen</strong>! Je tas staat klaar. Eet smakelijk!
+                    </span>
+                  )
                 ) : (
-                  <span>
-                    Onze koks werken momenteel aan je gerechten. Zodra alles klaar is, klinkt de omroep en verschijnt je nummer groen op het grote scherm.
-                  </span>
+                  order.orderType === 'dine_in' ? (
+                    <span>
+                      Neem alvast gezellig plaats aan een tafeltje. Onze koks bereiden je gerechten met zorg voor om <strong className="text-amber-300 font-bold">hier op te eten</strong>. We roepen je nummer om zodra het klaar is!
+                    </span>
+                  ) : (
+                    <span>
+                      Onze koks pakken je bestelling zo meteen stevig in voor <strong className="text-amber-300 font-bold">onderweg / meenemen</strong>. Zodra je tas klaarstaat bij de balie, roepen we je bestelnummer om!
+                    </span>
+                  )
                 )}
               </p>
+
+              {isReady && (
+                <div className="pt-4">
+                  <button
+                    onClick={async () => {
+                      if (window.confirm("Weet je zeker dat je je bestelling hebt afgehaald?")) {
+                        await updateOrderStatus(order.no, 'afgehaald');
+                      }
+                    }}
+                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center gap-2"
+                  >
+                    <PackageCheck className="w-4 h-4" />
+                    <span>Ik heb mijn bestelling afgehaald</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 

@@ -27,28 +27,16 @@ export const KITCHEN_STATUS_LIST: StatusMeta[] = [
     description: 'Nieuwe bestelling, wacht tot de chef begint'
   },
   {
-    id: 'oven_grill',
-    label: 'In de oven / grill',
-    shortLabel: 'Oven / Grill',
-    emoji: '🥩',
-    badgeBg: 'bg-orange-500/15',
-    badgeBorder: 'border-orange-500/30',
-    badgeText: 'text-orange-300',
-    buttonBg: 'bg-orange-500/20 text-orange-300 border-orange-500/40 hover:bg-orange-500/30',
-    dotColor: 'bg-orange-400',
-    description: 'Patties op de grill en broodjes in de oven geroosterd'
-  },
-  {
-    id: 'frituren',
-    label: 'Aan het frituren',
-    shortLabel: 'Frituren',
-    emoji: '🍟',
-    badgeBg: 'bg-yellow-500/15',
-    badgeBorder: 'border-yellow-500/30',
-    badgeText: 'text-yellow-300',
-    buttonBg: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 hover:bg-yellow-500/30',
-    dotColor: 'bg-yellow-400',
-    description: 'Frietjes, nuggets en crispy snacks in de friteuse'
+    id: 'bereiden',
+    label: 'In bereiding',
+    shortLabel: 'Bereiden',
+    emoji: '🧑‍🍳',
+    badgeBg: 'bg-amber-500/25',
+    badgeBorder: 'border-amber-500/40',
+    badgeText: 'text-amber-300',
+    buttonBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30',
+    dotColor: 'bg-amber-400',
+    description: 'De gerechten worden momenteel bereid in de keuken'
   },
   {
     id: 'inpakken',
@@ -90,8 +78,10 @@ export const KITCHEN_STATUS_LIST: StatusMeta[] = [
 
 export function getStatusMeta(status: OrderStatus): StatusMeta {
   if (status === 'new') return KITCHEN_STATUS_LIST[0]; // wachten
-  if (status === 'done') return KITCHEN_STATUS_LIST[4]; // klaar
-  if (status === 'archived') return KITCHEN_STATUS_LIST[5]; // afgehaald
+  if (status === 'oven_grill' || status === 'frituren' || status === 'bereiden') return KITCHEN_STATUS_LIST[1]; // bereiden
+  if (status === 'inpakken') return KITCHEN_STATUS_LIST[2]; // inpakken
+  if (status === 'done' || status === 'klaar') return KITCHEN_STATUS_LIST[3]; // klaar
+  if (status === 'archived' || status === 'afgehaald') return KITCHEN_STATUS_LIST[4]; // afgehaald
   const found = KITCHEN_STATUS_LIST.find(s => s.id === status);
   if (found) return found;
   return {
@@ -109,7 +99,7 @@ export function getStatusMeta(status: OrderStatus): StatusMeta {
 }
 
 export function isOrderInProgress(status: OrderStatus): boolean {
-  return status === 'new' || status === 'wachten' || status === 'oven_grill' || status === 'frituren' || status === 'inpakken';
+  return status === 'new' || status === 'wachten' || status === 'bereiden' || status === 'oven_grill' || status === 'frituren' || status === 'inpakken';
 }
 
 export function isOrderReady(status: OrderStatus): boolean {

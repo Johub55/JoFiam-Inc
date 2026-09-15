@@ -165,7 +165,16 @@ export const mergeOrders = (
   for (const exist of current) {
     if (!processedNos.has(exist.no)) {
       const deletedTime = recentlyDeletedOrders.get(exist.no);
-      if (!deletedTime || now - deletedTime >= 20000) {
+      if (deletedTime && now - deletedTime < 20000) {
+        continue; // Was recently deleted locally, skip it
+      }
+      
+      // If the order was created very recently (e.g. less than 15 seconds ago),
+      // it might be optimistic local-only and hasn't finished uploading to Supabase yet.
+      // Otherwise, if it is older, and we are connected/polling Supabase, and it's not in incoming,
+      // it has been deleted on another terminal/tab! So we should NOT keep it.
+      const isOptimistic = now - exist.timestamp < 15000;
+      if (isOptimistic) {
         result.push(exist);
       }
     }

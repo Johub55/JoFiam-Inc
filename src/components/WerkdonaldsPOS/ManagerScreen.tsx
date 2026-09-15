@@ -44,6 +44,7 @@ export const ManagerScreen: React.FC = () => {
     toggleCouponActive,
     createProduct,
     updateProduct,
+    deleteProduct,
     toggleProductSale,
     resetProductsToDefault,
     posUsers,
@@ -717,13 +718,24 @@ export const ManagerScreen: React.FC = () => {
                       {p.onSale ? '🔥 Actie Aan' : 'Uit'}
                     </button>
                   </td>
-                  <td className="p-2.5 text-right">
+                  <td className="p-2.5 text-right flex items-center justify-end gap-1">
                     <button
                       onClick={() => setEditingProduct({ ...p })}
-                      className="p-1 rounded text-slate-400 hover:text-amber-400"
+                      className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
                       title="Bewerken"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <Edit3 className="w-3.5 h-3.5 text-blue-400" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Weet je zeker dat je "${p.name}" wilt verwijderen?`)) {
+                          await deleteProduct(p.id);
+                        }
+                      }}
+                      className="p-1.5 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                      title="Verwijderen"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </td>
                 </tr>
