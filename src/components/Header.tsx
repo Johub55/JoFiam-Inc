@@ -43,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
     werkpayScreen,
     setWerkpayScreen,
     currentPosUser, 
+    canAccess,
     logoutPos,
     currentBankAccount,
     logoutWerkPay,
@@ -66,27 +67,27 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
   const cartItemCount = cart.reduce((sum, item) => sum + item.qty, 0);
   const [soundActive, setSoundActive] = useState<boolean>(AudioFX.isEnabled);
 
-  // Determine permissions
+  // Determine permissions using centralized canAccess
   const isCustomer = !currentPosUser || 
     currentPosUser.username === 'bestel_kassa' || 
     currentPosUser.username === 'klant' || 
-    (!currentPosUser.is_admin && !currentPosUser.perms?.some(p => ['kitchen', 'voorraad', 'manager'].includes(p)));
+    (!canAccess('kitchen') && !canAccess('voorraad') && !canAccess('manager'));
 
-  const canAccessKitchen = Boolean(currentPosUser && (currentPosUser.is_admin || currentPosUser.perms?.includes('kitchen')));
-  const canAccessInventory = Boolean(currentPosUser && (currentPosUser.is_admin || currentPosUser.perms?.includes('voorraad')));
-  const canAccessManager = Boolean(currentPosUser && (currentPosUser.is_admin || currentPosUser.perms?.includes('manager')));
+  const canAccessKitchen = canAccess('kitchen');
+  const canAccessInventory = canAccess('voorraad');
+  const canAccessManager = canAccess('manager');
 
   const handleSelectPosScreen = (screen: PosScreenType) => {
     if (screen === 'keuken' && !canAccessKitchen) {
-      alert('Geen toegang tot de keuken. Als klant heb je alleen toegang tot het bestel- en afhaalscherm.');
+      alert('Geen toegang tot de keuken. Als je dit recht niet hebt mag je dit scherm niet openen.');
       return;
     }
     if (screen === 'voorraad' && !canAccessInventory) {
-      alert('Geen toegang tot de voorraad. Als klant heb je alleen toegang tot het bestel- en afhaalscherm.');
+      alert('Geen toegang tot de voorraad. Als je dit recht niet hebt mag je dit scherm niet openen.');
       return;
     }
     if (screen === 'manager' && !canAccessManager) {
-      alert('Geen toegang tot het manager scherm. Alleen managers en admins kunnen dit scherm openen.');
+      alert('Geen toegang tot het manager scherm. Alleen managers met het manager-recht kunnen dit scherm openen.');
       return;
     }
     setPosScreen(screen);

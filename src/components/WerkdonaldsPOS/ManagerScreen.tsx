@@ -19,7 +19,10 @@ import {
   X,
   Printer,
   Lock,
-  Check
+  Check,
+  Radio,
+  Sliders,
+  AlertCircle
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -46,8 +49,12 @@ export const ManagerScreen: React.FC = () => {
     posUsers,
     createPosUser,
     updatePosUser,
-    deletePosUser
+    deletePosUser,
+    canAccess
   } = useApp();
+
+  // Active Manager Tab: 'dashboard' (General/Finance/Products/Coupons) | 'ops' (Manager Operations & Controls)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ops'>('dashboard');
 
   // Z-Report Modal
   const [showZReport, setShowZReport] = useState<boolean>(false);
@@ -257,6 +264,38 @@ export const ManagerScreen: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Subtabs within Manager: Algemeen vs Ops */}
+          <div className="flex bg-slate-900 border border-slate-800 p-1 rounded-xl">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                activeTab === 'dashboard'
+                  ? 'bg-amber-400 text-slate-950 shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Algemeen Overzicht</span>
+            </button>
+
+            {canAccess('manager') && (
+              <button
+                onClick={() => setActiveTab('ops')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  activeTab === 'ops'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sliders className="w-3.5 h-3.5 text-purple-300" />
+                <span>Ops Beheer</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 border border-purple-500/40 text-purple-300 font-mono">
+                  Manager
+                </span>
+              </button>
+            )}
+          </div>
+
           <button
             onClick={() => setShowZReport(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
@@ -274,6 +313,157 @@ export const ManagerScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {activeTab === 'ops' ? (
+        /* Ops Tab - Dedicated Operations & Store Controls for Manager */
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-purple-950/40 via-slate-900 to-slate-900 border border-purple-500/30 rounded-2xl p-5 shadow-xl">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                  <Sliders className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <span>Operations &amp; Store Master Control (Ops)</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+                      Exclusief voor Manager
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Live operationele schakelaars, noodknoppen, kassa-veiligheid en restaurant status.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Operational Toggles */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <Power className="w-4 h-4 text-rose-400" />
+                    <span>Noodstop Kassa (Bestelstop)</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Blokkeer direct alle nieuwe bestellingen en afrekeningen bij extreme drukte of incidenten.
+                  </p>
+                </div>
+                <button
+                  onClick={toggleOrderStop}
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition ${
+                    orderStopActive 
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 animate-pulse' 
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {orderStopActive ? '⛔ BESTELSTOP ACTIEF' : '🟢 Kassa Open'}
+                </button>
+              </div>
+              <div className="text-[11px] text-slate-500 border-t border-slate-800/80 pt-2 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Huidige status: {orderStopActive ? 'Klanten kunnen geen bestelling afronden.' : 'Bestellingen worden direct doorgestuurd naar de keuken.'}</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <Radio className="w-4 h-4 text-blue-400" />
+                    <span>Afhaalbalie TV Scherm</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Schakel het publieke afhaalscherm om naar 'Balie Gesloten' of 'Bestellingen Afhalen'.
+                  </p>
+                </div>
+                <button
+                  onClick={togglePickupClosed}
+                  className={`px-4 py-2 rounded-xl font-black text-xs transition ${
+                    pickupClosed 
+                      ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30' 
+                      : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                  }`}
+                >
+                  {pickupClosed ? '🔴 BALIE GESLOTEN' : '🟢 Balie Geopend'}
+                </button>
+              </div>
+              <div className="text-[11px] text-slate-500 border-t border-slate-800/80 pt-2 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 text-blue-400" />
+                <span>Huidige status: {pickupClosed ? 'TV toont gesloten mededeling.' : 'TV toont nummers "In Bereiding" en "Gereed".'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Operations Telemetry */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">
+                Actieve Bestellingen
+              </span>
+              <div className="text-2xl font-black text-amber-400 mt-1">
+                {orders.filter(o => o.status === 'prep').length} in de keuken
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                {orders.filter(o => o.status === 'ready').length} wachten op afhaal
+              </span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">
+                Geannuleerde Bestellingen
+              </span>
+              <div className="text-2xl font-black text-rose-400 mt-1">
+                {orders.filter(o => o.status === 'cancelled').length} orders
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">Uitval &amp; retouren</span>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-wider block">
+                Ingelogd Manager Profiel
+              </span>
+              <div className="text-lg font-black text-purple-300 mt-1 truncate">
+                {currentPosUser?.name || 'Onbekend'}
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block font-mono">
+                @{currentPosUser?.username || 'gast'} (Admin)
+              </span>
+            </div>
+          </div>
+
+          {/* Store Ops Quick Actions */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+            <h3 className="font-bold text-white text-sm flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-cyan-400" />
+              <span>Systeemacties &amp; Menureset</span>
+            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+              <div>
+                <div className="font-bold text-slate-200">Herstel Standaard Menukaart</div>
+                <p className="text-slate-400 text-[11px]">
+                  Zet alle 50+ gerechten en actieprijzen terug naar fabrieksinstellingen.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('Weet je zeker dat je alle producten wilt resetten naar de standaardlijst?')) {
+                    resetProductsToDefault();
+                    alert('Menu succesvol gereset!');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+              >
+                Menu Resetten
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Algemeen Dashboard Tab */
+        <>
 
       {/* Financial KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
@@ -818,6 +1008,8 @@ export const ManagerScreen: React.FC = () => {
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (

@@ -37,6 +37,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
     topUpWerkPay,
     processCheckout,
     currentPosUser,
+    canAccess,
     orderNo,
     cashRequests,
     createCashRequest,
@@ -92,7 +93,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
   const isAuthorizedCashier = Boolean(
     currentPosUser && 
     currentPosUser.username !== 'bestel_kassa' && 
-    (currentPosUser.is_admin || currentPosUser.perms?.includes('cash_pay'))
+    canAccess('cash_pay')
   );
 
   // Active user check for WerkPay quick mode

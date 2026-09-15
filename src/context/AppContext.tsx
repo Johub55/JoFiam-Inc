@@ -125,6 +125,7 @@ interface AppContextType {
   toggleCouponActive: (id: number) => void;
 
   // POS Auth
+  canAccess: (perm: string) => boolean;
   loginPos: (username: string, pass: string) => Promise<{ success: boolean; message: string }>;
   logoutPos: () => void;
   updatePosUser: (user: PosUser) => Promise<{ success: boolean; message: string }>;
@@ -1650,7 +1651,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             name: data.name,
             username: data.username,
             password: data.password,
-            perms: Array.isArray(data.perms) ? data.perms : ['pos', 'kitchen', 'pickup', 'cash_pay', 'manager'],
+            perms: Array.isArray(data.perms) ? data.perms : ['pos', 'pickup'],
             is_admin: Boolean(data.is_admin)
           };
           setCurrentPosUser(user);
@@ -1709,9 +1710,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: false, message: 'Onjuiste gebruikersnaam of wachtwoord! Controleer je invoer.' };
   };
 
+  const canAccess = (perm: string): boolean => {
+    if (!currentPosUser) return false;
+    if (currentPosUser.is_admin) return true;
+    if (currentPosUser.username.toLowerCase() === 'joas') return true;
+    if (!currentPosUser.perms || !Array.isArray(currentPosUser.perms)) return false;
+    return currentPosUser.perms.includes(perm);
+  };
+
   const logoutPos = () => {
     setCurrentPosUser(null);
     sessionStorage.removeItem('wd_pos_user');
+    setAppMode('pos');
+    setPosScreen('kassa');
   };
 
   const updatePosUser = async (u: PosUser): Promise<{ success: boolean; message: string }> => {
@@ -2006,6 +2017,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteGiftCard,
         createCoupon,
         toggleCouponActive,
+        canAccess,
         loginPos,
         logoutPos,
         updatePosUser,
