@@ -161,6 +161,11 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS discount NUMERIC(10, 2) NOT N
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS payment_meta JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS cashier TEXT DEFAULT 'Kassa';
 
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS contact_id TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS sender TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS text TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS timestamp TEXT;
+
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON public.orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_bank_accounts_uid ON public.bank_accounts(card_uid);

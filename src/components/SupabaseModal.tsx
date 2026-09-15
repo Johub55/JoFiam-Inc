@@ -335,6 +335,13 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS contact_id TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS sender TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS text TEXT;
+ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS timestamp TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_phone_messages_contact ON public.phone_messages(contact_id);
+
 ALTER TABLE public.phone_messages ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access phone_messages" ON public.phone_messages;
 CREATE POLICY "Public access phone_messages" ON public.phone_messages FOR ALL USING (true) WITH CHECK (true);
