@@ -1,6 +1,6 @@
 {
   "name": "Werkdonalds POS & WerkPay Bank",
   "description": "Geïntegreerd kassasysteem naadloos gekoppeld aan WerkPay Bank met live betalingen, keuken KDS, afhaal-TV en Supabase cloud synchronisatie.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
