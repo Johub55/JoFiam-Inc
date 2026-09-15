@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { UNIFIED_SUPABASE_SQL } from '../services/sqlScripts';
+import { SCHEMA_ONLY_SUPABASE_SQL, BASIS_SUPABASE_SQL, UNIFIED_SUPABASE_SQL } from '../services/sqlScripts';
 import { DEFAULT_PRODUCTS } from '../services/defaultProducts';
 import { 
   Database, 
@@ -15,7 +15,8 @@ import {
   AlertCircle,
   Download,
   CloudUpload,
-  RefreshCw
+  RefreshCw,
+  Shield
 } from 'lucide-react';
 
 interface SupabaseModalProps {
@@ -29,21 +30,34 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
   const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
   const [syncMsg, setSyncMsg] = useState<{ success: boolean; text: string } | null>(null);
 
+  // SQL Script variant: 'schema_only' (recommended: no product reset), 'basis', or 'full'
+  const [sqlVariant, setSqlVariant] = useState<'schema_only' | 'basis' | 'full'>('schema_only');
+
   const [url, setUrl] = useState<string>(supabaseConfig.supabaseUrl || '');
   const [anonKey, setAnonKey] = useState<string>(supabaseConfig.supabaseAnonKey || '');
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
+  const activeSqlCode = 
+    sqlVariant === 'schema_only' ? SCHEMA_ONLY_SUPABASE_SQL :
+    sqlVariant === 'basis' ? BASIS_SUPABASE_SQL :
+    UNIFIED_SUPABASE_SQL;
+
   const handleCopySql = () => {
-    navigator.clipboard.writeText(UNIFIED_SUPABASE_SQL);
+    navigator.clipboard.writeText(activeSqlCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleDownloadSql = () => {
-    const blob = new Blob([UNIFIED_SUPABASE_SQL], { type: 'text/plain;charset=utf-8' });
+    const filename = 
+      sqlVariant === 'schema_only' ? 'database-schema-only.sql' :
+      sqlVariant === 'basis' ? 'database-basis.sql' :
+      'database.sql';
+
+    const blob = new Blob([activeSqlCode], { type: 'text/plain;charset=utf-8' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = 'database.sql';
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -191,11 +205,62 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
           </div>
 
           {/* SQL Copy & Download Box */}
-          <div className="space-y-2">
+          <div className="space-y-3">
+            
+            {/* Variant Tabs */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-1.5 bg-slate-950 border border-slate-800 rounded-2xl">
+              <button
+                type="button"
+                onClick={() => setSqlVariant('schema_only')}
+                className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  sqlVariant === 'schema_only'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-extrabold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>🛡️ Schema Only (Geen Reset)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSqlVariant('basis')}
+                className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  sqlVariant === 'basis'
+                    ? 'bg-cyan-500 text-slate-950 shadow-md shadow-cyan-500/20 font-extrabold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>📄 Basis Tabellen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSqlVariant('full')}
+                className={`flex-1 min-w-[120px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  sqlVariant === 'full'
+                    ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20 font-extrabold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>📦 Volledig + Seed</span>
+              </button>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <span className="font-bold text-slate-200 block text-xs">Gecombineerd SQL Script (PostgreSQL / Supabase):</span>
-                <span className="text-[10px] text-emerald-400 font-medium">✓ Bevat alle 138 Werkdonalds producten, veilige RLS en PIN/Wachtwoord RPC login</span>
+                <span className="font-bold text-slate-200 block text-xs">
+                  {sqlVariant === 'schema_only' && '🛡️ Schema Only (Aanbevolen voor bestaande projecten)'}
+                  {sqlVariant === 'basis' && '📄 Basis Schema (Alleen 5 kern-tabellen)'}
+                  {sqlVariant === 'full' && '📦 Volledige Unificatie + Standaard Menu Data'}
+                </span>
+                <span className="text-[10px] text-emerald-400 font-medium">
+                  {sqlVariant === 'schema_only' && '✓ Inclusief Telefoon Chat, Cash, Audit logs, RLS & Realtime — ZONDER jouw producten te overschrijven'}
+                  {sqlVariant === 'basis' && '✓ Uitsluitend de basis-tabellen voor snelle opstart'}
+                  {sqlVariant === 'full' && '✓ Alle tabellen + 138 standaard producten (ON CONFLICT DO NOTHING)'}
+                </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -216,14 +281,14 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
                   }`}
                 >
                   {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copied ? 'Gekopieerd!' : 'Kopieer Volledige SQL'}</span>
+                  <span>{copied ? 'Gekopieerd!' : 'Kopieer SQL'}</span>
                 </button>
               </div>
             </div>
 
             <div className="relative">
               <pre className="p-4 bg-slate-950 border border-slate-800 rounded-2xl font-mono text-[11px] text-slate-300 overflow-x-auto max-h-56 leading-relaxed select-all">
-                {UNIFIED_SUPABASE_SQL}
+                {activeSqlCode}
               </pre>
             </div>
 
@@ -249,27 +314,71 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
               </button>
             </div>
 
-            {/* Quick Status / RLS Fix Snippet for Supabase */}
-            <div className="p-3.5 bg-amber-950/30 border border-amber-500/30 rounded-2xl space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                  🛡️ Snelle RLS Fix (Als bestelstatussen in Supabase niet opslaan)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const rlsSql = `ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;\nGRANT ALL ON TABLE public.orders TO anon, authenticated, service_role;\nGRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;`;
-                    navigator.clipboard.writeText(rlsSql);
-                    alert('RLS SQL gekopieerd! Plak dit in de Supabase SQL Editor om updates toe te staan.');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg transition shrink-0"
-                >
-                  Kopieer RLS Fix
-                </button>
+            {/* Quick Status / RLS Fix Snippets for Supabase */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              
+              {/* Phone Only SQL Snippet */}
+              <div className="p-3.5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+                    📱 Alleen Telefoon SMS &amp; Realtime Toevoegen
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const phoneSql = `CREATE TABLE IF NOT EXISTS public.phone_messages (
+  id BIGSERIAL PRIMARY KEY,
+  contact_id TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  text TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.phone_messages ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access phone_messages" ON public.phone_messages;
+CREATE POLICY "Public access phone_messages" ON public.phone_messages FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.phone_messages TO postgres, anon, authenticated, service_role;
+
+DO $$ BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.phone_messages; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;`;
+                      navigator.clipboard.writeText(phoneSql);
+                      alert('Telefoon SQL gekopieerd! Plak dit in de Supabase SQL Editor om alleen de telefoon toe te voegen.');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition shrink-0"
+                  >
+                    Kopieer Telefoon SQL
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Voegt uitsluitend de <code className="text-cyan-300">phone_messages</code> tabel en realtime toe aan een bestaande Supabase database zonder iets anders aan te raken.
+                </p>
               </div>
-              <p className="text-[11px] text-slate-400 leading-relaxed">
-                Als Supabase Row Level Security aan heeft staan zonder update-rechten, weigert de cloud database statuswijzigingen. Voer dit 2-regelig scriptje eenmalig uit in de Supabase SQL Editor om alle updates toe te staan.
-              </p>
+
+              {/* RLS Order Status Fix Snippet */}
+              <div className="p-3.5 bg-amber-950/30 border border-amber-500/30 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                    🛡️ Snelle RLS Fix (Bestelstatussen)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rlsSql = `ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;\nGRANT ALL ON TABLE public.orders TO anon, authenticated, service_role;\nGRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;`;
+                      navigator.clipboard.writeText(rlsSql);
+                      alert('RLS SQL gekopieerd! Plak dit in de Supabase SQL Editor om updates toe te staan.');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg transition shrink-0"
+                  >
+                    Kopieer RLS Fix
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Als Supabase Row Level Security aan heeft staan zonder update-rechten, weigert de cloud database statuswijzigingen. Voer dit 2-regelig scriptje uit.
+                </p>
+              </div>
+
             </div>
 
             {syncMsg && (

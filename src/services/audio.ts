@@ -99,6 +99,89 @@ class SoundEffects {
     }
   }
 
+  public digitalRingtone() {
+    if (!this.isEnabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      [0, 0.12, 0.24].forEach((delay, idx) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1046.5 + (idx * 200), now + delay);
+        gain.gain.setValueAtTime(0.15, now + delay);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.08);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.08);
+      });
+    } catch {}
+  }
+
+  public chimeRingtone() {
+    if (!this.isEnabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + (idx * 0.12));
+        gain.gain.setValueAtTime(0.2, now + (idx * 0.12));
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.12) + 0.5);
+        osc.start(now + (idx * 0.12));
+        osc.stop(now + (idx * 0.12) + 0.5);
+      });
+    } catch {}
+  }
+
+  public marimbaRingtone() {
+    if (!this.isEnabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.connect(gain);
+        gain.connect(this.ctx!.destination);
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + (idx * 0.1));
+        gain.gain.setValueAtTime(0.3, now + (idx * 0.1));
+        gain.gain.exponentialRampToValueAtTime(0.001, now + (idx * 0.1) + 0.25);
+        osc.start(now + (idx * 0.1));
+        osc.stop(now + (idx * 0.1) + 0.25);
+      });
+    } catch {}
+  }
+
+  public playRingtone(ringtoneType?: string) {
+    if (!this.isEnabled) return;
+    const type = ringtoneType || (typeof window !== 'undefined' ? localStorage.getItem('wd_phone_ringtone') : null) || 'bell';
+    switch (type) {
+      case 'digital':
+        this.digitalRingtone();
+        break;
+      case 'chime':
+        this.chimeRingtone();
+        break;
+      case 'marimba':
+        this.marimbaRingtone();
+        break;
+      case 'bell':
+      default:
+        this.bell();
+        break;
+    }
+  }
+
   public speakOrder(orderNo: number | string) {
     this.bell();
     if (!this.isEnabled) return;

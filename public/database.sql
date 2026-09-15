@@ -627,11 +627,4 @@ VALUES
   (135, 'Samurai Pittige Saus', 0.85, 0.00, FALSE, 'Sauzen & WerkDips', '🥫', TRUE),
   (136, 'Knoflook-Kruiden Saus', 0.85, 0.00, FALSE, 'Sauzen & WerkDips', '🥫', TRUE),
   (137, 'Warme Satésaus', 1.10, 0.00, FALSE, 'Sauzen & WerkDips', '🥜', TRUE)
-ON CONFLICT (id) DO UPDATE SET
-  name = EXCLUDED.name,
-  price = EXCLUDED.price,
-  sale_price = EXCLUDED.sale_price,
-  on_sale = EXCLUDED.on_sale,
-  cat = EXCLUDED.cat,
-  emoji = EXCLUDED.emoji,
-  in_stock = EXCLUDED.in_stock;
+ON CONFLICT (id) DO NOTHING;

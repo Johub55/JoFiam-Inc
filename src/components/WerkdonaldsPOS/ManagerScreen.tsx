@@ -22,7 +22,8 @@ import {
   Check,
   Radio,
   Sliders,
-  AlertCircle
+  AlertCircle,
+  Database
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -439,8 +440,72 @@ export const ManagerScreen: React.FC = () => {
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
             <h3 className="font-bold text-white text-sm flex items-center gap-2">
               <RotateCcw className="w-4 h-4 text-cyan-400" />
-              <span>Systeemacties &amp; Menureset</span>
+              <span>Systeemacties, Database &amp; Menureset</span>
             </h3>
+
+            {/* SQL Export & Schema Downloads */}
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+              <div>
+                <div className="font-bold text-slate-200 flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span>Supabase PostgreSQL Database Scripts (3 Opties)</span>
+                </div>
+                <p className="text-slate-400 text-[11px] mt-0.5">
+                  Kies een van de SQL scripts voor de Supabase SQL Editor. Gebruik de <strong>Schema Only</strong> versie als je jouw aangepaste producten en prijzen wilt BEWAREN.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <a
+                  href="./database-schema-only.sql"
+                  download="database-schema-only.sql"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 rounded-xl bg-slate-900 border border-emerald-500/40 hover:border-emerald-400 hover:bg-slate-850 transition flex items-center justify-between group shadow-sm"
+                >
+                  <div>
+                    <div className="font-bold text-emerald-400 flex items-center gap-1">
+                      <span>🛡️ Schema Only</span>
+                    </div>
+                    <div className="text-[10px] text-slate-300 font-medium">Behoudt jouw eigen producten &amp; prijzen (Geen reset)</div>
+                  </div>
+                  <Download className="w-4 h-4 text-slate-400 group-hover:text-emerald-400 transition" />
+                </a>
+
+                <a
+                  href="./database-basis.sql"
+                  download="database-basis.sql"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-850 transition flex items-center justify-between group"
+                >
+                  <div>
+                    <div className="font-bold text-cyan-400 flex items-center gap-1">
+                      <span>📄 Basis Tabellen</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">⚡ Alleen 5 kern-tabellen</div>
+                  </div>
+                  <Download className="w-4 h-4 text-slate-400 group-hover:text-cyan-400 transition" />
+                </a>
+
+                <a
+                  href="./database.sql"
+                  download="database.sql"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 rounded-xl bg-slate-900 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-850 transition flex items-center justify-between group"
+                >
+                  <div>
+                    <div className="font-bold text-indigo-400 flex items-center gap-1">
+                      <span>📦 Volledig + Seed</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400">🔥 Alle tabellen + Standaard data</div>
+                  </div>
+                  <Download className="w-4 h-4 text-slate-400 group-hover:text-indigo-400 transition" />
+                </a>
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs">
               <div>
                 <div className="font-bold text-slate-200">Herstel Standaard Menukaart</div>

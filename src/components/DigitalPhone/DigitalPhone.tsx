@@ -57,6 +57,14 @@ interface SMSContact {
   isCustom?: boolean;
 }
 
+const SYSTEM_PHONE_ACCOUNTS = [
+  { id: 'kassa1', name: 'Werkdonalds Kassa 1', phone: '06-POS-kassa1', avatar: '🍔', role: 'Kassa Terminal', greeting: 'Hallo! Je bent verbonden met Werkdonalds Kassa 1.' },
+  { id: 'manager', name: 'Manager Telefoon', phone: '06-POS-manager', avatar: '👔', role: 'Shift Supervisor', greeting: 'Hallo met de Manager van Dienst! Is alles onder controle?' },
+  { id: 'keuken', name: 'Keuken KDS Scherm', phone: '06-POS-keuken', avatar: '👨‍🍳', role: 'Keuken Command', greeting: 'Keuken hier! De bestellingen worden bereid.' },
+  { id: 'helpdesk', name: 'WerkPay Helpdesk', phone: '06-PAY-service', avatar: '💳', role: 'Bank Service', greeting: 'Welkom bij de WerkPay Helpdesk. Vragen over saldo of tikkies?' },
+  { id: 'support', name: 'Werkdonalds Klantenlijn', phone: '06-CALL-support', avatar: '📞', role: 'Klantenservice', greeting: 'Welkom bij de Werkdonalds Klantenservice. Spreek gerust in!' }
+];
+
 export const DigitalPhone: React.FC = () => {
   const { 
     bankAccounts, 
@@ -75,6 +83,47 @@ export const DigitalPhone: React.FC = () => {
   const [activeApp, setActiveApp] = useState<'home' | 'werkpay' | 'phone' | 'messages' | 'settings' | 'werkdonalds'>('home');
   const [time, setTime] = useState<string>('12:00');
   const [notification, setNotification] = useState<{ title: string; body: string } | null>(null);
+
+  // Phone Customization & Settings State
+  const [wallpaper, setWallpaper] = useState<string>(() => {
+    return localStorage.getItem('wd_phone_wallpaper') || 'cyan';
+  });
+  const [selectedRingtone, setSelectedRingtone] = useState<string>(() => {
+    return localStorage.getItem('wd_phone_ringtone') || 'bell';
+  });
+
+  const handleWallpaperChange = (wp: string) => {
+    setWallpaper(wp);
+    localStorage.setItem('wd_phone_wallpaper', wp);
+    try { AudioFX.beep(); } catch {}
+  };
+
+  const handleRingtoneChange = (rt: string) => {
+    setSelectedRingtone(rt);
+    localStorage.setItem('wd_phone_ringtone', rt);
+    try { AudioFX.playRingtone(rt); } catch {}
+  };
+
+  const getWallpaperClass = () => {
+    switch (wallpaper) {
+      case 'sunset':
+        return 'bg-gradient-to-b from-slate-950 via-amber-950/40 to-rose-950/70';
+      case 'neon':
+        return 'bg-gradient-to-b from-slate-950 via-purple-950/50 to-pink-950/70';
+      case 'emerald':
+        return 'bg-gradient-to-b from-slate-950 via-emerald-950/40 to-teal-950/70';
+      case 'dark':
+        return 'bg-slate-950';
+      case 'cyan':
+      default:
+        return 'bg-gradient-to-b from-slate-950 via-slate-900 to-cyan-950/50';
+    }
+  };
+
+  // Tikkie SMS State
+  const [showTikkieModal, setShowTikkieModal] = useState<boolean>(false);
+  const [tikkieAmount, setTikkieAmount] = useState<string>('5.00');
+  const [tikkieNote, setTikkieNote] = useState<string>('McFlurry samen gekocht');
 
   // Keyboard Click Audio effect helper
   const playClick = () => {
@@ -426,15 +475,15 @@ export const DigitalPhone: React.FC = () => {
   useEffect(() => {
     let ringInterval: any = null;
     if (callState === 'calling' || callState === 'incoming') {
-      try { AudioFX.bell(); } catch {}
+      try { AudioFX.playRingtone(selectedRingtone); } catch {}
       ringInterval = setInterval(() => {
-        try { AudioFX.bell(); } catch {}
+        try { AudioFX.playRingtone(selectedRingtone); } catch {}
       }, 1800);
     }
     return () => {
       if (ringInterval) clearInterval(ringInterval);
     };
-  }, [callState]);
+  }, [callState, selectedRingtone]);
 
   const startLiveCall = async (partnerId: string, partnerName: string, partnerPhone: string, partnerRole?: string) => {
     playClick();
@@ -461,11 +510,21 @@ export const DigitalPhone: React.FC = () => {
       toId: partnerId
     });
 
-    // Fallback timer if partner is offline or in single tab: connect automatically after 3 seconds
+    // Fallback timer if partner is offline or in single tab: connect automatically after 2.5 seconds
     setTimeout(() => {
       setCallState(prev => {
         if (prev === 'calling') {
           startSimulatedCallAudio();
+          const sysAcc = SYSTEM_PHONE_ACCOUNTS.find(s => s.id === partnerId || s.phone === partnerPhone || s.name === partnerName);
+          if (sysAcc && sysAcc.greeting && 'speechSynthesis' in window) {
+            try {
+              window.speechSynthesis.cancel();
+              const utt = new SpeechSynthesisUtterance(sysAcc.greeting);
+              utt.lang = 'nl-NL';
+              utt.rate = 1.0;
+              window.speechSynthesis.speak(utt);
+            } catch {}
+          }
           if (callIntervalRef.current) clearInterval(callIntervalRef.current);
           callIntervalRef.current = setInterval(() => {
             setCallTimer(t => t + 1);
@@ -474,7 +533,7 @@ export const DigitalPhone: React.FC = () => {
         }
         return prev;
       });
-    }, 3000);
+    }, 2500);
   };
 
   const startCall = async (name: string, phone: string, role?: string) => {
@@ -488,6 +547,16 @@ export const DigitalPhone: React.FC = () => {
     setTimeout(() => {
       setCallState('connected');
       startSimulatedCallAudio();
+      const sysAcc = SYSTEM_PHONE_ACCOUNTS.find(s => s.phone === phone || s.name === name);
+      if (sysAcc && sysAcc.greeting && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utt = new SpeechSynthesisUtterance(sysAcc.greeting);
+          utt.lang = 'nl-NL';
+          utt.rate = 1.0;
+          window.speechSynthesis.speak(utt);
+        } catch {}
+      }
       if (callIntervalRef.current) clearInterval(callIntervalRef.current);
       callIntervalRef.current = setInterval(() => {
         setCallTimer(prev => prev + 1);
@@ -866,12 +935,14 @@ export const DigitalPhone: React.FC = () => {
     };
   }, [payClient, posClient, myId, activeContactId, isOpen, activeApp]);
 
-  const sendSms = (contactId: string) => {
-    if (!smsInput.trim()) return;
+  const sendSms = (contactId: string, overrideText?: string) => {
+    const text = overrideText || smsInput.trim();
+    if (!text) return;
     playClick();
 
-    const text = smsInput.trim();
-    setSmsInput('');
+    if (!overrideText) {
+      setSmsInput('');
+    }
 
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -1113,7 +1184,7 @@ export const DigitalPhone: React.FC = () => {
             
             {/* 1. HOME SCREEN LAUNCHER SCREEN */}
             {activeApp === 'home' && (
-              <div className="flex-1 flex flex-col p-5 justify-between">
+              <div className={`flex-1 flex flex-col p-5 justify-between ${getWallpaperClass()}`}>
                 
                 {/* Floating Widget Box */}
                 <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-slate-800/80 space-y-1 shadow-md">
@@ -1205,7 +1276,7 @@ export const DigitalPhone: React.FC = () => {
                     <span className="text-[10px] font-bold text-slate-400 text-center tracking-tight leading-none">Weer (21°)</span>
                   </div>
 
-                  {/* APP: INFO */}
+                  {/* APP: INSTELLINGEN */}
                   <button
                     onClick={() => {
                       setActiveApp('settings');
@@ -1216,7 +1287,7 @@ export const DigitalPhone: React.FC = () => {
                     <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-slate-600 to-slate-800 flex items-center justify-center shadow-lg group-active:scale-90 transition">
                       <span className="text-xl">⚙️</span>
                     </div>
-                    <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Info</span>
+                    <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Instellingen</span>
                   </button>
                 </div>
 
@@ -1696,6 +1767,28 @@ export const DigitalPhone: React.FC = () => {
                         </button>
                       </div>
 
+                      {/* List dedicated System Phone Accounts */}
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider block">Speciale Telefoon Accounts:</span>
+                        {SYSTEM_PHONE_ACCOUNTS.map(sys => (
+                          <button
+                            key={sys.id}
+                            onClick={() => {
+                              playClick();
+                              setShowNewCallList(false);
+                              startCall(sys.name, sys.phone, sys.role);
+                            }}
+                            className="w-full p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 text-left flex items-center gap-2 text-white font-bold transition text-[11px]"
+                          >
+                            <span>{sys.avatar}</span>
+                            <div>
+                              <div>{sys.name}</div>
+                              <div className="text-[8px] text-cyan-400 font-mono">{sys.phone} ({sys.role})</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+
                       {/* List registered POS Staff users */}
                       <div className="space-y-1.5">
                         <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Werkdonalds Kassa-gebruikers:</span>
@@ -1999,6 +2092,34 @@ export const DigitalPhone: React.FC = () => {
                           </button>
                         </div>
 
+                        {/* List dedicated System Phone Accounts */}
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider block">Speciale Telefoon Accounts:</span>
+                          {SYSTEM_PHONE_ACCOUNTS.map(sys => (
+                            <button
+                              key={sys.id}
+                              onClick={() => {
+                                playClick();
+                                setShowNewChatList(false);
+                                handleStartNewChatWithUser({
+                                  id: sys.id,
+                                  name: sys.name,
+                                  username: sys.id,
+                                  avatar: sys.avatar,
+                                  role: sys.role
+                                }, 'pos');
+                              }}
+                              className="w-full p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-850 text-left flex items-center gap-2 text-white font-bold transition text-[11px]"
+                            >
+                              <span>{sys.avatar}</span>
+                              <div>
+                                <div>{sys.name}</div>
+                                <div className="text-[8px] text-cyan-400 font-mono">{sys.phone} ({sys.role})</div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
                         {/* List registered POS Staff users */}
                         <div className="space-y-1.5">
                           <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Werkdonalds Kassa-gebruikers:</span>
@@ -2149,6 +2270,68 @@ export const DigitalPhone: React.FC = () => {
                           ) : (
                             contact.messages.map(m => {
                               const isMe = m.sender === 'me';
+                              const isTikkie = m.text.includes('[TIKKIE:');
+                              
+                              if (isTikkie) {
+                                const raw = m.text.substring(m.text.indexOf('[TIKKIE:') + 8, m.text.indexOf(']'));
+                                const [tikAmount, ...tikNoteParts] = raw.split(':');
+                                const tikNote = tikNoteParts.join(':') || 'Betaalverzoek';
+                                const numAmt = Number(tikAmount) || 5.0;
+
+                                return (
+                                  <div
+                                    key={m.id}
+                                    className={`flex flex-col max-w-[90%] space-y-1 ${isMe ? 'self-end items-end' : 'self-start items-start'}`}
+                                  >
+                                    <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-950/90 to-slate-900 border border-emerald-500/40 text-white shadow-md space-y-2 w-52">
+                                      <div className="flex items-center justify-between text-[9px] font-black uppercase text-emerald-400 tracking-wider">
+                                        <span className="flex items-center gap-1">💶 WerkPay Tikkie</span>
+                                        <span className="text-[8px] text-emerald-300/60 font-mono">LIVE</span>
+                                      </div>
+                                      <div>
+                                        <div className="text-lg font-mono font-black text-emerald-300">€ {numAmt.toFixed(2)}</div>
+                                        <div className="text-[10px] text-slate-300 italic truncate max-w-[180px]">"{tikNote}"</div>
+                                      </div>
+                                      {!isMe ? (
+                                        <button
+                                          onClick={async () => {
+                                            playClick();
+                                            if (!wpIsLoggedIn || !wpAccount) {
+                                              alert("Log eerst in op je WerkPay bankrekening via de WerkPay app op de telefoon om te betalen!");
+                                              setActiveApp('werkpay');
+                                              return;
+                                            }
+                                            const success = await payClient(contact.id, numAmt, `Tikkie: ${tikNote}`);
+                                            if (success) {
+                                              try { AudioFX.bell(); } catch {}
+                                              setNotification({
+                                                title: 'WerkPay Tikkie Betaald!',
+                                                body: `€ ${numAmt.toFixed(2)} overgemaakt naar ${contact.name}.`
+                                              });
+                                              sendSms(contact.id, `✅ Tikkie van €${numAmt.toFixed(2)} succesvol voldaan via WerkPay!`);
+                                            } else {
+                                              alert("Betaling mislukt! Onvoldoende saldo op je WerkPay rekening.");
+                                            }
+                                          }}
+                                          className="w-full py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-[10px] shadow flex items-center justify-center gap-1 transition"
+                                        >
+                                          <CreditCard className="w-3.5 h-3.5" />
+                                          <span>Betaal Nu met WerkPay</span>
+                                        </button>
+                                      ) : (
+                                        <div className="text-[8px] text-emerald-400/80 font-bold italic text-center border-t border-emerald-900/50 pt-1">
+                                          Verstuurd via WerkPay
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[8px] text-slate-500 font-mono px-1">
+                                      <span>{m.timestamp}</span>
+                                      {isMe && <CheckCheck className="w-3 h-3 text-cyan-400" />}
+                                    </div>
+                                  </div>
+                                );
+                              }
+
                               return (
                                 <div
                                   key={m.id}
@@ -2173,8 +2356,66 @@ export const DigitalPhone: React.FC = () => {
                           )}
                         </div>
 
+                        {/* Inline Tikkie Generator Drawer */}
+                        {showTikkieModal && (
+                          <div className="p-3 bg-slate-900 border-t border-slate-800 space-y-2 animate-in slide-in-from-bottom-2">
+                            <div className="flex items-center justify-between text-xs font-black text-emerald-400">
+                              <span className="flex items-center gap-1">💶 WerkPay Tikkie Maken</span>
+                              <button onClick={() => setShowTikkieModal(false)} className="text-slate-400 hover:text-white">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            <div className="flex gap-2">
+                              <div className="w-24">
+                                <label className="text-[8px] font-bold text-slate-400 uppercase block">Bedrag (€)</label>
+                                <input
+                                  type="number"
+                                  step="0.50"
+                                  value={tikkieAmount}
+                                  onChange={e => setTikkieAmount(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs font-mono text-white focus:outline-none focus:border-emerald-400"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-[8px] font-bold text-slate-400 uppercase block">Omschrijving</label>
+                                <input
+                                  type="text"
+                                  value={tikkieNote}
+                                  onChange={e => setTikkieNote(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-emerald-400"
+                                />
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                if (!tikkieAmount || Number(tikkieAmount) <= 0) return;
+                                const msg = `[TIKKIE:${tikkieAmount}:${tikkieNote.trim() || 'Betaalverzoek'}]`;
+                                sendSms(contact.id, msg);
+                                setShowTikkieModal(false);
+                              }}
+                              className="w-full py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 text-xs font-black rounded-lg shadow transition active:scale-95 flex items-center justify-center gap-1"
+                            >
+                              <span>Stuur Tikkie Betaalverzoek (€{tikkieAmount})</span>
+                            </button>
+                          </div>
+                        )}
+
                         {/* Input bottom box */}
-                        <div className="p-2.5 bg-slate-900 border-t border-slate-850 flex items-center gap-2">
+                        <div className="p-2.5 bg-slate-900 border-t border-slate-850 flex items-center gap-1.5">
+                          <button
+                            onClick={() => {
+                              setShowTikkieModal(!showTikkieModal);
+                              playClick();
+                            }}
+                            className={`p-1.5 rounded-xl border transition ${
+                              showTikkieModal
+                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
+                                : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white'
+                            }`}
+                            title="Tikkie Sturen"
+                          >
+                            💶
+                          </button>
                           <input
                             type="text"
                             placeholder="Typ een bericht..."
@@ -2202,7 +2443,7 @@ export const DigitalPhone: React.FC = () => {
               </div>
             )}
 
-            {/* 6. APP: SETTINGS / INFO APP (IN-PHONE) */}
+            {/* 6. APP: SETTINGS APP (IN-PHONE) */}
             {activeApp === 'settings' && (
               <div className="flex-1 flex flex-col bg-slate-950">
                 {/* Header */}
@@ -2212,18 +2453,80 @@ export const DigitalPhone: React.FC = () => {
                       <ArrowLeft className="w-4 h-4" />
                     </button>
                     <span className="text-xs font-black text-white flex items-center gap-1">
-                      ⚙️ Info
+                      ⚙️ Telefoon Instellingen
                     </span>
                   </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
-                  <div className="text-center space-y-1">
-                    <div className="text-2xl">📱</div>
-                    <h4 className="font-black text-white">WerkMobile Phone V1.2</h4>
-                    <p className="text-[10px] text-slate-500">Virtual Interactive Device</p>
+                  {/* ACHTERGROND / WALLPAPER SELECTOR */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                    <span className="text-[10px] text-cyan-400 font-bold block uppercase tracking-wider flex items-center gap-1">
+                      🎨 Achtergrond / Theme
+                    </span>
+                    <div className="grid grid-cols-5 gap-1.5 pt-1">
+                      {[
+                        { id: 'cyan', label: 'Cyan', color: 'bg-cyan-600' },
+                        { id: 'sunset', label: 'Sunset', color: 'bg-amber-600' },
+                        { id: 'neon', label: 'Neon', color: 'bg-pink-600' },
+                        { id: 'emerald', label: 'Groen', color: 'bg-emerald-600' },
+                        { id: 'dark', label: 'OLED', color: 'bg-slate-800' }
+                      ].map(wp => (
+                        <button
+                          key={wp.id}
+                          onClick={() => handleWallpaperChange(wp.id)}
+                          className={`flex flex-col items-center gap-1 p-1.5 rounded-xl border transition ${
+                            wallpaper === wp.id ? 'border-cyan-400 bg-slate-800 ring-2 ring-cyan-500/30' : 'border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <span className={`w-5 h-5 rounded-full ${wp.color} shadow-inner block`} />
+                          <span className="text-[8px] font-bold text-slate-300">{wp.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
+                  {/* BELTOON / RINGTONE SELECTOR */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        🔔 Beltoon Geluid
+                      </span>
+                      <button
+                        onClick={() => AudioFX.playRingtone(selectedRingtone)}
+                        className="text-[9px] bg-indigo-600 hover:bg-indigo-500 text-white font-black px-2 py-0.5 rounded-lg transition"
+                      >
+                        🔊 Test Beltoon
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {[
+                        { id: 'bell', name: 'Klassiek Belsignaal', desc: 'Heldere dubbele kassa-chime' },
+                        { id: 'digital', name: 'Digital Electronic', desc: 'Futuristische 3-tone piep' },
+                        { id: 'chime', name: 'Gentle Chime', desc: 'Zachte harmonische melodie' },
+                        { id: 'marimba', name: 'Retro Marimba', desc: 'Houten percussie synth' }
+                      ].map(rt => (
+                        <button
+                          key={rt.id}
+                          onClick={() => handleRingtoneChange(rt.id)}
+                          className={`w-full p-2 rounded-xl text-left border flex items-center justify-between transition ${
+                            selectedRingtone === rt.id
+                              ? 'border-indigo-500 bg-indigo-950/20 text-white'
+                              : 'border-slate-800 hover:border-slate-700 text-slate-400'
+                          }`}
+                        >
+                          <div>
+                            <div className="text-[11px] font-bold text-white">{rt.name}</div>
+                            <div className="text-[8px] text-slate-500">{rt.desc}</div>
+                          </div>
+                          {selectedRingtone === rt.id && <Check className="w-3.5 h-3.5 text-indigo-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* SYSTEM INFO */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
                     <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Systeeminformatie</span>
                     <div className="flex justify-between py-1 border-b border-slate-850 text-[11px]">
@@ -2239,15 +2542,9 @@ export const DigitalPhone: React.FC = () => {
                       <span className="text-cyan-400 font-bold">Supabase Realtime</span>
                     </div>
                     <div className="flex justify-between py-1 text-[11px]">
-                      <span className="text-slate-400">Stem-permissie:</span>
-                      <span className="text-emerald-400 font-bold">Microfoon LIVE</span>
+                      <span className="text-slate-400">Actief Account:</span>
+                      <span className="text-emerald-400 font-bold truncate max-w-[120px]">{wpAccount?.account_holder || 'Gast'}</span>
                     </div>
-                  </div>
-
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2 text-center text-[10px] text-slate-400">
-                    <p>
-                      Deze virtuele telefoon synchroniseert real-time SMS-berichten tussen geopende browser-tabs en stelt medewerkers in staat om veilig WerkPay rekeningen te beheren en stemgeluid te visualiseren via de microfoon!
-                    </p>
                   </div>
                 </div>
               </div>
