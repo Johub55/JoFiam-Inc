@@ -184,6 +184,11 @@ export const DigitalPhone: React.FC = () => {
   const myPhone = wpAccount ? '06-PAY-' + wpAccount.username : (wdEmpUser ? '06-POS-' + wdEmpUser.username : '06-GUEST');
 
   const callIntervalRef = useRef<any>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const simToneOscRef = useRef<any>(null);
+  const simToneGainRef = useRef<any>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
 
   // Real Microphone Web Audio API
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
@@ -192,6 +197,150 @@ export const DigitalPhone: React.FC = () => {
   const [micFrequencies, setMicFrequencies] = useState<number[]>(new Array(12).fill(6));
   const [micPermissionError, setMicPermissionError] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+
+  const stopSimulatedCallAudio = () => {
+    if (simToneOscRef.current) {
+      try {
+        if (Array.isArray(simToneOscRef.current)) {
+          simToneOscRef.current.forEach(osc => osc.stop());
+        }
+      } catch {}
+      simToneOscRef.current = null;
+    }
+    if (simToneGainRef.current) {
+      try {
+        simToneGainRef.current.disconnect();
+      } catch {}
+      simToneGainRef.current = null;
+    }
+  };
+
+  const startSimulatedCallAudio = () => {
+    stopSimulatedCallAudio();
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx = audioCtx || new AudioContextClass();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+
+      // Telephone voice & line comfort tone sound synthesis
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(350, ctx.currentTime);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(440, ctx.currentTime);
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1000, ctx.currentTime);
+      filter.Q.setValueAtTime(1.2, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.015, ctx.currentTime);
+
+      osc1.connect(filter);
+      osc2.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start();
+      osc2.start();
+
+      simToneOscRef.current = [osc1, osc2];
+      simToneGainRef.current = gain;
+    } catch (err) {
+      console.warn('Simulated call audio failed:', err);
+    }
+  };
+
+  const cleanupWebRTC = () => {
+    if (peerConnectionRef.current) {
+      try {
+        peerConnectionRef.current.ontrack = null;
+        peerConnectionRef.current.onicecandidate = null;
+        peerConnectionRef.current.close();
+      } catch {}
+      peerConnectionRef.current = null;
+    }
+    if (remoteStreamRef.current) {
+      try {
+        remoteStreamRef.current.getTracks().forEach(t => t.stop());
+      } catch {}
+      remoteStreamRef.current = null;
+    }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+    stopSimulatedCallAudio();
+  };
+
+  const initPeerConnection = async (targetId: string, isInitiator: boolean) => {
+    cleanupWebRTC();
+    try {
+      const pc = new RTCPeerConnection({
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      });
+      peerConnectionRef.current = pc;
+
+      if (micStream) {
+        micStream.getTracks().forEach(track => {
+          pc.addTrack(track, micStream);
+        });
+      }
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendPhoneSignal({
+            type: 'WEBRTC_ICE',
+            fromId: myId,
+            toId: targetId,
+            candidate: event.candidate.toJSON()
+          });
+        }
+      };
+
+      pc.ontrack = (event) => {
+        if (event.streams && event.streams[0]) {
+          remoteStreamRef.current = event.streams[0];
+          if (remoteAudioRef.current) {
+            remoteAudioRef.current.srcObject = event.streams[0];
+            remoteAudioRef.current.play().catch(() => {});
+          }
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            const ctx = audioCtx || new AudioContextClass();
+            const remoteSource = ctx.createMediaStreamSource(event.streams[0]);
+            const ans = analyser || ctx.createAnalyser();
+            ans.fftSize = 64;
+            remoteSource.connect(ans);
+            setAnalyser(ans);
+          } catch {}
+        }
+      };
+
+      if (isInitiator) {
+        const offer = await pc.createOffer({ offerToReceiveAudio: true });
+        await pc.setLocalDescription(offer);
+        sendPhoneSignal({
+          type: 'WEBRTC_OFFER',
+          fromId: myId,
+          toId: targetId,
+          sdp: pc.localDescription
+        });
+      }
+
+      startSimulatedCallAudio();
+    } catch (err) {
+      console.warn('WebRTC init failed, using simulated call connection audio:', err);
+      startSimulatedCallAudio();
+    }
+  };
 
   // Start Mic capturing and Analyser
   const requestMicAccess = async () => {
@@ -216,6 +365,7 @@ export const DigitalPhone: React.FC = () => {
   };
 
   const stopMicAccess = () => {
+    cleanupWebRTC();
     if (micStream) {
       micStream.getTracks().forEach(track => track.stop());
       setMicStream(null);
@@ -476,6 +626,7 @@ export const DigitalPhone: React.FC = () => {
           callIntervalRef.current = setInterval(() => {
             setCallTimer(prev => prev + 1);
           }, 1000);
+          initPeerConnection(fromId, true);
         }
       }
 
@@ -483,6 +634,7 @@ export const DigitalPhone: React.FC = () => {
       if (type === 'CALL_DECLINE') {
         const { fromId, toId } = data;
         if (toId === myId) {
+          cleanupWebRTC();
           setCallState('idle');
           setCallTimer(0);
           setCallingContact(null);
@@ -496,12 +648,62 @@ export const DigitalPhone: React.FC = () => {
       if (type === 'CALL_HANGUP') {
         const { fromId, toId } = data;
         if (toId === myId) {
+          cleanupWebRTC();
           setCallState('idle');
           setCallTimer(0);
           setCallingContact(null);
           setCallPartnerId(null);
           stopMicAccess();
           if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+        }
+      }
+
+      // 2.5 WEBRTC PROTOCOL SIGNALS
+      if (type === 'WEBRTC_OFFER') {
+        const { fromId, toId, sdp } = data;
+        if (toId === myId && sdp) {
+          (async () => {
+            try {
+              if (!peerConnectionRef.current) {
+                await initPeerConnection(fromId, false);
+              }
+              if (peerConnectionRef.current) {
+                await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await peerConnectionRef.current.createAnswer();
+                await peerConnectionRef.current.setLocalDescription(answer);
+                sendPhoneSignal({
+                  type: 'WEBRTC_ANSWER',
+                  fromId: myId,
+                  toId: fromId,
+                  sdp: peerConnectionRef.current.localDescription
+                });
+              }
+            } catch (err) {
+              console.warn('WebRTC offer handling error:', err);
+            }
+          })();
+        }
+      }
+
+      if (type === 'WEBRTC_ANSWER') {
+        const { fromId, toId, sdp } = data;
+        if (toId === myId && sdp && peerConnectionRef.current) {
+          try {
+            peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(sdp)).catch(() => {});
+          } catch (err) {
+            console.warn('WebRTC answer handling error:', err);
+          }
+        }
+      }
+
+      if (type === 'WEBRTC_ICE') {
+        const { fromId, toId, candidate } = data;
+        if (toId === myId && candidate && peerConnectionRef.current) {
+          try {
+            peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+          } catch (err) {
+            console.warn('WebRTC ICE handling error:', err);
+          }
         }
       }
     };
@@ -829,6 +1031,9 @@ export const DigitalPhone: React.FC = () => {
 
   return (
     <>
+      {/* Hidden audio element for WebRTC remote voice stream */}
+      <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+
       {/* 1. FLOATING CYAN LAUNCHER TRIGGER */}
       <button
         onClick={() => {
@@ -1712,6 +1917,7 @@ export const DigitalPhone: React.FC = () => {
                                   fromId: myId,
                                   toId: callPartnerId
                                 });
+                                initPeerConnection(callPartnerId, false);
                               }
                               setCallState('connected');
                               setCallTimer(0);
