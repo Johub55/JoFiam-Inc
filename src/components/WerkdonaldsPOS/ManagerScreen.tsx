@@ -1,0 +1,1111 @@
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import { euro } from '../../services/store';
+import { Product, Coupon, GiftCard, PosUser } from '../../types';
+import { 
+  BarChart3, 
+  FileText, 
+  Download, 
+  Power, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Flame, 
+  ShieldCheck, 
+  Key, 
+  Tag, 
+  Gift, 
+  RotateCcw,
+  X,
+  Printer,
+  Lock,
+  Check
+} from 'lucide-react';
+
+export const ManagerScreen: React.FC = () => {
+  const {
+    currentPosUser,
+    orders,
+    products,
+    totalExpenses,
+    orderStopActive,
+    toggleOrderStop,
+    pickupClosed,
+    togglePickupClosed,
+    giftCards,
+    createGiftCard,
+    topUpGiftCard,
+    deleteGiftCard,
+    coupons,
+    createCoupon,
+    toggleCouponActive,
+    createProduct,
+    updateProduct,
+    toggleProductSale,
+    resetProductsToDefault,
+    posUsers,
+    createPosUser,
+    updatePosUser,
+    deletePosUser
+  } = useApp();
+
+  // Z-Report Modal
+  const [showZReport, setShowZReport] = useState<boolean>(false);
+
+  // New Product State
+  const [newProdName, setNewProdName] = useState<string>('');
+  const [newProdPrice, setNewProdPrice] = useState<string>('');
+  const [newProdSalePrice, setNewProdSalePrice] = useState<string>('');
+  const [newProdCat, setNewProdCat] = useState<string>('Burgers & Wraps');
+  const [newProdEmoji, setNewProdEmoji] = useState<string>('🍔');
+
+  // Edit Product Modal State
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  // New Gift Card State
+  const [newGiftCode, setNewGiftCode] = useState<string>('');
+  const [newGiftAmount, setNewGiftAmount] = useState<string>('');
+
+  // New Coupon State
+  const [newCouponCode, setNewCouponCode] = useState<string>('');
+  const [newCouponType, setNewCouponType] = useState<'percent' | 'fixed'>('percent');
+  const [newCouponVal, setNewCouponVal] = useState<string>('');
+
+  // New Employee State
+  const [newUserName, setNewUserName] = useState<string>('');
+  const [newUserUsername, setNewUserUsername] = useState<string>('');
+  const [newUserPass, setNewUserPass] = useState<string>('');
+  const [newUserIsAdmin, setNewUserIsAdmin] = useState<boolean>(false);
+  const [newUserPerms, setNewUserPerms] = useState<string[]>(['pos', 'kitchen', 'pickup', 'cash_pay']);
+
+  // Edit Employee State
+  const [editingUser, setEditingUser] = useState<PosUser | null>(null);
+  const [editUserPass, setEditUserPass] = useState<string>('');
+
+  const PERMISSION_OPTIONS = [
+    { id: 'pos', label: 'Kassa & Bestellen', desc: 'Bestelscherm & kassa bedienen' },
+    { id: 'kitchen', label: 'Keukenscherm (KDS)', desc: 'Keukendisplay inzien en bestellingen afronden' },
+    { id: 'pickup', label: 'Afhaalscherm TV', desc: 'Gereed bestellingen bekijken' },
+    { id: 'voorraad', label: 'Voorraad & Inkoop', desc: 'Voorraad inzien en inkoop beheren' },
+    { id: 'manager', label: 'Manager Dashboard', desc: 'Omzet, instellingen en kassa beheer' },
+    { id: 'medewerkers', label: 'Medewerkers Aanpassen', desc: 'Gebruikers toevoegen, rechten en accounts beheren' },
+    { id: 'producten', label: 'Producten Aanpassen', desc: 'Menu items, prijzen en acties aanpassen' },
+    { id: 'coupons_giftcards', label: 'Coupons & Cadeaubonnen', desc: 'Kortingscodes en cadeaubonnen toekennen' },
+    { id: 'cash_pay', label: 'Contant Geld Autoriseren', desc: 'Contante bestellingen goedkeuren' },
+  ];
+
+  // Stats
+  const validOrders = orders.filter(o => o.status !== 'cancelled');
+  const totalRevenue = validOrders.reduce((sum, o) => sum + o.total, 0);
+  const totalItems = validOrders.reduce((sum, o) => sum + o.items.reduce((s, it) => s + it.qty, 0), 0);
+  const totalDiscounts = validOrders.reduce((sum, o) => sum + o.discount, 0);
+  const netProfit = Math.max(0, totalRevenue - totalExpenses);
+
+  const workPayRevenue = validOrders.filter(o => o.paymentMethod === 'workpay').reduce((sum, o) => sum + o.total, 0);
+  const cashRevenue = validOrders.filter(o => o.paymentMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
+  const giftCardRevenue = validOrders.filter(o => o.paymentMethod === 'giftcard').reduce((sum, o) => sum + o.total, 0);
+
+  // Export CSV
+  const handleExportCSV = () => {
+    if (orders.length === 0) return alert('Geen bestellingen om te exporteren.');
+    let csv = 'OrderNr;Tijd;Totaal;Korting;Type;Klant_Tafel;Betaalmethode;Kassier;Status\n';
+    orders.forEach(o => {
+      csv += `${o.no};${o.time};${o.total.toFixed(2)};${o.discount.toFixed(2)};${o.orderType};${o.identifier};${o.paymentMethod};${o.cashier};${o.status}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `werkdonalds_orders_${new Date().toISOString().slice(0,10)}.csv`;
+    link.click();
+  };
+
+  const handleCreateProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pr = parseFloat(newProdPrice);
+    if (!newProdName.trim() || isNaN(pr) || pr <= 0) return alert('Vul geldige productgegevens in.');
+    const sale = parseFloat(newProdSalePrice) || 0;
+    createProduct({
+      name: newProdName.trim(),
+      price: pr,
+      salePrice: sale,
+      onSale: sale > 0,
+      cat: newProdCat,
+      emoji: newProdEmoji || '🍔',
+      inStock: true
+    });
+    setNewProdName('');
+    setNewProdPrice('');
+    setNewProdSalePrice('');
+    alert(`Product ${newProdName} toegevoegd!`);
+  };
+
+  const handleSaveEditProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    updateProduct(editingProduct);
+    setEditingProduct(null);
+  };
+
+  const handleCreateGiftCard = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseFloat(newGiftAmount);
+    if (!newGiftCode.trim() || isNaN(amt) || amt <= 0) return alert('Vul een geldige code en bedrag in.');
+    createGiftCard(newGiftCode.trim(), amt);
+    setNewGiftCode('');
+    setNewGiftAmount('');
+  };
+
+  const handleCreateCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseFloat(newCouponVal);
+    if (!newCouponCode.trim() || isNaN(val) || val <= 0) return alert('Vul een code en waarde in.');
+    createCoupon({
+      code: newCouponCode.trim().toUpperCase(),
+      discount_type: newCouponType,
+      discount_val: val,
+      is_active: true
+    });
+    setNewCouponCode('');
+    setNewCouponVal('');
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPass.trim()) return alert('Vul alle velden in.');
+    const effectivePerms = newUserIsAdmin 
+      ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
+      : newUserPerms;
+
+    const res = await createPosUser({
+      name: newUserName.trim(),
+      username: newUserUsername.trim().toLowerCase(),
+      password: newUserPass.trim(),
+      perms: effectivePerms,
+      is_admin: newUserIsAdmin
+    });
+    setNewUserName('');
+    setNewUserUsername('');
+    setNewUserPass('');
+    setNewUserIsAdmin(false);
+    setNewUserPerms(['pos', 'kitchen', 'pickup', 'cash_pay']);
+    alert(res.message);
+  };
+
+  const handleStartEditUser = (u: PosUser) => {
+    // Joas can only be edited by Joas
+    if (u.username.toLowerCase() === 'joas' && currentPosUser?.username.toLowerCase() !== 'joas') {
+      alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.');
+      return;
+    }
+    setEditingUser({ ...u, perms: [...(u.perms || [])] });
+    setEditUserPass('');
+  };
+
+  const handleSaveEditUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    if (editingUser.username.toLowerCase() === 'joas' && currentPosUser?.username.toLowerCase() !== 'joas') {
+      alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.');
+      return;
+    }
+
+    const effectivePerms = editingUser.is_admin
+      ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
+      : (editingUser.perms || []);
+
+    const res = await updatePosUser({
+      ...editingUser,
+      perms: effectivePerms,
+      password: editUserPass.trim() || undefined
+    });
+
+    alert(res.message);
+    if (res.success) {
+      setEditingUser(null);
+    }
+  };
+
+  const handleDeleteUser = async (u: PosUser) => {
+    if (u.username.toLowerCase() === 'joas') {
+      alert('De hoofdbeheerder Joas kan niet worden verwijderd!');
+      return;
+    }
+    if (u.username === 'bestel_kassa') {
+      alert('Het standaard bestelaccount kan niet worden verwijderd.');
+      return;
+    }
+    if (confirm(`Weet je zeker dat je medewerker "${u.name}" wilt verwijderen?`)) {
+      const res = await deletePosUser(u.id);
+      alert(res.message);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col h-[calc(100vh-108px)] overflow-y-auto bg-slate-950 p-4 sm:p-6 space-y-6">
+      
+      {/* Top Header & Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+        <div>
+          <h1 className="text-xl font-black text-white flex items-center gap-2">
+            <BarChart3 className="w-6 h-6 text-amber-400" />
+            <span>Manager Dashboard &amp; Instellingen</span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Beheer omzet, kassa instellingen, menuprijzen, cadeaubonnen, kortingen en personeel.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowZReport(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          >
+            <FileText className="w-4 h-4 text-amber-400" />
+            <span>Z-Rapport / Dagafsluiting</span>
+          </button>
+
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+          >
+            <Download className="w-4 h-4 text-cyan-400" />
+            <span>Exporteer CSV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Financial KPIs */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Totale Omzet</span>
+          <div className="text-xl font-black text-emerald-400 mt-1">{euro(totalRevenue)}</div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Inkoopkosten</span>
+          <div className="text-xl font-black text-rose-400 mt-1">{euro(totalExpenses)}</div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Nettowinst</span>
+          <div className="text-xl font-black text-blue-400 mt-1">{euro(netProfit)}</div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Bestellingen</span>
+          <div className="text-xl font-black text-white mt-1">{validOrders.length}</div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Items Verkocht</span>
+          <div className="text-xl font-black text-amber-400 mt-1">{totalItems}</div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
+          <span className="text-[11px] font-bold uppercase text-slate-400">Korting Gegeven</span>
+          <div className="text-xl font-black text-rose-400 mt-1">{euro(totalDiscounts)}</div>
+        </div>
+      </div>
+
+      {/* Store Operations & Controls */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
+        <h2 className="font-bold text-sm text-white mb-3 flex items-center gap-2">
+          <span>⚙️ Winkel- &amp; Baliebeheer</span>
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          
+          {/* Bestelstop */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div>
+              <div className="font-bold text-slate-200">⛔ Bestelstop Kassa</div>
+              <p className="text-[11px] text-slate-400">
+                {orderStopActive ? 'Actief: klanten kunnen niet afrekenen' : 'Niet actief: kassa is open'}
+              </p>
+            </div>
+            <button
+              onClick={toggleOrderStop}
+              className={`px-3 py-2 rounded-xl font-bold text-xs transition ${
+                orderStopActive 
+                  ? 'bg-rose-600 text-white shadow-rose-600/20' 
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {orderStopActive ? 'Bestelstop Opheffen' : 'Bestelstop Activeren'}
+            </button>
+          </div>
+
+          {/* Afhaalscherm sluiten */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+            <div>
+              <div className="font-bold text-slate-200">🔴 Afhaalbalie Scherm</div>
+              <p className="text-[11px] text-slate-400">
+                {pickupClosed ? 'Gesloten bord wordt getoond op TV' : 'Actief: bestelnummers worden getoond'}
+              </p>
+            </div>
+            <button
+              onClick={togglePickupClosed}
+              className={`px-3 py-2 rounded-xl font-bold text-xs transition ${
+                pickupClosed 
+                  ? 'bg-rose-600 text-white shadow-rose-600/20' 
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+              }`}
+            >
+              {pickupClosed ? 'Balie Openen' : 'Balie Sluiten'}
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Cadeaubonnen Beheer */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-sm text-white flex items-center gap-2">
+            <Gift className="w-4 h-4 text-purple-400" />
+            <span>💳 Cadeaubonnen Beheer</span>
+          </h2>
+          <span className="text-xs text-slate-400">Klanten kunnen hiermee betalen aan de kassa</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
+            {giftCards.map(card => (
+              <div key={card.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold font-mono text-purple-300">{card.code}</span>
+                  <div className="text-[11px] text-slate-400">
+                    Huidig: <strong className="text-emerald-400">{euro(card.current_balance)}</strong> (Start: {euro(card.initial_balance)})
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => topUpGiftCard(card.id, 10)}
+                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                  >
+                    + €10
+                  </button>
+                  <button
+                    onClick={() => deleteGiftCard(card.id)}
+                    className="p-1 rounded text-slate-500 hover:text-rose-400"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleCreateGiftCard} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5 text-xs">
+            <h3 className="font-bold text-slate-300">+ Nieuwe Cadeaubon Aanmaken</h3>
+            <input
+              type="text"
+              required
+              value={newGiftCode}
+              onChange={e => setNewGiftCode(e.target.value.toUpperCase())}
+              placeholder="Cadeauboncode"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white uppercase font-mono"
+            />
+            <input
+              type="number"
+              required
+              step="1"
+              value={newGiftAmount}
+              onChange={e => setNewGiftAmount(e.target.value)}
+              placeholder="Saldo in euro (€)"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+            />
+            <button
+              type="submit"
+              className="w-full py-2 rounded-lg font-bold bg-purple-600 hover:bg-purple-500 text-white"
+            >
+              + Cadeaubon Aanmaken
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Menu & Product Management (50+ Items) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-sm text-white flex items-center gap-2">
+              <span>🍔 Menulijst, Actieprijzen &amp; Items ({products.length} gerechten)</span>
+            </h2>
+            <p className="text-xs text-slate-400">Prijzen aanpassen of actieprijzen tijdelijk activeren.</p>
+          </div>
+          <button
+            onClick={() => {
+              if (confirm('Menulijst herstellen naar standaard 67 Werkdonalds gerechten?')) {
+                resetProductsToDefault();
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Herstel Standaardlijst</span>
+          </button>
+        </div>
+
+        {/* Add Product Form */}
+        <form onSubmit={handleCreateProduct} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
+          <input
+            type="text"
+            required
+            value={newProdName}
+            onChange={e => setNewProdName(e.target.value)}
+            placeholder="Naam gerecht"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+          />
+          <input
+            type="number"
+            required
+            step="0.05"
+            value={newProdPrice}
+            onChange={e => setNewProdPrice(e.target.value)}
+            placeholder="Prijs (€ 5.95)"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+          />
+          <input
+            type="number"
+            step="0.05"
+            value={newProdSalePrice}
+            onChange={e => setNewProdSalePrice(e.target.value)}
+            placeholder="Actie (€ 3.95)"
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+          />
+          <select
+            value={newProdCat}
+            onChange={e => setNewProdCat(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+          >
+            <option value="Burgers & Wraps">Burgers & Wraps</option>
+            <option value="Chicken & Snacks">Chicken & Snacks</option>
+            <option value="Friet & Sides">Friet & Sides</option>
+            <option value="Dranken & McCafé">Dranken & McCafé</option>
+            <option value="Desserts & IJs">Desserts & IJs</option>
+            <option value="Happy Meal">Happy Meal</option>
+            <option value="Sauzen & Dips">Sauzen & Dips</option>
+          </select>
+          <button
+            type="submit"
+            className="py-1.5 rounded-lg font-bold bg-amber-400 hover:bg-amber-300 text-slate-950 flex items-center justify-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" /> Toevoegen
+          </button>
+        </form>
+
+        {/* Product Table */}
+        <div className="overflow-x-auto max-h-72 border border-slate-800 rounded-xl">
+          <table className="w-full text-left text-xs text-slate-300">
+            <thead className="bg-slate-950 text-slate-400 font-mono text-[11px] sticky top-0 border-b border-slate-800">
+              <tr>
+                <th className="p-2.5">Emoji</th>
+                <th className="p-2.5">Product</th>
+                <th className="p-2.5">Categorie</th>
+                <th className="p-2.5">Regulier</th>
+                <th className="p-2.5">Actieprijs</th>
+                <th className="p-2.5">Actie Status</th>
+                <th className="p-2.5 text-right">Beheer</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {products.map(p => (
+                <tr key={p.id} className="hover:bg-slate-800/30">
+                  <td className="p-2.5 text-base">{p.emoji}</td>
+                  <td className="p-2.5 font-bold text-white">{p.name}</td>
+                  <td className="p-2.5 text-slate-400">{p.cat}</td>
+                  <td className="p-2.5 font-mono">{euro(p.price)}</td>
+                  <td className="p-2.5 font-mono">{p.salePrice > 0 ? euro(p.salePrice) : '—'}</td>
+                  <td className="p-2.5">
+                    <button
+                      onClick={() => toggleProductSale(p.id)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        p.onSale ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {p.onSale ? '🔥 Actie Aan' : 'Uit'}
+                    </button>
+                  </td>
+                  <td className="p-2.5 text-right">
+                    <button
+                      onClick={() => setEditingProduct({ ...p })}
+                      className="p-1 rounded text-slate-400 hover:text-amber-400"
+                      title="Bewerken"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Kortingscoupons Beheer */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+        <h2 className="font-bold text-sm text-white flex items-center gap-2">
+          <Tag className="w-4 h-4 text-emerald-400" />
+          <span>🏷️ Kortingscoupons Beheren</span>
+        </h2>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
+            {coupons.map(c => (
+              <div key={c.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
+                <div>
+                  <span className="font-bold font-mono text-emerald-300">{c.code}</span>
+                  <div className="text-[11px] text-slate-400">
+                    Korting: {c.discount_type === 'percent' ? `${c.discount_val}%` : euro(c.discount_val)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => toggleCouponActive(c.id)}
+                  className={`px-2.5 py-1 rounded text-xs font-bold ${
+                    c.is_active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-500'
+                  }`}
+                >
+                  {c.is_active ? '🟢 Actief' : '🔴 Uit'}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleCreateCoupon} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5 text-xs">
+            <h3 className="font-bold text-slate-300">+ Nieuwe Coupon Aanmaken</h3>
+            <input
+              type="text"
+              required
+              value={newCouponCode}
+              onChange={e => setNewCouponCode(e.target.value.toUpperCase())}
+              placeholder="Couponcode"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white uppercase font-mono"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={newCouponType}
+                onChange={e => setNewCouponType(e.target.value as any)}
+                className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+              >
+                <option value="percent">Percentage (%)</option>
+                <option value="fixed">Vast Bedrag (€)</option>
+              </select>
+              <input
+                type="number"
+                required
+                step="0.05"
+                value={newCouponVal}
+                onChange={e => setNewCouponVal(e.target.value)}
+                placeholder="Kortingswaarde"
+                className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-2 rounded-lg font-bold bg-emerald-600 hover:bg-emerald-500 text-white"
+            >
+              + Coupon Opslaan
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* Werknemers & Rechten */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-sm text-white flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-400" />
+              <span>👥 Werknemers, Rollen &amp; Toegangsrechten ({posUsers.length})</span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Beheer bestaande gebruikers, pas schermen en rechten aan. Let op: Joas kan alleen door Joas worden aangepast.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* User List */}
+          <div className="lg:col-span-7 space-y-2.5">
+            {posUsers.map(u => {
+              const isJoas = u.username.toLowerCase() === 'joas';
+              const canEditThisUser = !isJoas || currentPosUser?.username.toLowerCase() === 'joas';
+
+              return (
+                <div key={u.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2.5 text-xs transition hover:border-slate-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-extrabold text-white text-sm flex items-center gap-2">
+                        <span>{u.name}</span>
+                        {isJoas && (
+                          <span className="text-[10px] px-2 py-0.2 rounded-full font-black bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                            Eigenaar
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">@{u.username}</div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                        u.is_admin 
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' 
+                          : u.username === 'bestel_kassa' || u.username === 'klant'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                      }`}>
+                        {u.is_admin ? 'Manager' : u.username === 'bestel_kassa' || u.username === 'klant' ? 'Klant' : 'Medewerker'}
+                      </span>
+
+                      {canEditThisUser ? (
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditUser(u)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center gap-1 transition"
+                        >
+                          <Edit3 className="w-3 h-3 text-blue-400" />
+                          <span>Bewerken</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.')}
+                          className="px-2.5 py-1 rounded-lg bg-slate-900 text-slate-400 font-medium text-xs border border-slate-800 flex items-center gap-1 cursor-not-allowed"
+                          title="Alleen Joas kan het account van Joas bewerken"
+                        >
+                          <Lock className="w-3 h-3 text-amber-400" />
+                          <span>Alleen Joas</span>
+                        </button>
+                      )}
+
+                      {!isJoas && u.username !== 'bestel_kassa' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteUser(u)}
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                          title="Medewerker verwijderen"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Permissions pills */}
+                  <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-900">
+                    <span className="text-[10px] text-slate-500 font-bold self-center mr-1">Toegang:</span>
+                    {u.perms && u.perms.length > 0 ? (
+                      u.perms.map(p => {
+                        const opt = PERMISSION_OPTIONS.find(o => o.id === p);
+                        return (
+                          <span
+                            key={p}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900 border border-slate-800 text-slate-300"
+                          >
+                            {opt ? opt.label.split(' ')[0] : p}
+                          </span>
+                        );
+                      })
+                    ) : (
+                      <span className="text-[10px] text-slate-500 italic">Geen extra rechten</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* New Employee Form with Granular Permissions */}
+          <div className="lg:col-span-5">
+            <form onSubmit={handleCreateUser} className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+              <h3 className="font-extrabold text-sm text-slate-200 flex items-center gap-2">
+                <Plus className="w-4 h-4 text-blue-400" />
+                <span>Nieuwe Medewerker Aanmaken</span>
+              </h3>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Volledige Naam</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                  placeholder="Volledige Naam"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Gebruikersnaam</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserUsername}
+                  onChange={e => setNewUserUsername(e.target.value)}
+                  placeholder="Gebruikersnaam"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white font-mono focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">Wachtwoord of Pincode</label>
+                <input
+                  type="password"
+                  required
+                  value={newUserPass}
+                  onChange={e => setNewUserPass(e.target.value)}
+                  placeholder="Wachtwoord"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newUserIsAdmin}
+                  onChange={e => setNewUserIsAdmin(e.target.checked)}
+                  className="rounded border-slate-700 bg-slate-950 text-blue-500"
+                />
+                <span className="font-bold text-slate-200">👑 Is Manager / Beheerder (alle rechten)</span>
+              </label>
+
+              {/* Granular Permissions Checkboxes */}
+              <div className="space-y-1.5 pt-1">
+                <span className="font-bold text-slate-300 block">Kies Schermen &amp; Bevoegdheden:</span>
+                <div className="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto pr-1">
+                  {PERMISSION_OPTIONS.map(opt => {
+                    const isChecked = newUserIsAdmin || newUserPerms.includes(opt.id);
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition ${
+                          isChecked 
+                            ? 'bg-blue-500/10 border-blue-500/30 text-white' 
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled={newUserIsAdmin}
+                          checked={isChecked}
+                          onChange={e => {
+                            if (e.target.checked) {
+                              setNewUserPerms(prev => [...prev, opt.id]);
+                            } else {
+                              setNewUserPerms(prev => prev.filter(p => p !== opt.id));
+                            }
+                          }}
+                          className="rounded border-slate-700 bg-slate-950 text-blue-500"
+                        />
+                        <div className="flex-1">
+                          <span className="font-bold block text-slate-200">{opt.label}</span>
+                          <span className="text-[10px] text-slate-400 block">{opt.desc}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl font-black bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 transition"
+              >
+                + Medewerker Opslaan
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-lg p-6 space-y-5 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-white text-base">Medewerker Aanpassen</h3>
+                  <p className="text-xs text-slate-400">Wijzig gegevens, rollen en toegangsrechten voor {editingUser.name}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setEditingUser(null)} 
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="space-y-4 text-xs">
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">Volledige Naam</label>
+                <input
+                  type="text"
+                  required
+                  value={editingUser.name}
+                  onChange={e => setEditingUser({ ...editingUser, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">Gebruikersnaam</label>
+                <input
+                  type="text"
+                  required
+                  disabled={editingUser.username.toLowerCase() === 'joas'}
+                  value={editingUser.username}
+                  onChange={e => setEditingUser({ ...editingUser, username: e.target.value.toLowerCase() })}
+                  className={`w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-blue-500 ${
+                    editingUser.username.toLowerCase() === 'joas' ? 'opacity-60 cursor-not-allowed' : ''
+                  }`}
+                />
+                {editingUser.username.toLowerCase() === 'joas' && (
+                  <p className="text-[11px] text-amber-400 mt-1">Gebruikersnaam 'joas' is beschermd en kan niet worden gewijzigd.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">Wachtwoord Wijzigen (optioneel)</label>
+                <input
+                  type="password"
+                  value={editUserPass}
+                  onChange={e => setEditUserPass(e.target.value)}
+                  placeholder="Laat leeg om het huidige wachtwoord te behouden"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+
+              <label className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(editingUser.is_admin)}
+                  onChange={e => setEditingUser({ ...editingUser, is_admin: e.target.checked })}
+                  className="rounded border-slate-700 bg-slate-900 text-blue-500"
+                />
+                <span className="font-bold text-slate-200">👑 Manager / Beheerder Status (geeft volledige admin rechten)</span>
+              </label>
+
+              {/* Granular Permissions Selection */}
+              <div className="space-y-2">
+                <span className="font-bold text-slate-200 block">Kies Toegangsrechten &amp; Schermen:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {PERMISSION_OPTIONS.map(opt => {
+                    const isChecked = Boolean(editingUser.is_admin || editingUser.perms?.includes(opt.id));
+                    return (
+                      <label
+                        key={opt.id}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border cursor-pointer transition ${
+                          isChecked
+                            ? 'bg-blue-500/10 border-blue-500/30 text-white'
+                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled={Boolean(editingUser.is_admin)}
+                          checked={isChecked}
+                          onChange={e => {
+                            const current = editingUser.perms || [];
+                            if (e.target.checked) {
+                              setEditingUser({ ...editingUser, perms: [...current, opt.id] });
+                            } else {
+                              setEditingUser({ ...editingUser, perms: current.filter(p => p !== opt.id) });
+                            }
+                          }}
+                          className="mt-0.5 rounded border-slate-700 bg-slate-900 text-blue-500"
+                        />
+                        <div>
+                          <span className="font-bold text-slate-200 block text-xs">{opt.label}</span>
+                          <span className="text-[10px] text-slate-400 block leading-tight">{opt.desc}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="flex-1 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 font-bold text-slate-300 transition text-sm"
+                >
+                  Annuleren
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 font-black text-white transition shadow-lg shadow-blue-600/25 text-sm"
+                >
+                  Wijzigingen Opslaan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Product Modal */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 className="font-bold text-white text-sm">✏️ Product Bewerken</h3>
+              <button onClick={() => setEditingProduct(null)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEditProduct} className="space-y-3 text-xs">
+              <div>
+                <label className="text-slate-400 block mb-1">Productnaam</label>
+                <input
+                  type="text"
+                  required
+                  value={editingProduct.name}
+                  onChange={e => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-slate-400 block mb-1">Regulier (€)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    required
+                    value={editingProduct.price}
+                    onChange={e => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-400 block mb-1">Actieprijs (€)</label>
+                  <input
+                    type="number"
+                    step="0.05"
+                    value={editingProduct.salePrice || ''}
+                    onChange={e => setEditingProduct({ ...editingProduct, salePrice: parseFloat(e.target.value) || 0 })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+                  />
+                </div>
+              </div>
+              <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editingProduct.onSale}
+                  onChange={e => setEditingProduct({ ...editingProduct, onSale: e.target.checked })}
+                  className="rounded border-slate-700 bg-slate-900 text-amber-400"
+                />
+                <span className="font-bold text-slate-300">🔥 Actieprijs Activeren</span>
+              </label>
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProduct(null)}
+                  className="flex-1 py-2 rounded-lg bg-slate-800 font-bold text-slate-300"
+                >
+                  Annuleren
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2 rounded-lg bg-amber-400 font-bold text-slate-950"
+                >
+                  Opslaan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Z-Report Modal */}
+      {showZReport && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <span className="font-black text-sm text-white">📊 Dagafsluiting Z-Rapport</span>
+              <button onClick={() => setShowZReport(false)} className="text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 bg-white text-slate-950 font-mono text-xs space-y-2 select-text">
+              <div className="text-center pb-2 border-b-2 border-dashed border-slate-300">
+                <h3 className="font-black text-base">WERKDONALDS POS</h3>
+                <p className="text-[10px] text-slate-500">Z-RAPPORT / FINANCIËLE DAGAFSLUITING</p>
+                <p className="text-[10px] text-slate-500">{new Date().toLocaleString('nl-NL')}</p>
+              </div>
+
+              <div className="space-y-1 py-2 border-b-2 border-dashed border-slate-300">
+                <div className="flex justify-between">
+                  <span>Aantal bestellingen:</span>
+                  <strong>{validOrders.length}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Verkochte items:</span>
+                  <strong>{totalItems}</strong>
+                </div>
+              </div>
+
+              <div className="space-y-1 py-2 border-b-2 border-dashed border-slate-300">
+                <div className="flex justify-between">
+                  <span>Omzet WerkPay:</span>
+                  <strong>{euro(workPayRevenue)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Omzet Contant:</span>
+                  <strong>{euro(cashRevenue)}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Omzet Cadeaubon:</span>
+                  <strong>{euro(giftCardRevenue)}</strong>
+                </div>
+                <div className="flex justify-between text-rose-600">
+                  <span>Gegeven kortingen:</span>
+                  <strong>- {euro(totalDiscounts)}</strong>
+                </div>
+              </div>
+
+              <div className="pt-2 font-bold text-sm space-y-1">
+                <div className="flex justify-between text-slate-950">
+                  <span>BRUTO OMZET:</span>
+                  <span>{euro(totalRevenue)}</span>
+                </div>
+                <div className="flex justify-between text-rose-600 text-xs">
+                  <span>Inkoopkosten:</span>
+                  <span>- {euro(totalExpenses)}</span>
+                </div>
+                <div className="flex justify-between text-emerald-600 font-black pt-1 border-t border-slate-300">
+                  <span>NETTOWINST:</span>
+                  <span>{euro(netProfit)}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-950 border-t border-slate-800 flex gap-2">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 flex items-center justify-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Print Z-Rapport</span>
+              </button>
+              <button
+                onClick={() => setShowZReport(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

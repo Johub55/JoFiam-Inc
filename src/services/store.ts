@@ -1,0 +1,75 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { 
+  Order, 
+  Product, 
+  CartItem, 
+  BankAccount, 
+  BankTransaction, 
+  InventoryItem, 
+  Coupon, 
+  GiftCard, 
+  PosUser, 
+  SupabaseConfig 
+} from '../types';
+import { DEFAULT_PRODUCTS } from './defaultProducts';
+import { AudioFX } from './audio';
+
+// Default Supabase project endpoints provided by the user
+export const DEFAULT_SUPABASE_POS_URL = "https://qbncbzchrmbqhfbxgvbr.supabase.co";
+export const DEFAULT_SUPABASE_POS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibmNiemNocm1icWhmYnhndmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjI4OTUsImV4cCI6MjEwNDQzODg5NX0.cBbcg-VQyZ8NoxkVlDWF2ddmyD8MAS2jtHjRvDtrlOo";
+
+export const DEFAULT_SUPABASE_PAY_URL = "https://qbncbzchrmbqhfbxgvbr.supabase.co";
+export const DEFAULT_SUPABASE_PAY_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibmNiemNocm1icWhmYnhndmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjI4OTUsImV4cCI6MjEwNDQzODg5NX0.cBbcg-VQyZ8NoxkVlDWF2ddmyD8MAS2jtHjRvDtrlOo";
+
+// Initial Demo data
+export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
+  { id: 1, username: 'joas', password: 'admin123', account_holder: 'Joas Thorig', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999.00, is_admin: true },
+  { id: 2, username: 'klant01', password: 'klant123', account_holder: 'Daan de Vries', card_uid: '5542 1198 3320 4411', pin_code: '1234', balance: 45.50, is_admin: false },
+  { id: 3, username: 'emma', password: 'emma123', account_holder: 'Emma Bakker', card_uid: '4890 2214 7731 9904', pin_code: '4321', balance: 28.75, is_admin: false }
+];
+
+export const INITIAL_INVENTORY: InventoryItem[] = [
+  { id: 1, item_name: "🍔 Burger Broodjes (Sesam)", stock_qty: 150, min_qty: 30, unit: "stuks", cost_price: 0.35, supplier_name: "Bakkerij Bakkersland" },
+  { id: 2, item_name: "🥩 100% Rundvlees Patties", stock_qty: 120, min_qty: 25, unit: "stuks", cost_price: 0.65, supplier_name: "Vleesbedrijf Van Loon" },
+  { id: 3, item_name: "🍗 Krokante Kip Patties", stock_qty: 80, min_qty: 20, unit: "stuks", cost_price: 0.55, supplier_name: "Pluimvee Verbeek" },
+  { id: 4, item_name: "🍟 Franse Friet (Dozen 10kg)", stock_qty: 25, min_qty: 5, unit: "dozen", cost_price: 4.50, supplier_name: "Aviko Potato" },
+  { id: 5, item_name: "🧀 Cheddar Kaas Plakjes", stock_qty: 200, min_qty: 40, unit: "stuks", cost_price: 0.15, supplier_name: "FrieslandCampina" },
+  { id: 6, item_name: "🥤 Coca-Cola Siroop (Tanks)", stock_qty: 10, min_qty: 2, unit: "stuks", cost_price: 18.50, supplier_name: "Coca-Cola Europacific" },
+  { id: 7, item_name: "🎁 WerkMeal Speeltjes & Verrassingen", stock_qty: 100, min_qty: 20, unit: "stuks", cost_price: 0.80, supplier_name: "Toy Logistics Europe" }
+];
+
+export const INITIAL_COUPONS: Coupon[] = [];
+
+export const INITIAL_GIFT_CARDS: GiftCard[] = [];
+
+export const ORDER_KIOSK_USER: PosUser = {
+  id: 0,
+  name: 'Bestel Account (Klant)',
+  username: 'bestel_kassa',
+  perms: ['pos', 'pickup'],
+  is_admin: false
+};
+
+export const INITIAL_POS_USERS: PosUser[] = [
+  { 
+    id: 1, 
+    name: 'Joas Thorig', 
+    username: 'joas', 
+    password: 'admin123', 
+    perms: ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay'], 
+    is_admin: true 
+  },
+  ORDER_KIOSK_USER
+];
+
+export function euro(amount: number | string | undefined | null): string {
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return '€ 0,00';
+  return new Intl.NumberFormat('nl-NL', { style: 'currency', currency: 'EUR' }).format(n);
+}
+
+export function formatCardUid(uid?: string): string {
+  const raw = String(uid || '').replace(/\s+/g, '');
+  if (!raw) return '•••• •••• •••• ••••';
+  return raw.replace(/(.{4})/g, '$1 ').trim();
+}
