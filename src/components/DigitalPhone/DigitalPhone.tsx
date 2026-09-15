@@ -208,7 +208,7 @@ export const DigitalPhone: React.FC = () => {
       try { AudioFX.bell(); } catch {}
     } else {
       // Failed
-      setWpAuthError('Pincode onjuist! (Standaard is 1234)');
+      setWpAuthError('Onjuiste pincode!');
       setWpAuthPin('');
       try { AudioFX.beep(); } catch {}
     }
@@ -279,7 +279,7 @@ export const DigitalPhone: React.FC = () => {
         pendingIdentity.phone
       );
     } else {
-      setIdentityAuthError('Onjuist wachtwoord! (Hint: 1234)');
+      setIdentityAuthError('Onjuist wachtwoord!');
       try { AudioFX.beep(); } catch {}
     }
   };
@@ -1316,23 +1316,6 @@ export const DigitalPhone: React.FC = () => {
                     <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Werkdonalds</span>
                   </button>
 
-                  {/* APP: TELEFOON */}
-                  <button
-                    onClick={() => {
-                      setActiveApp('phone');
-                      playClick();
-                    }}
-                    className="flex flex-col items-center gap-1.5 group"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg group-active:scale-90 transition relative">
-                      <Phone className="w-6 h-6 text-white" />
-                      {callState !== 'idle' && (
-                        <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 rounded-full flex items-center justify-center text-[8px] font-black text-white animate-pulse">!</span>
-                      )}
-                    </div>
-                    <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Bellen</span>
-                  </button>
-
                   {/* APP: BERICHTEN / SMS */}
                   <button
                     onClick={() => {
@@ -1349,14 +1332,6 @@ export const DigitalPhone: React.FC = () => {
                     </div>
                     <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Sms</span>
                   </button>
-
-                  {/* APP: WEER (DUMMY) */}
-                  <div className="flex flex-col items-center gap-1.5 opacity-60">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-orange-400 to-amber-500 flex items-center justify-center shadow-lg">
-                      <span className="text-xl">☀️</span>
-                    </div>
-                    <span className="text-[10px] font-bold text-slate-400 text-center tracking-tight leading-none">Weer (21°)</span>
-                  </div>
 
                   {/* APP: INSTELLINGEN */}
                   <button
@@ -1375,9 +1350,9 @@ export const DigitalPhone: React.FC = () => {
 
                 {/* DOCK BAR AT THE BOTTOM */}
                 <div className="bg-slate-800/40 backdrop-blur border border-slate-700/50 p-2 rounded-[24px] grid grid-cols-3 gap-1">
-                  <button onClick={() => { setActiveApp('phone'); playClick(); }} className="py-1 flex justify-center text-emerald-400 hover:text-emerald-300"><Phone className="w-4 h-4" /></button>
                   <button onClick={() => { setActiveApp('werkpay'); playClick(); }} className="py-1 flex justify-center text-cyan-400 hover:text-cyan-300"><Wallet className="w-4 h-4" /></button>
                   <button onClick={() => { setActiveApp('messages'); playClick(); }} className="py-1 flex justify-center text-indigo-400 hover:text-indigo-300"><MessageSquare className="w-4 h-4" /></button>
+                  <button onClick={() => { setActiveApp('settings'); playClick(); }} className="py-1 flex justify-center text-slate-400 hover:text-slate-200"><span className="text-sm">⚙️</span></button>
                 </div>
               </div>
             )}
@@ -1693,26 +1668,6 @@ export const DigitalPhone: React.FC = () => {
                           <Unlock className="w-3.5 h-3.5" />
                           <span>Meld je aan op shift</span>
                         </button>
-                      </div>
-
-                      {/* QUICK ACCOUNTS HINT FOR TESTING */}
-                      <div className="pt-2">
-                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block mb-1">Geregistreerd personeel:</span>
-                        <div className="flex flex-wrap gap-1">
-                          {posUsers.map(u => (
-                            <button
-                              key={u.id}
-                              onClick={() => {
-                                playClick();
-                                setWdEmpUsername(u.username);
-                                setWdEmpPassword(u.password || 'admin123');
-                              }}
-                              className="text-[9px] bg-slate-900 border border-slate-850 hover:bg-slate-850 text-slate-300 rounded px-2 py-0.5 font-bold"
-                            >
-                              {u.name} (@{u.username})
-                            </button>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   ) : (
@@ -2759,10 +2714,6 @@ export const DigitalPhone: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="text-[8px] text-slate-400 text-center italic">
-                        💡 Standaard wachtwoord: <strong className="text-white font-mono">1234</strong> of <strong className="text-white font-mono">admin123</strong>
-                      </div>
-
                       <button
                         onClick={handleConfirmIdentityLogin}
                         className="w-full py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-lg"
@@ -2778,7 +2729,7 @@ export const DigitalPhone: React.FC = () => {
                     
                     {/* CATEGORY 1: SYSTEM & POS PHONES */}
                     <div className="space-y-1.5">
-                      <span className="text-[9px] font-black text-cyan-400 uppercase tracking-wider block">🏢 Specifieke Telefoons (Wachtwoord 1234):</span>
+                      <span className="text-[9px] font-black text-cyan-400 uppercase tracking-wider block">🏢 Specifieke Telefoons:</span>
                       {SYSTEM_PHONE_ACCOUNTS.map(sys => (
                         <button
                           key={sys.id}
@@ -2816,7 +2767,7 @@ export const DigitalPhone: React.FC = () => {
 
                     {/* CATEGORY 2: POS STAFF USERS */}
                     <div className="space-y-1.5">
-                      <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">👨‍🍳 Personeel Accounts (Wachtwoord vereist):</span>
+                      <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">👨‍🍳 Personeel Accounts:</span>
                       {posUsers.map(u => (
                         <button
                           key={u.id}
@@ -2854,7 +2805,7 @@ export const DigitalPhone: React.FC = () => {
 
                     {/* CATEGORY 3: WERKPAY BANK ACCOUNTS */}
                     <div className="space-y-1.5">
-                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider block">💳 WerkPay Accounts (PIN vereist):</span>
+                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider block">💳 WerkPay Accounts:</span>
                       {bankAccounts.map(acc => (
                         <button
                           key={acc.id}

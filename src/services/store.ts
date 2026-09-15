@@ -23,9 +23,7 @@ export const DEFAULT_SUPABASE_PAY_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey
 
 // Initial Demo data
 export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [
-  { id: 1, username: 'joas', password: 'admin123', account_holder: 'Joas Thorig', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999.00, is_admin: true },
-  { id: 2, username: 'klant01', password: 'klant123', account_holder: 'Daan de Vries', card_uid: '5542 1198 3320 4411', pin_code: '1234', balance: 45.50, is_admin: false },
-  { id: 3, username: 'emma', password: 'emma123', account_holder: 'Emma Bakker', card_uid: '4890 2214 7731 9904', pin_code: '4321', balance: 28.75, is_admin: false }
+  { id: 1, username: 'joas', password: 'admin123', account_holder: 'Joas Thorig', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999.00, is_admin: true }
 ];
 
 export const INITIAL_INVENTORY: InventoryItem[] = [

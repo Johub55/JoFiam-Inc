@@ -25,6 +25,7 @@
     }
   </script>
   <style>
+    html, body { background-color: #020617 !important; color: #f8fafc !important; }
     @keyframes pulse-subtle { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     .pulse-subtle { animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1939,8 +1940,7 @@
 
     // Local bank accounts fallback
     let localBankAccounts = [
-      { username: 'joas', password: 'admin123', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999, is_admin: true },
-      { username: 'klant01', password: 'klant123', card_uid: '5542 1198 3320 4411', pin_code: '1234', balance: 45.50, is_admin: false }
+      { username: 'joas', password: 'admin123', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999, is_admin: true }
     ];
 
     // --- 3. INIT & SUPABASE SETUP ---

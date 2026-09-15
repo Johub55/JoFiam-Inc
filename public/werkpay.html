@@ -35,6 +35,7 @@
   </script>
 
   <style>
+    html, body { background-color: #020617 !important; color: #f8fafc !important; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0b1120; }
     ::-webkit-scrollbar-thumb { background: #1e3a8a; border-radius: 9999px; }
@@ -649,15 +650,11 @@
     const DEFAULT_SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibmNiemNocm1icWhmYnhndmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjI4OTUsImV4cCI6MjEwNDQzODg5NX0.cBbcg-VQyZ8NoxkVlDWF2ddmyD8MAS2jtHjRvDtrlOo";
 
     const INITIAL_ACCOUNTS = [
-      { id: 1, username: 'joas', password: 'admin123', account_holder: 'Joas Thorig', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999.00, is_admin: true },
-      { id: 2, username: 'klant01', password: 'klant123', account_holder: 'Daan de Vries', card_uid: '5542 1198 3320 4411', pin_code: '1234', balance: 45.50, is_admin: false },
-      { id: 3, username: 'emma', password: 'emma123', account_holder: 'Emma Bakker', card_uid: '4890 2214 7731 9904', pin_code: '4321', balance: 28.75, is_admin: false }
+      { id: 1, username: 'joas', password: 'admin123', account_holder: 'Joas Thorig', card_uid: '4129 8831 5504 9012', pin_code: '0000', balance: 999999.00, is_admin: true }
     ];
 
     const INITIAL_TRANSACTIONS = [
-      { id: 101, username: 'joas', type: 'deposit', amount: 100.00, label: '⚡ Saldo Opwaardering (iDEAL)', note: 'Persoonlijke opwaardering', time: 'Vandaag 10:15' },
-      { id: 102, username: 'klant01', type: 'payment', amount: 12.80, label: '🍔 Werkdonalds Kassa Betaling', note: 'Bestelling #1001 (Menu & Friet)', time: 'Vandaag 11:30' },
-      { id: 103, username: 'emma', type: 'deposit', amount: 25.00, label: '⚡ Saldo Opwaardering', note: 'Via WerkPay iDEAL', time: 'Vandaag 09:40' }
+      { id: 101, username: 'joas', type: 'deposit', amount: 100.00, label: '⚡ Saldo Opwaardering (iDEAL)', note: 'Persoonlijke opwaardering', time: 'Vandaag 10:15' }
     ];
 
     // State
