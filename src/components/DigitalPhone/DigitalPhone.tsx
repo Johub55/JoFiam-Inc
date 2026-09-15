@@ -106,6 +106,15 @@ export const DigitalPhone: React.FC = () => {
   const [wpTransferAmount, setWpTransferAmount] = useState<string>('');
   const [wpTransferSuccess, setWpTransferSuccess] = useState<boolean>(false);
 
+  // WERKDONALDS STAFF EMPLOYEE PORTAL APP STATE
+  const [wdEmpUser, setWdEmpUser] = useState<PosUser | null>(null);
+  const [wdEmpUsername, setWdEmpUsername] = useState<string>('');
+  const [wdEmpPassword, setWdEmpPassword] = useState<string>('');
+  const [wdEmpError, setWdEmpError] = useState<string | null>(null);
+  const [wdCashAmount, setWdCashAmount] = useState<string>('');
+  const [wdCashReason, setWdCashReason] = useState<string>('');
+  const [wdCashSuccess, setWdCashSuccess] = useState<boolean>(false);
+
   // Sync mobile active account if global active account changes
   useEffect(() => {
     if (currentBankAccount) {
@@ -161,10 +170,16 @@ export const DigitalPhone: React.FC = () => {
   const [callState, setCallState] = useState<'idle' | 'calling' | 'connected' | 'incoming'>('idle');
   const [callTimer, setCallTimer] = useState<number>(0);
   const [callingContact, setCallingContact] = useState<{ name: string; phone: string; role?: string } | null>(null);
-  const [recentCalls, setRecentCalls] = useState<{ name: string; phone: string; time: string; direction: 'in' | 'out' }[]>([
-    { name: 'Mamma', phone: '06-45217422', time: 'Gisteren', direction: 'in' },
-    { name: 'Werkdonalds Manager', phone: '0900-DONALDS', time: 'Eergisteren', direction: 'out' }
-  ]);
+  const [recentCalls, setRecentCalls] = useState<{ name: string; phone: string; time: string; direction: 'in' | 'out' }[]>([]);
+  const [callPartnerId, setCallPartnerId] = useState<string | null>(null);
+  const [showNewCallList, setShowNewCallList] = useState<boolean>(false);
+
+  const [guestId] = useState<string>(() => 'gast_' + Math.random().toString(36).substring(2, 6));
+  const myId = wpAccount?.username || wdEmpUser?.username || guestId;
+  const myName = wpAccount?.account_holder || wdEmpUser?.name || 'Gast-Gebruiker';
+  const myAvatar = wpAccount ? '💳' : (wdEmpUser ? '👨‍🍳' : '📱');
+  const myRole = wpAccount ? 'WerkPay Rekeninghouder' : (wdEmpUser ? 'Werkdonalds Medewerker' : 'Gebruiker');
+  const myPhone = wpAccount ? '06-PAY-' + wpAccount.username : (wdEmpUser ? '06-POS-' + wdEmpUser.username : '06-GUEST');
 
   const callIntervalRef = useRef<any>(null);
 
@@ -235,20 +250,48 @@ export const DigitalPhone: React.FC = () => {
     };
   }, [analyser, isMuted]);
 
+  const startLiveCall = async (partnerId: string, partnerName: string, partnerPhone: string, partnerRole?: string) => {
+    playClick();
+    setCallingContact({ name: partnerName, phone: partnerPhone, role: partnerRole || 'Bellen...' });
+    setCallPartnerId(partnerId);
+    setCallState('calling');
+    setCallTimer(0);
+
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    setRecentCalls(prev => [
+      { name: partnerName, phone: partnerPhone, time: timeStr, direction: 'out' },
+      ...prev.slice(0, 9)
+    ]);
+
+    try { AudioFX.bell(); } catch {}
+    await requestMicAccess();
+
+    try {
+      const channel = new BroadcastChannel('wd_phone_channel');
+      channel.postMessage({
+        type: 'CALL_DIAL',
+        fromId: myId,
+        fromName: myName,
+        fromPhone: myPhone,
+        toId: partnerId
+      });
+      channel.close();
+    } catch {}
+  };
+
   const startCall = async (name: string, phone: string, role?: string) => {
     playClick();
     setCallingContact({ name, phone, role });
     setCallState('calling');
     setCallTimer(0);
 
-    // Play ringing bell audio
     try { AudioFX.bell(); } catch {}
-
-    // Instantly request microphone so it is ready
     await requestMicAccess();
 
     setTimeout(() => {
       setCallState('connected');
+      if (callIntervalRef.current) clearInterval(callIntervalRef.current);
       callIntervalRef.current = setInterval(() => {
         setCallTimer(prev => prev + 1);
       }, 1000);
@@ -260,9 +303,19 @@ export const DigitalPhone: React.FC = () => {
     if (callIntervalRef.current) {
       clearInterval(callIntervalRef.current);
     }
+    try {
+      const channel = new BroadcastChannel('wd_phone_channel');
+      channel.postMessage({
+        type: 'CALL_HANGUP',
+        fromId: myId,
+        toId: callPartnerId
+      });
+      channel.close();
+    } catch {}
     setCallState('idle');
     setCallTimer(0);
     setCallingContact(null);
+    setCallPartnerId(null);
     stopMicAccess();
   };
 
@@ -274,96 +327,20 @@ export const DigitalPhone: React.FC = () => {
   const [showNewChatList, setShowNewChatList] = useState<boolean>(false);
   const [contacts, setContacts] = useState<SMSContact[]>([]);
 
-  // Initialize Contacts list with static profiles, merging with localStorage SMS history
+  // Initialize Contacts list, loading purely from localStorage but excluding any leftover mock profiles
   useEffect(() => {
-    const defaultContacts: SMSContact[] = [
-      {
-        id: 'manager',
-        name: 'Manager Werkdonalds',
-        avatar: '👨‍💼',
-        role: 'Filiaalmanager',
-        phone: '0900-DONALDS',
-        unread: false,
-        messages: [
-          { id: '1', sender: 'them', text: 'Hee! Zijn de burgers al klaar voor tafel 4?', timestamp: '10:30', read: false },
-          { id: '2', sender: 'me', text: 'Ja, de keuken is er nu mee bezig!', timestamp: '10:32', read: true },
-          { id: '3', sender: 'them', text: 'Top. Zorg ook dat de prullenbakken geleegd worden vandaag.', timestamp: '10:33', read: false }
-        ],
-        autoReplies: [
-          { keywords: ['burger', 'keuken', 'eten'], replies: ['Mooi zo, doorwerken!', 'Let op de hygiëne!', 'Zijn de frietjes ook vers?'] },
-          { keywords: ['klaar', 'af', 'klaar!'], replies: ['Geweldig werk, neem direct een korte pauze.', 'Topper! Houd het tempo hoog.'] },
-          { keywords: ['werkpay', 'geld', 'rekening', 'salaris'], replies: ['Salaris is overgemaakt via WerkPay!', 'Check je saldo in de WerkPay app!'] }
-        ]
-      },
-      {
-        id: 'jan',
-        name: 'Frietbakker Jan',
-        avatar: '🍟',
-        role: 'Keukenheld',
-        phone: '06-98741122',
-        unread: false,
-        messages: [
-          { id: '1', sender: 'them', text: 'Yo, help me even met de patat! Het is super druk.', timestamp: '11:15', read: true }
-        ],
-        autoReplies: [
-          { keywords: ['friet', 'patat', 'frituur'], replies: ['Ik gooi er nog een lading friet in!', 'Hebben we nog mayonaise?', 'Het vet is heet!'] },
-          { keywords: ['help', 'kom', 'onderweg'], replies: ['Snel! Kassa 3 stroomt over!', 'Bedankt man! Ik geef je straks een kipnugget.'] }
-        ]
-      },
-      {
-        id: 'sanne',
-        name: 'Kassière Sanne',
-        avatar: '🥤',
-        role: 'Kassa 1',
-        phone: '06-12345678',
-        unread: false,
-        messages: [
-          { id: '1', sender: 'them', text: 'Kan iemand wisselgeld brengen bij kassa 1? Heb munten van 1 euro nodig.', timestamp: '11:45', read: true }
-        ],
-        autoReplies: [
-          { keywords: ['geld', 'munt', 'wisselgeld'], replies: ['Dankje! Je bent een lifesaver.', 'De kassa la is weer gevuld.'] },
-          { keywords: ['ijs', 'shake', 'ijsje'], replies: ['De ijsmachine werkt gelukkig weer!', 'Zal ik een milkshake voor je tappen?'] }
-        ]
-      },
-      {
-        id: 'mamma',
-        name: 'Mamma 💖',
-        avatar: '👩',
-        role: 'Thuisfront',
-        phone: '06-45217422',
-        unread: false,
-        messages: [
-          { id: '1', sender: 'them', text: 'Ben je al klaar met werken schat? Vergeet de melk niet mee te nemen.', timestamp: '09:00', read: true }
-        ],
-        autoReplies: [
-          { keywords: ['ja', 'bijna', 'klaar'], replies: ['Super, ik heb het eten al klaarstaan!', 'Tot zo schat, doe voorzichtig op de fiets.'] },
-          { keywords: ['nee', 'druk', 'werken'], replies: ['Werk ze lieverd! Niet te hard werken hoor.', 'Mamma is trots op je!'] }
-        ]
-      }
-    ];
-
-    // Load SMS History from LocalStorage
     const storedHistory = localStorage.getItem('wd_phone_sms_history');
     if (storedHistory) {
       try {
         const parsed: SMSContact[] = JSON.parse(storedHistory);
-        // Sync static autoReplies and merge
-        const merged = defaultContacts.map(dc => {
-          const match = parsed.find(p => p.id === dc.id);
-          if (match) {
-            return { ...dc, messages: match.messages, unread: match.unread };
-          }
-          return dc;
-        });
-
-        // Append custom dynamic contacts added by the user
-        const customs = parsed.filter(p => !defaultContacts.some(dc => dc.id === p.id));
-        setContacts([...merged, ...customs]);
+        // Exclude legacy mock profiles
+        const filtered = parsed.filter(c => c.id !== 'manager' && c.id !== 'mamma' && c.id !== 'jan' && c.id !== 'sanne');
+        setContacts(filtered);
       } catch {
-        setContacts(defaultContacts);
+        setContacts([]);
       }
     } else {
-      setContacts(defaultContacts);
+      setContacts([]);
     }
   }, []);
 
@@ -372,17 +349,24 @@ export const DigitalPhone: React.FC = () => {
     localStorage.setItem('wd_phone_sms_history', JSON.stringify(updatedContacts));
   };
 
-  // Cross-Tab/Real-Time Broadcast Channel for SMSing other users
+  // Synchronous Cross-Tab Real-Time SMS and Calling Protocol
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      const smsChannel = new BroadcastChannel('wd_sms_channel');
-      smsChannel.onmessage = (event) => {
-        if (event.data && event.data.type === 'SMS_RECEIVED') {
+      const phoneChannel = new BroadcastChannel('wd_phone_channel');
+      phoneChannel.onmessage = (event) => {
+        if (!event.data) return;
+
+        const { type } = event.data;
+
+        // 1. REAL-TIME SMS PROTOCOL
+        if (type === 'SMS_RECEIVED') {
           const { senderId, senderName, text, targetId, avatar, role } = event.data;
           
+          // Only process if it is sent to me
+          if (targetId !== myId) return;
+
           setContacts(prev => {
-            // Find if this chat thread exists
             const existing = prev.find(c => c.id === senderId);
             const now = new Date();
             const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -408,7 +392,6 @@ export const DigitalPhone: React.FC = () => {
                 return c;
               });
             } else {
-              // Create dynamic new contact for the sender
               const newContact: SMSContact = {
                 id: senderId,
                 name: senderName,
@@ -426,7 +409,6 @@ export const DigitalPhone: React.FC = () => {
             return nextContacts;
           });
 
-          // Show in-app notification if phone is closed or not in messages
           if (!isOpen || activeApp !== 'messages' || activeContactId !== senderId) {
             setNotification({
               title: `SMS van ${senderName}`,
@@ -435,10 +417,71 @@ export const DigitalPhone: React.FC = () => {
             try { AudioFX.bell(); } catch {}
           }
         }
+
+        // 2. REAL-TIME CALLING PROTOCOL
+        // 2.1 CALL_DIAL: Someone is calling me
+        if (type === 'CALL_DIAL') {
+          const { fromId, fromName, fromPhone, toId } = event.data;
+          
+          if (toId === myId) {
+            // I am being called!
+            setCallState('incoming');
+            setCallingContact({
+              name: fromName,
+              phone: fromPhone,
+              role: 'Inkomende oproep'
+            });
+            setCallPartnerId(fromId);
+            setActiveApp('phone'); // Switch to phone app to show incoming call overlay
+            setIsOpen(true); // Open the phone so they see it
+            try { AudioFX.bell(); } catch {}
+          }
+        }
+
+        // 2.2 CALL_ACCEPT: Caller receives acceptance from recipient
+        if (type === 'CALL_ACCEPT') {
+          const { fromId, toId } = event.data;
+          if (toId === myId && callPartnerId === fromId) {
+            setCallState('connected');
+            setCallTimer(0);
+            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+            callIntervalRef.current = setInterval(() => {
+              setCallTimer(prev => prev + 1);
+            }, 1000);
+            try { AudioFX.bell(); } catch {}
+          }
+        }
+
+        // 2.3 CALL_DECLINE: Caller or recipient gets rejected
+        if (type === 'CALL_DECLINE') {
+          const { fromId, toId } = event.data;
+          if (toId === myId && callPartnerId === fromId) {
+            setCallState('idle');
+            setCallTimer(0);
+            setCallingContact(null);
+            setCallPartnerId(null);
+            stopMicAccess();
+            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+            alert('Gesprek geweigerd of beëindigd door de ander.');
+          }
+        }
+
+        // 2.4 CALL_HANGUP: Partner hung up
+        if (type === 'CALL_HANGUP') {
+          const { fromId, toId } = event.data;
+          if (toId === myId && callPartnerId === fromId) {
+            setCallState('idle');
+            setCallTimer(0);
+            setCallingContact(null);
+            setCallPartnerId(null);
+            stopMicAccess();
+            if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+          }
+        }
       };
-      return () => smsChannel.close();
+      return () => phoneChannel.close();
     } catch {}
-  }, [isOpen, activeApp, activeContactId]);
+  }, [isOpen, activeApp, activeContactId, myId, callPartnerId]);
 
   const sendSms = (contactId: string) => {
     if (!smsInput.trim()) return;
@@ -470,16 +513,10 @@ export const DigitalPhone: React.FC = () => {
     setContacts(updated);
     saveSmsToStorage(updated);
 
-    // Broadcast SMS to other tabs / devices
+    // Broadcast SMS to other tabs / devices via unified channel
     try {
-      const smsChannel = new BroadcastChannel('wd_sms_channel');
-      // Determine my identity from active WerkPay bank account or POS user
-      const myName = wpAccount?.account_holder || wdEmpUser?.name || 'Anonieme Collega';
-      const myId = wpAccount?.username || wdEmpUser?.username || 'anonymous_user';
-      const myAvatar = wpAccount ? '💳' : (wdEmpUser ? '👨‍🍳' : '📱');
-      const myRole = wpAccount ? 'WerkPay Rekeninghouder' : (wdEmpUser ? 'Werkdonalds Medewerker' : 'Gebruiker');
-
-      smsChannel.postMessage({
+      const channel = new BroadcastChannel('wd_phone_channel');
+      channel.postMessage({
         type: 'SMS_RECEIVED',
         senderId: myId,
         senderName: myName,
@@ -488,55 +525,8 @@ export const DigitalPhone: React.FC = () => {
         avatar: myAvatar,
         role: myRole
       });
+      channel.close();
     } catch {}
-
-    // Simulated Smart auto-replies for static bot contacts
-    const contact = contacts.find(c => c.id === contactId);
-    if (contact && contact.autoReplies) {
-      const lowercaseText = text.toLowerCase();
-      let matchedReply: string | null = null;
-
-      for (const rule of contact.autoReplies) {
-        if (rule.keywords.some(k => lowercaseText.includes(k))) {
-          const replies = rule.replies;
-          matchedReply = replies[Math.floor(Math.random() * replies.length)];
-          break;
-        }
-      }
-
-      if (matchedReply) {
-        const replyText = matchedReply;
-        setTimeout(() => {
-          const replyMsg: SMSMessage = {
-            id: (Date.now() + 1).toString(),
-            sender: 'them',
-            text: replyText,
-            timestamp: timeStr,
-            read: false
-          };
-
-          setContacts(prev => {
-            const next = prev.map(c => {
-              if (c.id === contactId) {
-                return {
-                  ...c,
-                  messages: [...c.messages, replyMsg],
-                  unread: activeContactId !== contactId
-                };
-              }
-              return c;
-            });
-            saveSmsToStorage(next);
-            return next;
-          });
-
-          if (!isOpen || activeApp !== 'messages' || activeContactId !== contactId) {
-            setNotification({ title: contact.name, body: replyText });
-            try { AudioFX.bell(); } catch {}
-          }
-        }, 1500);
-      }
-    }
   };
 
   // Delete/Clear all messages for a contact
@@ -600,13 +590,6 @@ export const DigitalPhone: React.FC = () => {
   // ==========================================
   // WERKDONALDS STAFF EMPLOYEE PORTAL APP
   // ==========================================
-  const [wdEmpUser, setWdEmpUser] = useState<PosUser | null>(null);
-  const [wdEmpUsername, setWdEmpUsername] = useState<string>('');
-  const [wdEmpPassword, setWdEmpPassword] = useState<string>('');
-  const [wdEmpError, setWdEmpError] = useState<string | null>(null);
-  const [wdCashAmount, setWdCashAmount] = useState<string>('');
-  const [wdCashReason, setWdCashReason] = useState<string>('');
-  const [wdCashSuccess, setWdCashSuccess] = useState<boolean>(false);
 
   const handleWdEmpLogin = () => {
     playClick();
@@ -1007,7 +990,7 @@ export const DigitalPhone: React.FC = () => {
                             <label className="text-[9px] text-slate-400 font-bold block mb-0.5">Naar Gebruikersnaam (ontvanger)</label>
                             <input
                               type="text"
-                              placeholder="bijv: jan, manager, sanne"
+                              placeholder="bijv: jan, joas, sanne"
                               value={wpTransferTarget}
                               onChange={e => setWpTransferTarget(e.target.value)}
                               className="w-full bg-slate-950 border border-slate-800 rounded-lg p-1.5 text-xs focus:outline-none focus:border-cyan-400 text-white"
@@ -1238,7 +1221,7 @@ export const DigitalPhone: React.FC = () => {
 
                           {wdCashSuccess && (
                             <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] text-center font-bold animate-pulse">
-                              Aanvraag ingediend! Manager notificatie verzonden.
+                              Aanvraag ingediend ter goedkeuring.
                             </div>
                           )}
                         </div>
@@ -1309,66 +1292,139 @@ export const DigitalPhone: React.FC = () => {
                 {/* Phone screen routing based on callState */}
                 {callState === 'idle' ? (
                   /* KEYPAD & CONTACTS DIALER */
-                  <div className="flex-1 flex flex-col justify-between p-4">
-                    {/* Dial Input Display */}
-                    <div className="text-center py-1 h-11 flex items-center justify-center">
-                      <span className="text-xl font-mono font-black text-white tracking-widest">{dialInput || 'Toets nummer...'}</span>
-                      {dialInput && (
-                        <button onClick={() => { setDialInput(''); playClick(); }} className="ml-2 text-slate-500 hover:text-white">
-                          <X className="w-4 h-4" />
+                  showNewCallList ? (
+                    <div className="flex-1 flex flex-col bg-slate-950 p-3 space-y-3.5 overflow-y-auto">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Wie wil je bellen?</span>
+                        <button onClick={() => { playClick(); setShowNewCallList(false); }} className="text-slate-500 hover:text-white text-[10px] font-bold">
+                          Terug
                         </button>
-                      )}
-                    </div>
+                      </div>
 
-                    {/* Numeric Keypad Grid */}
-                    <div className="grid grid-cols-3 gap-y-2.5 gap-x-4 px-4 my-auto select-none">
-                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map(num => (
+                      {/* List registered POS Staff users */}
+                      <div className="space-y-1.5">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">Werkdonalds Kassa-gebruikers:</span>
+                        {posUsers.filter(u => u.username !== myId).length === 0 ? (
+                          <div className="text-[10px] text-slate-600 italic px-2">Geen andere medewerkers gevonden.</div>
+                        ) : (
+                          posUsers.filter(u => u.username !== myId).map(u => (
+                            <button
+                              key={u.id}
+                              onClick={() => {
+                                playClick();
+                                setShowNewCallList(false);
+                                startLiveCall(u.username, u.name, '06-' + u.username, 'POS Medewerker');
+                              }}
+                              className="w-full p-2 rounded-xl bg-slate-900 border border-slate-850 hover:bg-slate-850 text-left flex items-center gap-2 text-white font-bold transition text-[11px]"
+                            >
+                              <span>👨‍🍳</span>
+                              <div>
+                                <div>{u.name}</div>
+                                <div className="text-[8px] text-slate-500 font-mono">Bel @{u.username}</div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      {/* List registered WerkPay bank account holders */}
+                      <div className="space-y-1.5 pt-1">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase tracking-wider block">WerkPay bankrekeningen:</span>
+                        {bankAccounts.filter(acc => acc.username !== myId).length === 0 ? (
+                          <div className="text-[10px] text-slate-600 italic px-2">Geen andere bankrekeningen gevonden.</div>
+                        ) : (
+                          bankAccounts.filter(acc => acc.username !== myId).map(acc => (
+                            <button
+                              key={acc.id}
+                              onClick={() => {
+                                playClick();
+                                setShowNewCallList(false);
+                                startLiveCall(acc.username, acc.account_holder, '06-' + acc.username, 'Bankrekening');
+                              }}
+                              className="w-full p-2 rounded-xl bg-slate-900 border border-slate-850 hover:bg-slate-850 text-left flex items-center gap-2 text-white font-bold transition text-[11px]"
+                            >
+                              <span>💳</span>
+                              <div>
+                                <div>{acc.account_holder}</div>
+                                <div className="text-[8px] text-slate-500 font-mono">Bel @{acc.username}</div>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col justify-between p-4">
+                      {/* Dial Input Display */}
+                      <div className="text-center py-1 h-11 flex items-center justify-center">
+                        <span className="text-xl font-mono font-black text-white tracking-widest">{dialInput || 'Toets nummer...'}</span>
+                        {dialInput && (
+                          <button onClick={() => { setDialInput(''); playClick(); }} className="ml-2 text-slate-500 hover:text-white">
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Numeric Keypad Grid */}
+                      <div className="grid grid-cols-3 gap-y-2.5 gap-x-4 px-4 my-auto select-none">
+                        {['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'].map(num => (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => {
+                              setDialInput(prev => prev + num);
+                              playClick();
+                            }}
+                            className="w-11 h-11 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 transition flex flex-col items-center justify-center border border-slate-800/60"
+                          >
+                            <span className="text-sm font-black text-white">{num}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Action buttons at the bottom */}
+                      <div className="flex items-center justify-center gap-4 pt-3 border-t border-slate-900 mt-2">
                         <button
-                          key={num}
-                          type="button"
                           onClick={() => {
-                            setDialInput(prev => prev + num);
-                            playClick();
+                            if (!dialInput) {
+                              alert("Toets eerst een nummer of kies een contact!");
+                              return;
+                            }
+                            // See if dialInput is an active username
+                            const matchedUser = posUsers.find(u => u.username.toLowerCase() === dialInput.trim().toLowerCase()) ||
+                                                bankAccounts.find(a => a.username.toLowerCase() === dialInput.trim().toLowerCase());
+                            if (matchedUser) {
+                              const name = 'account_holder' in matchedUser ? matchedUser.account_holder : matchedUser.name;
+                              const role = 'account_holder' in matchedUser ? 'Bankrekening' : 'POS Medewerker';
+                              startLiveCall(matchedUser.username, name, '06-' + matchedUser.username, role);
+                            } else {
+                              startCall(dialInput, dialInput, 'Handmatig ingevoerd');
+                            }
                           }}
-                          className="w-11 h-11 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 transition flex flex-col items-center justify-center border border-slate-800/60"
+                          className="w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-lg active:scale-90 transition"
                         >
-                          <span className="text-sm font-black text-white">{num}</span>
+                          <PhoneCall className="w-5 h-5" />
                         </button>
-                      ))}
-                    </div>
 
-                    {/* Action buttons at the bottom */}
-                    <div className="flex items-center justify-center gap-4 pt-3 border-t border-slate-900 mt-2">
-                      <button
-                        onClick={() => {
-                          if (!dialInput) {
-                            alert("Toets eerst een nummer of kies een contact!");
-                            return;
-                          }
-                          startCall(dialInput, dialInput, 'Handmatig ingevoerd');
-                        }}
-                        className="w-11 h-11 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shadow-lg active:scale-90 transition"
-                      >
-                        <PhoneCall className="w-5 h-5" />
-                      </button>
-
-                      {/* QUICK CONTACTS BUTTONS */}
-                      <button
-                        onClick={() => {
-                          startCall('Manager', '0900-DONALDS', 'Filiaalmanager');
-                        }}
-                        className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 text-[10px] font-black flex items-center gap-1.5 transition"
-                      >
-                        <User className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Manager bellen</span>
-                      </button>
+                        {/* QUICK DIRECTORY DIALER */}
+                        <button
+                          onClick={() => {
+                            playClick();
+                            setShowNewCallList(true);
+                          }}
+                          className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 text-[10px] font-black flex items-center gap-1.5 transition"
+                        >
+                          <Users className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Kies Contact</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )
                 ) : (
                   /* SIMULATED & MIC-DRIVEN CALL SCREEN */
                   <div className="flex-1 flex flex-col justify-between p-5 bg-slate-950">
                     <div className="text-center space-y-2 mt-4">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center text-2xl font-bold mx-auto shadow-xl ring-4 ring-cyan-500/10">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-600 text-white flex items-center justify-center text-2xl font-bold mx-auto shadow-xl ring-4 ring-cyan-500/10 animate-pulse">
                         {callingContact?.name ? callingContact.name[0] : '📞'}
                       </div>
                       <div>
@@ -1381,6 +1437,8 @@ export const DigitalPhone: React.FC = () => {
                       <div className="pt-1">
                         {callState === 'calling' ? (
                           <span className="text-[10px] text-cyan-400 font-bold tracking-widest uppercase animate-pulse">Verbinding maken...</span>
+                        ) : callState === 'incoming' ? (
+                          <span className="text-[10px] text-yellow-400 font-bold tracking-widest uppercase animate-bounce block">Inkomende oproep...</span>
                         ) : (
                           <div className="space-y-0.5">
                             <span className="text-[10px] text-emerald-400 font-black tracking-widest uppercase">Verbonden via Mic</span>
@@ -1444,14 +1502,69 @@ export const DigitalPhone: React.FC = () => {
                       </div>
                     )}
 
-                    {/* RED HANGUP BUTTON */}
+                    {/* CALL ACTIONS: HANGUP VS ACCEPT/DECLINE FOR INCOMING */}
                     <div className="flex justify-center pb-4">
-                      <button
-                        onClick={hangUp}
-                        className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg active:scale-90 transition"
-                      >
-                        <PhoneOff className="w-5 h-5" />
-                      </button>
+                      {callState === 'incoming' ? (
+                        <div className="flex items-center gap-6">
+                          {/* DECLINE BUTTON */}
+                          <button
+                            onClick={async () => {
+                              playClick();
+                              try {
+                                const channel = new BroadcastChannel('wd_phone_channel');
+                                channel.postMessage({
+                                  type: 'CALL_DECLINE',
+                                  fromId: myId,
+                                  toId: callPartnerId
+                                });
+                                channel.close();
+                              } catch {}
+                              setCallState('idle');
+                              setCallingContact(null);
+                              setCallPartnerId(null);
+                            }}
+                            className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg active:scale-90 transition"
+                            title="Weigeren"
+                          >
+                            <PhoneOff className="w-5 h-5" />
+                          </button>
+
+                          {/* ACCEPT BUTTON */}
+                          <button
+                            onClick={async () => {
+                              playClick();
+                              await requestMicAccess();
+                              try {
+                                const channel = new BroadcastChannel('wd_phone_channel');
+                                channel.postMessage({
+                                  type: 'CALL_ACCEPT',
+                                  fromId: myId,
+                                  toId: callPartnerId
+                                });
+                                channel.close();
+                              } catch {}
+                              setCallState('connected');
+                              setCallTimer(0);
+                              if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+                              callIntervalRef.current = setInterval(() => {
+                                setCallTimer(prev => prev + 1);
+                              }, 1000);
+                            }}
+                            className="w-12 h-12 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white flex items-center justify-center shadow-lg active:scale-90 transition animate-bounce"
+                            title="Opnemen"
+                          >
+                            <PhoneCall className="w-5 h-5" />
+                          </button>
+                        </div>
+                      ) : (
+                        /* RED HANGUP BUTTON */
+                        <button
+                          onClick={hangUp}
+                          className="w-12 h-12 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-lg active:scale-90 transition"
+                        >
+                          <PhoneOff className="w-5 h-5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
