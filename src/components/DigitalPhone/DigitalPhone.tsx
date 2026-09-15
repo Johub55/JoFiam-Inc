@@ -460,6 +460,21 @@ export const DigitalPhone: React.FC = () => {
       fromRole: myRole,
       toId: partnerId
     });
+
+    // Fallback timer if partner is offline or in single tab: connect automatically after 3 seconds
+    setTimeout(() => {
+      setCallState(prev => {
+        if (prev === 'calling') {
+          startSimulatedCallAudio();
+          if (callIntervalRef.current) clearInterval(callIntervalRef.current);
+          callIntervalRef.current = setInterval(() => {
+            setCallTimer(t => t + 1);
+          }, 1000);
+          return 'connected';
+        }
+        return prev;
+      });
+    }, 3000);
   };
 
   const startCall = async (name: string, phone: string, role?: string) => {
@@ -472,6 +487,7 @@ export const DigitalPhone: React.FC = () => {
 
     setTimeout(() => {
       setCallState('connected');
+      startSimulatedCallAudio();
       if (callIntervalRef.current) clearInterval(callIntervalRef.current);
       callIntervalRef.current = setInterval(() => {
         setCallTimer(prev => prev + 1);

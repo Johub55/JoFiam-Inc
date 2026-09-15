@@ -335,7 +335,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
 
   const [activeReceiptOrder, setActiveReceiptOrder] = useState<Order | null>(null);
-  const [trackedOrderNo, setTrackedOrderNo] = useState<number | null>(null);
+  const [trackedOrderNo, setTrackedOrderNoInternal] = useState<number | null>(null);
+
+  const setTrackedOrderNo = useCallback((orderNo: number | null) => {
+    setTrackedOrderNoInternal(orderNo);
+    if (orderNo !== null) {
+      setAppMode('pos');
+      setPosScreen('volgscherm');
+    }
+  }, []);
 
   // Track order numbers placed in this session or browser
   const [myOrderNumbers, setMyOrderNumbers] = useState<number[]>(() => {

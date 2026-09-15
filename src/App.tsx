@@ -8,7 +8,6 @@ import { InventoryScreen } from './components/WerkdonaldsPOS/InventoryScreen';
 import { ManagerScreen } from './components/WerkdonaldsPOS/ManagerScreen';
 import { OrderTrackingScreen } from './components/WerkdonaldsPOS/OrderTrackingScreen';
 import { ReceiptModal } from './components/WerkdonaldsPOS/ReceiptModal';
-import { OrderTrackingModal } from './components/WerkdonaldsPOS/OrderTrackingModal';
 import { PaymentModal } from './components/WerkdonaldsPOS/PaymentModal';
 import { WalletScreen } from './components/WerkPayBank/WalletScreen';
 import { ManagerAccountsScreen } from './components/WerkPayBank/ManagerAccountsScreen';
@@ -88,7 +87,6 @@ const MainLayout: React.FC = () => {
       {/* Global Modals & Notifications */}
       <StaffCashRequestNotifier />
       <ReceiptModal />
-      <OrderTrackingModal />
       {showPaymentModal && (
         <PaymentModal onClose={() => setShowPaymentModal(false)} />
       )}
