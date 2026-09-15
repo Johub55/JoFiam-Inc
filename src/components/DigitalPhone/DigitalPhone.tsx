@@ -224,13 +224,72 @@ export const DigitalPhone: React.FC = () => {
   const [recentCalls, setRecentCalls] = useState<{ name: string; phone: string; time: string; direction: 'in' | 'out' }[]>([]);
   const [callPartnerId, setCallPartnerId] = useState<string | null>(null);
   const [showNewCallList, setShowNewCallList] = useState<boolean>(false);
+  const [showIdentityModal, setShowIdentityModal] = useState<boolean>(false);
+  const [pendingIdentity, setPendingIdentity] = useState<{ id: string; name: string; avatar: string; role: string; phone: string; password?: string } | null>(null);
+  const [identityInputPass, setIdentityInputPass] = useState<string>('');
+  const [identityAuthError, setIdentityAuthError] = useState<string | null>(null);
 
-  const [guestId] = useState<string>(() => 'gast_' + Math.random().toString(36).substring(2, 6));
-  const myId = wpAccount?.username || wdEmpUser?.username || guestId;
-  const myName = wpAccount?.account_holder || wdEmpUser?.name || 'Gast-Gebruiker';
-  const myAvatar = wpAccount ? '💳' : (wdEmpUser ? '👨‍🍳' : '📱');
-  const myRole = wpAccount ? 'WerkPay Rekeninghouder' : (wdEmpUser ? 'Werkdonalds Medewerker' : 'Gebruiker');
-  const myPhone = wpAccount ? '06-PAY-' + wpAccount.username : (wdEmpUser ? '06-POS-' + wdEmpUser.username : '06-GUEST');
+  // Dedicated Active Phone Account / Identity State (Persisted in localStorage)
+  const [phoneIdentity, setPhoneIdentity] = useState<{ id: string; name: string; avatar: string; role: string; phone: string } | null>(() => {
+    const saved = localStorage.getItem('wd_phone_active_identity');
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return null;
+  });
+
+  // Active Phone Account / Identity State
+  // Note: Phone is NOT logged in by default until user explicitly logs in on phone with password
+  const activeAccount = phoneIdentity;
+
+  const myId = activeAccount?.id || 'unauthenticated';
+  const myName = activeAccount?.name || 'Niet Ingelogd';
+  const myAvatar = activeAccount?.avatar || '🔒';
+  const myRole = activeAccount?.role || 'Geen Actief Account';
+  const myPhone = activeAccount?.phone || 'Geen Nummer';
+
+  const handleSelectPhoneIdentity = (id: string, name: string, avatar: string, role: string, phone: string) => {
+    const identity = { id, name, avatar, role, phone };
+    setPhoneIdentity(identity);
+    localStorage.setItem('wd_phone_active_identity', JSON.stringify(identity));
+    setShowIdentityModal(false);
+    setPendingIdentity(null);
+    setIdentityInputPass('');
+    setIdentityAuthError(null);
+    try { AudioFX.bell(); } catch {}
+  };
+
+  const handleConfirmIdentityLogin = () => {
+    if (!pendingIdentity) return;
+    const entered = identityInputPass.trim();
+    if (!entered) {
+      setIdentityAuthError('Voer een wachtwoord in.');
+      return;
+    }
+
+    const expectedPass = pendingIdentity.password || '1234';
+    const isValid = entered === expectedPass || entered === '1234' || entered === 'admin123';
+
+    if (isValid) {
+      handleSelectPhoneIdentity(
+        pendingIdentity.id,
+        pendingIdentity.name,
+        pendingIdentity.avatar,
+        pendingIdentity.role,
+        pendingIdentity.phone
+      );
+    } else {
+      setIdentityAuthError('Onjuist wachtwoord! (Hint: 1234)');
+      try { AudioFX.beep(); } catch {}
+    }
+  };
+
+  const handleClearPhoneIdentity = () => {
+    setPhoneIdentity(null);
+    localStorage.removeItem('wd_phone_active_identity');
+    setShowIdentityModal(false);
+    try { AudioFX.beep(); } catch {}
+  };
 
   const callIntervalRef = useRef<any>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -1143,7 +1202,7 @@ export const DigitalPhone: React.FC = () => {
       {isOpen && (
         <div
           id="digital-phone-shell"
-          className="fixed bottom-24 right-6 z-50 w-[300px] h-[550px] bg-slate-900 border-4 border-slate-750 rounded-[40px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col font-sans ring-1 ring-white/10"
+          className="fixed bottom-24 right-6 z-50 w-[320px] max-h-[85vh] h-[580px] bg-slate-900 border-4 border-slate-750 rounded-[40px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col font-sans ring-1 ring-white/10"
         >
           {/* TOP STATUS BAR & DYNAMIC NOTCH */}
           <div className="bg-slate-950 px-5 pt-3.5 pb-2.5 flex items-center justify-between select-none relative z-20">
@@ -1180,12 +1239,35 @@ export const DigitalPhone: React.FC = () => {
           )}
 
           {/* WORKPHONE CORE VIEWPORT PANEL */}
-          <div className="flex-1 flex flex-col relative bg-slate-950 overflow-hidden">
+          <div className="flex-1 flex flex-col relative bg-slate-950 overflow-hidden min-h-0">
             
             {/* 1. HOME SCREEN LAUNCHER SCREEN */}
             {activeApp === 'home' && (
-              <div className={`flex-1 flex flex-col p-5 justify-between ${getWallpaperClass()}`}>
+              <div className={`flex-1 flex flex-col p-4 justify-between min-h-0 ${getWallpaperClass()}`}>
                 
+                {/* ACTIVE PHONE ACCOUNT IDENTITY BADGE */}
+                <div className="p-2.5 bg-slate-900/90 backdrop-blur rounded-2xl border border-slate-800 flex items-center justify-between shadow-md">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm shrink-0">
+                      {myAvatar}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[9px] text-cyan-400 font-bold uppercase tracking-wider truncate flex items-center gap-1">
+                        <span>📱 Telefoon Ingelogd Als</span>
+                      </div>
+                      <div className="text-[11px] font-black text-white truncate">{myName}</div>
+                      <div className="text-[8px] text-slate-400 font-mono truncate">{myPhone}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setShowIdentityModal(true); playClick(); }}
+                    className="px-2 py-1 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[9px] font-bold transition flex items-center gap-1 active:scale-95 shrink-0"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Inloggen</span>
+                  </button>
+                </div>
+
                 {/* Floating Widget Box */}
                 <div className="p-3 bg-gradient-to-br from-slate-900 to-slate-950 rounded-2xl border border-slate-800/80 space-y-1 shadow-md">
                   <div className="flex justify-between items-center text-[9px] font-bold text-slate-400 uppercase tracking-wider">
@@ -1736,7 +1818,7 @@ export const DigitalPhone: React.FC = () => {
 
             {/* 4. APP: TELEFOON / REAL MIC CALL SCREEN */}
             {activeApp === 'phone' && (
-              <div className="flex-1 flex flex-col bg-slate-950">
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                 {/* Header */}
                 <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
@@ -1748,18 +1830,39 @@ export const DigitalPhone: React.FC = () => {
                       <span>Bellen</span>
                     </span>
                   </div>
-                  {callState !== 'idle' && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono animate-pulse font-bold border border-red-500/15">
-                      GESPREK
-                    </span>
-                  )}
+                  <button
+                    onClick={() => { setShowIdentityModal(true); playClick(); }}
+                    className="text-[9px] bg-slate-800 hover:bg-slate-750 text-cyan-400 font-bold px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1"
+                  >
+                    <span>{myAvatar} {myName}</span>
+                    <span className="text-[8px] opacity-75">({myPhone})</span>
+                  </button>
+                </div>
+
+                {/* ACTIVE IDENTITY MINI BAR */}
+                <div className={`px-3 py-1.5 border-b flex items-center justify-between text-[9px] shrink-0 ${
+                  phoneIdentity ? 'bg-slate-900/80 border-slate-800' : 'bg-amber-950/40 border-amber-500/30'
+                }`}>
+                  <span className="font-bold truncate">
+                    {phoneIdentity ? (
+                      <span className="text-slate-400">Zender ID: <strong className="text-emerald-400 font-mono">{myPhone}</strong> ({myRole})</span>
+                    ) : (
+                      <span className="text-amber-400">🔒 Niet ingelogd op telefoon account</span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => { setShowIdentityModal(true); playClick(); }}
+                    className="text-cyan-400 hover:underline font-bold text-[9px] shrink-0 ml-1"
+                  >
+                    {phoneIdentity ? 'Wissel' : 'Inloggen'}
+                  </button>
                 </div>
 
                 {/* Phone screen routing based on callState */}
                 {callState === 'idle' ? (
                   /* KEYPAD & CONTACTS DIALER */
                   showNewCallList ? (
-                    <div className="flex-1 flex flex-col bg-slate-950 p-3 space-y-3.5 overflow-y-auto">
+                    <div className="flex-1 flex flex-col bg-slate-950 p-3 space-y-3.5 overflow-y-auto min-h-0">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Wie wil je bellen?</span>
                         <button onClick={() => { playClick(); setShowNewCallList(false); }} className="text-slate-500 hover:text-white text-[10px] font-bold">
@@ -2526,6 +2629,41 @@ export const DigitalPhone: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* TELEFOON INLOGGEN & IDENTITEIT INSTELLINGEN */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider flex items-center gap-1">
+                        📱 Telefoon Identiteit / Inlog
+                      </span>
+                      <button
+                        onClick={() => { setShowIdentityModal(true); playClick(); }}
+                        className="text-[9px] bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black px-2 py-0.5 rounded-lg transition"
+                      >
+                        Inloggen / Kies Rol
+                      </button>
+                    </div>
+                    <div className="p-2.5 bg-slate-950 border border-slate-850 rounded-xl flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl shrink-0">{myAvatar}</span>
+                        <div className="min-w-0">
+                          <div className="text-[11px] font-black text-white truncate">{myName}</div>
+                          <div className="text-[9px] text-emerald-400 font-mono truncate">{myPhone} • {myRole}</div>
+                        </div>
+                      </div>
+                      {phoneIdentity && (
+                        <button
+                          onClick={handleClearPhoneIdentity}
+                          className="text-[8px] bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-1.5 py-0.5 rounded font-bold border border-rose-500/20 shrink-0 ml-1"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-slate-400 italic leading-tight">
+                      Stel in wie deze telefoon gebruikt (bijv. Manager Telefoon, Kassa 1, Keuken, of medewerker) zodat inkomende oproepen en SMS-berichten op dit toestel aankomen.
+                    </p>
+                  </div>
+
                   {/* SYSTEM INFO */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2">
                     <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Systeeminformatie</span>
@@ -2542,11 +2680,228 @@ export const DigitalPhone: React.FC = () => {
                       <span className="text-cyan-400 font-bold">Supabase Realtime</span>
                     </div>
                     <div className="flex justify-between py-1 text-[11px]">
-                      <span className="text-slate-400">Actief Account:</span>
-                      <span className="text-emerald-400 font-bold truncate max-w-[120px]">{wpAccount?.account_holder || 'Gast'}</span>
+                      <span className="text-slate-400">Actieve Identiteit:</span>
+                      <span className="text-emerald-400 font-bold truncate max-w-[120px]">{myName}</span>
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* TELEFOON ACCOUNT INLOGGEN / SELECTIE MODAL OVERLAY */}
+            {showIdentityModal && (
+              <div className="absolute inset-0 z-50 bg-slate-950/95 backdrop-blur-md p-3.5 flex flex-col min-h-0 animate-in fade-in duration-150">
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0">
+                  <div>
+                    <h4 className="font-black text-xs text-white flex items-center gap-1.5">
+                      <span>📱</span> Telefoon Account Inloggen
+                    </h4>
+                    <p className="text-[9px] text-slate-400">
+                      {pendingIdentity ? 'Voer wachtwoord in voor account' : 'Kies wie dit specifieke toestel bedient'}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowIdentityModal(false);
+                      setPendingIdentity(null);
+                      setIdentityInputPass('');
+                      setIdentityAuthError(null);
+                    }}
+                    className="p-1 text-slate-400 hover:text-white rounded-lg"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {pendingIdentity ? (
+                  /* PASSWORD INPUT VIEW FOR SELECTED ACCOUNT */
+                  <div className="flex-1 flex flex-col justify-between p-1 space-y-3 min-h-0 py-3">
+                    <div className="text-center space-y-1.5 pt-1">
+                      <button
+                        onClick={() => setPendingIdentity(null)}
+                        className="text-[10px] text-cyan-400 hover:underline flex items-center gap-1 mx-auto font-bold"
+                      >
+                        <ArrowLeft className="w-3 h-3" /> Kies een ander account
+                      </button>
+
+                      <div className="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl mx-auto shadow-md">
+                        {pendingIdentity.avatar}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-white text-xs">{pendingIdentity.name}</h4>
+                        <span className="text-[9px] text-cyan-400 font-mono block">{pendingIdentity.phone}</span>
+                        <span className="text-[8px] text-slate-400 font-bold uppercase">{pendingIdentity.role}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl space-y-2.5">
+                      <label className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block">
+                        🔒 Voer Wachtwoord In:
+                      </label>
+                      <input
+                        type="password"
+                        placeholder="••••••••"
+                        value={identityInputPass}
+                        onChange={e => {
+                          setIdentityInputPass(e.target.value);
+                          setIdentityAuthError(null);
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleConfirmIdentityLogin();
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono focus:outline-none focus:border-cyan-400 text-center tracking-widest"
+                        autoFocus
+                      />
+
+                      {identityAuthError && (
+                        <div className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[9px] font-bold text-center animate-pulse">
+                          {identityAuthError}
+                        </div>
+                      )}
+
+                      <div className="text-[8px] text-slate-400 text-center italic">
+                        💡 Standaard wachtwoord: <strong className="text-white font-mono">1234</strong> of <strong className="text-white font-mono">admin123</strong>
+                      </div>
+
+                      <button
+                        onClick={handleConfirmIdentityLogin}
+                        className="w-full py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition active:scale-95 flex items-center justify-center gap-1 shadow-lg"
+                      >
+                        <Unlock className="w-3.5 h-3.5" />
+                        <span>Inloggen Op Telefoon</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ACCOUNT SELECTION LIST */
+                  <div className="flex-1 overflow-y-auto custom-scroll min-h-0 space-y-3 py-3 text-xs pr-1">
+                    
+                    {/* CATEGORY 1: SYSTEM & POS PHONES */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-black text-cyan-400 uppercase tracking-wider block">🏢 Specifieke Telefoons (Wachtwoord 1234):</span>
+                      {SYSTEM_PHONE_ACCOUNTS.map(sys => (
+                        <button
+                          key={sys.id}
+                          onClick={() => {
+                            setPendingIdentity({
+                              id: sys.id,
+                              name: sys.name,
+                              avatar: sys.avatar,
+                              role: sys.role,
+                              phone: sys.phone,
+                              password: '1234'
+                            });
+                            setIdentityInputPass('');
+                            setIdentityAuthError(null);
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                            myId === sys.id ? 'border-cyan-400 bg-cyan-950/40 text-white shadow-lg' : 'border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xl shrink-0">{sys.avatar}</span>
+                            <div className="min-w-0">
+                              <div className="font-bold text-[11px] text-white truncate">{sys.name}</div>
+                              <div className="text-[9px] text-cyan-400 font-mono truncate">{sys.phone} ({sys.role})</div>
+                            </div>
+                          </div>
+                          {myId === sys.id ? (
+                            <span className="text-[8px] bg-cyan-500 text-slate-950 font-black px-1.5 py-0.5 rounded-full shrink-0">ACTIEF</span>
+                          ) : (
+                            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* CATEGORY 2: POS STAFF USERS */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-black text-amber-400 uppercase tracking-wider block">👨‍🍳 Personeel Accounts (Wachtwoord vereist):</span>
+                      {posUsers.map(u => (
+                        <button
+                          key={u.id}
+                          onClick={() => {
+                            setPendingIdentity({
+                              id: u.username,
+                              name: u.name,
+                              avatar: '👨‍🍳',
+                              role: u.is_admin ? 'Hoofdbeheerder' : 'Medewerker',
+                              phone: '06-POS-' + u.username,
+                              password: u.password || 'admin123'
+                            });
+                            setIdentityInputPass('');
+                            setIdentityAuthError(null);
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                            myId === u.username ? 'border-amber-400 bg-amber-950/40 text-white shadow-lg' : 'border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xl shrink-0">👨‍🍳</span>
+                            <div className="min-w-0">
+                              <div className="font-bold text-[11px] text-white truncate">{u.name}</div>
+                              <div className="text-[9px] text-slate-400 font-mono truncate">06-POS-{u.username}</div>
+                            </div>
+                          </div>
+                          {myId === u.username ? (
+                            <span className="text-[8px] bg-amber-500 text-slate-950 font-black px-1.5 py-0.5 rounded-full shrink-0">ACTIEF</span>
+                          ) : (
+                            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* CATEGORY 3: WERKPAY BANK ACCOUNTS */}
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] font-black text-indigo-400 uppercase tracking-wider block">💳 WerkPay Accounts (PIN vereist):</span>
+                      {bankAccounts.map(acc => (
+                        <button
+                          key={acc.id}
+                          onClick={() => {
+                            setPendingIdentity({
+                              id: acc.username,
+                              name: acc.account_holder,
+                              avatar: '💳',
+                              role: 'Bankrekening',
+                              phone: '06-PAY-' + acc.username,
+                              password: acc.password || acc.pin_code || '1234'
+                            });
+                            setIdentityInputPass('');
+                            setIdentityAuthError(null);
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                            myId === acc.username ? 'border-indigo-400 bg-indigo-950/40 text-white shadow-lg' : 'border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xl shrink-0">💳</span>
+                            <div className="min-w-0">
+                              <div className="font-bold text-[11px] text-white truncate">{acc.account_holder}</div>
+                              <div className="text-[9px] text-indigo-400 font-mono truncate">06-PAY-{acc.username}</div>
+                            </div>
+                          </div>
+                          {myId === acc.username ? (
+                            <span className="text-[8px] bg-indigo-500 text-white font-black px-1.5 py-0.5 rounded-full shrink-0">ACTIEF</span>
+                          ) : (
+                            <Lock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {phoneIdentity && !pendingIdentity && (
+                  <div className="pt-2 border-t border-slate-800 shrink-0">
+                    <button
+                      onClick={handleClearPhoneIdentity}
+                      className="w-full py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 font-bold text-[10px] transition"
+                    >
+                      Uitloggen Van Telefoon
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
