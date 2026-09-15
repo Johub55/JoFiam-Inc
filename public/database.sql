@@ -108,6 +108,18 @@ CREATE TABLE IF NOT EXISTS public.pos_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 1.10 Telefoon SMS Berichten (Live Synchronisatie via Supabase)
+CREATE TABLE IF NOT EXISTS public.phone_messages (
+  id BIGSERIAL PRIMARY KEY,
+  sender_id TEXT NOT NULL,
+  sender_name TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  avatar TEXT DEFAULT '📱',
+  role TEXT DEFAULT 'Gebruiker',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 
 -- 1.9 VEILIGHEIDS- EN COMPATIBILITEITSMIGRATIES (Voor als tabellen al eerder bestonden)
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(10, 2) DEFAULT 0.00;

@@ -53,6 +53,8 @@ interface AppContextType {
   // Connection & Supabase
   supabaseConfig: SupabaseConfig;
   setSupabaseConfig: (cfg: Partial<SupabaseConfig>) => void;
+  posClient: SupabaseClient | null;
+  payClient: SupabaseClient | null;
   isOnline: boolean;
   isSupabaseConfigured: boolean;
   connectionText: string;
@@ -2078,6 +2080,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setWerkpayScreen,
         supabaseConfig,
         setSupabaseConfig,
+        posClient,
+        payClient,
         isOnline,
         isSupabaseConfigured: Boolean(
           (supabaseConfig.unifiedUrl || supabaseConfig.supabaseUrl) &&

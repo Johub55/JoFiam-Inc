@@ -65,7 +65,9 @@ export const DigitalPhone: React.FC = () => {
     orders,
     posUsers,
     createCashRequest,
-    saveBankAccount
+    saveBankAccount,
+    payClient,
+    posClient
   } = useApp();
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -483,6 +485,122 @@ export const DigitalPhone: React.FC = () => {
     } catch {}
   }, [isOpen, activeApp, activeContactId, myId, callPartnerId]);
 
+  // Supabase phone_messages Database Sync & Realtime Subscription
+  useEffect(() => {
+    const sbClient = payClient || posClient;
+    if (!sbClient) return;
+
+    let channel: any = null;
+
+    // Fetch initial messages sent to me from Supabase database
+    const fetchSupabaseMessages = async () => {
+      try {
+        const { data, error } = await sbClient
+          .from('phone_messages')
+          .select('*')
+          .eq('target_id', myId)
+          .order('created_at', { ascending: true })
+          .limit(100);
+
+        if (data && data.length > 0) {
+          setContacts(prev => {
+            let next = [...prev];
+            data.forEach((row: any) => {
+              const senderId = row.sender_id;
+              const existing = next.find(c => c.id === senderId);
+              const msgTime = new Date(row.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              const msgId = 'sb_' + row.id;
+
+              const msgObj: SMSMessage = {
+                id: msgId,
+                sender: 'them',
+                text: row.text,
+                timestamp: msgTime,
+                read: true
+              };
+
+              if (existing) {
+                if (!existing.messages.some(m => m.id === msgId)) {
+                  next = next.map(c => c.id === senderId ? { ...c, messages: [...c.messages, msgObj] } : c);
+                }
+              } else {
+                next.push({
+                  id: senderId,
+                  name: row.sender_name || senderId,
+                  avatar: row.avatar || '📱',
+                  role: row.role || 'Gebruiker',
+                  phone: '06-' + senderId,
+                  unread: false,
+                  messages: [msgObj],
+                  isCustom: true
+                });
+              }
+            });
+            saveSmsToStorage(next);
+            return next;
+          });
+        }
+      } catch {}
+    };
+
+    fetchSupabaseMessages();
+
+    // Subscribe to real-time inserts on phone_messages table
+    try {
+      channel = sbClient
+        .channel('public:phone_messages')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'phone_messages', filter: `target_id=eq.${myId}` }, (payload: any) => {
+          const row = payload.new;
+          if (!row) return;
+
+          const senderId = row.sender_id;
+          const msgTime = new Date(row.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          const msgId = 'sb_' + row.id;
+
+          setContacts(prev => {
+            const existing = prev.find(c => c.id === senderId);
+            const msgObj: SMSMessage = {
+              id: msgId,
+              sender: 'them',
+              text: row.text,
+              timestamp: msgTime,
+              read: false
+            };
+
+            let next: SMSContact[] = [];
+            if (existing) {
+              if (existing.messages.some(m => m.id === msgId)) return prev;
+              next = prev.map(c => c.id === senderId ? { ...c, messages: [...c.messages, msgObj], unread: activeContactId !== senderId } : c);
+            } else {
+              next = [...prev, {
+                id: senderId,
+                name: row.sender_name || senderId,
+                avatar: row.avatar || '📱',
+                role: row.role || 'Gebruiker',
+                phone: '06-' + senderId,
+                unread: activeContactId !== senderId,
+                messages: [msgObj],
+                isCustom: true
+              }];
+            }
+
+            saveSmsToStorage(next);
+            return next;
+          });
+
+          if (!isOpen || activeApp !== 'messages' || activeContactId !== senderId) {
+            setNotification({ title: row.sender_name || 'Nieuw bericht', body: row.text });
+            try { AudioFX.bell(); } catch {}
+          }
+        })
+        .subscribe();
+    } catch {}
+
+    return () => {
+      if (channel && sbClient) sbClient.removeChannel(channel);
+    };
+  }, [payClient, posClient, myId, activeContactId, isOpen, activeApp]);
+
   const sendSms = (contactId: string) => {
     if (!smsInput.trim()) return;
     playClick();
@@ -513,7 +631,20 @@ export const DigitalPhone: React.FC = () => {
     setContacts(updated);
     saveSmsToStorage(updated);
 
-    // Broadcast SMS to other tabs / devices via unified channel
+    // 1. Save message to Supabase database if connected
+    const sbClient = payClient || posClient;
+    if (sbClient) {
+      sbClient.from('phone_messages').insert({
+        sender_id: myId,
+        sender_name: myName,
+        target_id: contactId,
+        text,
+        avatar: myAvatar,
+        role: myRole
+      }).then(() => {}).catch(() => {});
+    }
+
+    // 2. Broadcast SMS to other tabs / devices via unified channel
     try {
       const channel = new BroadcastChannel('wd_phone_channel');
       channel.postMessage({

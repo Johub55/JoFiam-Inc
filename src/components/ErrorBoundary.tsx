@@ -34,8 +34,9 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
-  public render() {
-    if (this.state.hasError) {
+  public render(): ReactNode {
+    const instance = this as any;
+    if (instance.state?.hasError) {
       return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center select-none font-sans">
           <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-4">
@@ -49,9 +50,9 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {this.state.error && (
+            {instance.state?.error && (
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-left font-mono text-[10px] text-red-300 overflow-x-auto max-h-32">
-                {this.state.error.message}
+                {instance.state.error.message}
               </div>
             )}
 
@@ -74,6 +75,6 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    return this.props.children;
+    return instance.props?.children;
   }
 }
