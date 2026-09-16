@@ -26,7 +26,24 @@ export const GitHubExportModal: React.FC<GitHubExportModalProps> = ({ isOpen, on
   if (!isOpen) return null;
 
   const handleCopy = (content: string, fileName: string) => {
-    navigator.clipboard.writeText(content);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(content);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = content;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (e) {
+      console.warn("Fallback copy method used due to clipboard error:", e);
+    }
     setCopiedFile(fileName);
     setTimeout(() => setCopiedFile(null), 2500);
   };

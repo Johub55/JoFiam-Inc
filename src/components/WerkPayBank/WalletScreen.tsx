@@ -67,7 +67,24 @@ export const WalletScreen: React.FC = () => {
 
   const handleCopyUid = () => {
     if (!currentBankAccount?.card_uid) return;
-    navigator.clipboard.writeText(currentBankAccount.card_uid);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(currentBankAccount.card_uid);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = currentBankAccount.card_uid;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (e) {
+      console.warn("Fallback copy method used due to clipboard error:", e);
+    }
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
   };

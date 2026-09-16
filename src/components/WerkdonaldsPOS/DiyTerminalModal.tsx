@@ -73,7 +73,24 @@ export const DiyTerminalModal: React.FC<DiyTerminalModalProps> = ({ onClose, onS
   };
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(ARDUINO_SKETCH_CODE);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ARDUINO_SKETCH_CODE);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = ARDUINO_SKETCH_CODE;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (e) {
+      console.warn("Fallback copy method used due to clipboard error:", e);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };

@@ -43,7 +43,24 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
     UNIFIED_SUPABASE_SQL;
 
   const handleCopySql = () => {
-    navigator.clipboard.writeText(activeSqlCode);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(activeSqlCode);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = activeSqlCode;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+    } catch (e) {
+      console.warn("Fallback copy method used due to clipboard error:", e);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -350,7 +367,24 @@ GRANT ALL ON TABLE public.phone_messages TO postgres, anon, authenticated, servi
 DO $$ BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.phone_messages; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;`;
-                      navigator.clipboard.writeText(phoneSql);
+                      try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(phoneSql);
+                        } else {
+                          const textArea = document.createElement("textarea");
+                          textArea.value = phoneSql;
+                          textArea.style.position = "fixed";
+                          textArea.style.left = "-999999px";
+                          textArea.style.top = "-999999px";
+                          document.body.appendChild(textArea);
+                          textArea.focus();
+                          textArea.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                        }
+                      } catch (e) {
+                        console.warn("Fallback copy method used due to clipboard error:", e);
+                      }
                       alert('Telefoon SQL gekopieerd! Plak dit in de Supabase SQL Editor om alleen de telefoon toe te voegen.');
                     }}
                     className="px-2.5 py-1 text-[11px] font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition shrink-0"
@@ -373,7 +407,24 @@ END $$;`;
                     type="button"
                     onClick={() => {
                       const rlsSql = `ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;\nGRANT ALL ON TABLE public.orders TO anon, authenticated, service_role;\nGRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;`;
-                      navigator.clipboard.writeText(rlsSql);
+                      try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(rlsSql);
+                        } else {
+                          const textArea = document.createElement("textarea");
+                          textArea.value = rlsSql;
+                          textArea.style.position = "fixed";
+                          textArea.style.left = "-999999px";
+                          textArea.style.top = "-999999px";
+                          document.body.appendChild(textArea);
+                          textArea.focus();
+                          textArea.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                        }
+                      } catch (e) {
+                        console.warn("Fallback copy method used due to clipboard error:", e);
+                      }
                       alert('RLS SQL gekopieerd! Plak dit in de Supabase SQL Editor om updates toe te staan.');
                     }}
                     className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg transition shrink-0"
