@@ -45,7 +45,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
   } = useApp();
 
   const [paymentMethod, setPaymentMethod] = useState<'workpay' | 'cash' | 'giftcard'>('workpay');
-  const [orderType, setOrderType] = useState<'dine_in' | 'takeaway'>('dine_in');
+  const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
   const [identifier, setIdentifier] = useState<string>('');
 
   // WerkPay Mode: 'quick' | 'card' | 'login' | 'terminal'
@@ -333,42 +333,73 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto">
           
           {/* Order Details & Dining Mode */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setOrderType('dine_in')}
-              className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
-                orderType === 'dine_in'
-                  ? 'bg-blue-600 border-blue-500 text-white shadow'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-              }`}
-            >
-              <span>🍽️ Hier Opeten</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType('takeaway')}
-              className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
-                orderType === 'takeaway'
-                  ? 'bg-blue-600 border-blue-500 text-white shadow'
-                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
-              }`}
-            >
-              <span>🥡 Meenemen (Afhaal)</span>
-            </button>
+          <div>
+            <label className="text-xs text-slate-400 font-semibold block mb-1.5">
+              Kies Besteltype:
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setOrderType('dine_in')}
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  orderType === 'dine_in'
+                    ? 'bg-blue-600 border-blue-500 text-white shadow'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <span>🍽️ Opeten</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('takeaway')}
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  orderType === 'takeaway'
+                    ? 'bg-blue-600 border-blue-500 text-white shadow'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <span>🥡 Afhaal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('delivery')}
+                className={`py-2 px-2.5 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  orderType === 'delivery'
+                    ? 'bg-amber-600 border-amber-500 text-white shadow'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <span>🛵 Bezorgen</span>
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="text-xs text-slate-400 font-semibold block mb-1">
-              {orderType === 'dine_in' ? 'Tafelnummer of Klantnaam' : 'Klantnaam of Bestelcode'}
+              {orderType === 'dine_in'
+                ? 'Tafelnummer of Klantnaam'
+                : orderType === 'delivery'
+                ? 'Bezorgadres & Klantnaam (Geen omroep)'
+                : 'Klantnaam of Bestelcode'}
             </label>
             <input
               type="text"
               value={identifier}
               onChange={e => setIdentifier(e.target.value)}
-              placeholder={orderType === 'dine_in' ? 'Tafelnummer of klantnaam' : 'Klantnaam'}
+              placeholder={
+                orderType === 'dine_in'
+                  ? 'bijv. Tafel 4 of Jan'
+                  : orderType === 'delivery'
+                  ? 'bijv. Dorpsstraat 12 (Jan)'
+                  : 'bijv. Afhaal Jan'
+              }
               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
             />
+            {orderType === 'delivery' && (
+              <p className="text-[11px] text-amber-400/90 font-medium mt-1">
+                ℹ️ Bezorgbestellingen worden niet omgeroepen via de speakers en niet op het afhaalscherm getoond.
+              </p>
+            )}
           </div>
 
           {/* Amount Overview */}

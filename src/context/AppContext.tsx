@@ -107,14 +107,14 @@ interface AppContextType {
   setTrackedOrderNo: (orderNo: number | null) => void;
   processCheckout: (
     method: 'workpay' | 'cash' | 'giftcard',
-    orderType: 'dine_in' | 'takeaway',
+    orderType: 'dine_in' | 'takeaway' | 'delivery',
     identifier: string,
     paymentMeta: any
   ) => Promise<{ success: boolean; message: string; order?: Order }>;
 
   // Cash Payment Requests (Cross-terminal / Staff authorization)
   cashRequests: CashPaymentRequest[];
-  createCashRequest: (orderNo: number, total: number, orderType: 'dine_in' | 'takeaway', identifier: string) => CashPaymentRequest;
+  createCashRequest: (orderNo: number, total: number, orderType: 'dine_in' | 'takeaway' | 'delivery', identifier: string) => CashPaymentRequest;
   approveCashRequest: (requestId: string, approvedBy: string, received: number, change: number) => void;
   rejectCashRequest: (requestId: string, reason?: string) => void;
 
@@ -1224,9 +1224,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateOrderStatus = async (orderNum: number, newStatus: OrderStatus) => {
     const now = Date.now();
     recordLocalOrderMutation(orderNum, { status: newStatus });
-    setOrders(prev => prev.map(o => o.no === orderNum ? { ...o, status: newStatus, updatedAt: now } : o));
+    
+    let currentOrder: Order | undefined;
+    setOrders(prev => {
+      currentOrder = prev.find(o => o.no === orderNum);
+      return prev.map(o => o.no === orderNum ? { ...o, status: newStatus, updatedAt: now } : o);
+    });
+
     if (newStatus === 'done' || newStatus === 'klaar') {
-      AudioFX.speakOrder(orderNum);
+      const orderToAnnounce = currentOrder || orders.find(o => o.no === orderNum);
+      if (orderToAnnounce && orderToAnnounce.orderType !== 'delivery') {
+        AudioFX.speakOrder(orderNum, orderToAnnounce.identifier, orderToAnnounce.orderType);
+      }
     }
     broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: newStatus, updatedAt: now });
     if (posClient) {
@@ -1503,7 +1512,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const createCashRequest = (
     orderNo: number,
     total: number,
-    orderType: 'dine_in' | 'takeaway',
+    orderType: 'dine_in' | 'takeaway' | 'delivery',
     identifier: string
   ): CashPaymentRequest => {
     const newReq: CashPaymentRequest = {

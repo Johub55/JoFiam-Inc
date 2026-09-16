@@ -70,8 +70,8 @@ export interface Order {
   items: OrderItem[];
   total: number;
   discount: number;
-  orderType: 'dine_in' | 'takeaway';
-  identifier: string; // Tafelnummer of Klantnaam
+  orderType: 'dine_in' | 'takeaway' | 'delivery';
+  identifier: string; // Tafelnummer, Klantnaam of Bezorgadres
   notes?: string;
   paymentMethod: 'workpay' | 'cash' | 'giftcard';
   paymentMeta?: {
@@ -83,6 +83,8 @@ export interface Order {
     received?: number;
     change?: number;
     accepted_by?: string;
+    brand?: string;
+    brandName?: string;
   };
   cashier: string;
   status: OrderStatus;
@@ -167,7 +169,7 @@ export interface SupabaseConfig {
 export interface CashPaymentRequest {
   id: string;
   orderNo: number;
-  orderType: 'dine_in' | 'takeaway';
+  orderType: 'dine_in' | 'takeaway' | 'delivery';
   identifier: string;
   total: number;
   status: 'pending' | 'approved' | 'rejected';

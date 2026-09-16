@@ -1,11 +1,22 @@
 /**
  * Audio FX helper for Werkdonalds POS & WerkPay
- * Includes 2-tone chime bell, cash register ding, click beeps, and Dutch speech synthesis for pickup order TV & kitchen.
+ * Includes 2-tone chime bell, cash register ding, click beeps, and Dutch speech synthesis
+ * with full Linux / Chromium / Firefox compatibility and custom order announcement wording.
  */
+
+export interface SpeechVoiceOption {
+  name: string;
+  lang: string;
+  voiceURI: string;
+  isDutch: boolean;
+}
 
 class SoundEffects {
   private ctx: AudioContext | null = null;
   public isEnabled: boolean = true;
+  private activeUtterance: SpeechSynthesisUtterance | null = null;
+  private cachedVoices: SpeechSynthesisVoice[] = [];
+  private resumeTimer: any = null;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -14,15 +25,55 @@ class SoundEffects {
         this.isEnabled = stored === 'true';
       }
 
+      // Initialize speech synthesis voices & listen for changes (essential for Linux Chromium)
+      this.initVoices();
+
       // Pre-warm AudioContext on first user interaction anywhere
       const unlockAudio = () => {
         this.initCtx();
+        if ('speechSynthesis' in window) {
+          try {
+            window.speechSynthesis.resume();
+          } catch {}
+        }
         window.removeEventListener('pointerdown', unlockAudio);
         window.removeEventListener('keydown', unlockAudio);
       };
       window.addEventListener('pointerdown', unlockAudio, { once: true });
       window.addEventListener('keydown', unlockAudio, { once: true });
     }
+  }
+
+  private initVoices() {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
+    const loadVoices = () => {
+      try {
+        this.cachedVoices = window.speechSynthesis.getVoices() || [];
+      } catch {
+        this.cachedVoices = [];
+      }
+    };
+
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }
+
+  public getAvailableVoices(): SpeechVoiceOption[] {
+    if (this.cachedVoices.length === 0 && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        this.cachedVoices = window.speechSynthesis.getVoices() || [];
+      } catch {}
+    }
+
+    return this.cachedVoices.map(v => ({
+      name: v.name,
+      lang: v.lang,
+      voiceURI: v.voiceURI,
+      isDutch: v.lang.toLowerCase().startsWith('nl') || v.name.toLowerCase().includes('dutch') || v.name.toLowerCase().includes('nederlands')
+    }));
   }
 
   public setEnabled(val: boolean) {
@@ -182,34 +233,135 @@ class SoundEffects {
     }
   }
 
-  public speakOrder(orderNo: number | string) {
+  /**
+   * Omroepfunctie voor het afhaalscherm en de keuken:
+   * Zegt: "Bestelling <nummer> voor <tafel of persoon> is gereed om af te halen!"
+   * ALS het een bezorging is (orderType === 'delivery'):
+   * NIET omroepen (wordt direct overgeslagen).
+   */
+  public speakOrder(orderNo: number | string, identifier?: string, orderType?: string) {
+    // 1. Bezorgbestellingen worden NOOIT omgeroepen
+    if (orderType === 'delivery' || (identifier && identifier.toLowerCase().includes('bezorg'))) {
+      return;
+    }
+
+    // 2. Speel eerst de attentiebel / chime
     this.bell();
     if (!this.isEnabled) return;
+
+    // Format target name / table according to user prompt
+    let target = '';
+    const cleanId = (identifier || '').trim();
+    if (cleanId) {
+      target = cleanId;
+    } else if (orderType === 'dine_in') {
+      target = 'in het restaurant';
+    } else if (orderType === 'takeaway') {
+      target = 'afhaal';
+    } else {
+      target = 'de balie';
+    }
+
+    const textToSpeak = `Bestelling ${orderNo} voor ${target} is gereed om af te halen!`;
+
+    // 3. SpeechSynthesis with Linux Chrome / Firefox engine workarounds
     setTimeout(() => {
-      try {
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const text = `Attentie! Bestelling nummer ${orderNo} is gereed om af te halen!`;
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = 'nl-NL';
-          utterance.rate = 0.95;
-          utterance.pitch = 1.05;
-          utterance.volume = 1.0;
+      this.executeSpeech(textToSpeak);
+    }, 400);
+  }
 
-          // Select Dutch voice if available
-          const voices = window.speechSynthesis.getVoices();
-          const dutchVoice = voices.find(v => v.lang.toLowerCase().startsWith('nl'));
-          if (dutchVoice) {
-            utterance.voice = dutchVoice;
-          }
+  public testSpeech(sampleOrderNo: number | string = 1001, sampleIdentifier: string = 'Tafel 4') {
+    this.speakOrder(sampleOrderNo, sampleIdentifier, 'dine_in');
+  }
 
-          window.speechSynthesis.speak(utterance);
-        }
-      } catch {
-        // SpeechSynthesis not available or permitted
+  private executeSpeech(text: string) {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        return;
       }
-    }, 450);
+
+      // Linux Chromium fix: Resume synthesis if paused
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
+      window.speechSynthesis.cancel();
+
+      // Create new Utterance
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'nl-NL';
+      utterance.rate = 0.95;
+      utterance.pitch = 1.05;
+      utterance.volume = 1.0;
+
+      // Ensure voices are loaded (Linux async reload)
+      if (this.cachedVoices.length === 0) {
+        this.cachedVoices = window.speechSynthesis.getVoices() || [];
+      }
+
+      // Check for user-selected voice in settings
+      const selectedVoiceURI = localStorage.getItem('wd_tts_voice');
+      let chosenVoice: SpeechSynthesisVoice | undefined;
+
+      if (selectedVoiceURI) {
+        chosenVoice = this.cachedVoices.find(v => v.voiceURI === selectedVoiceURI);
+      }
+
+      // Fallback voice search logic:
+      if (!chosenVoice) {
+        // 1. nl-NL or nl_NL or nl-BE
+        chosenVoice = this.cachedVoices.find(v => v.lang.toLowerCase().startsWith('nl'));
+      }
+      if (!chosenVoice) {
+        // 2. Name contains Dutch / Nederlands
+        chosenVoice = this.cachedVoices.find(v => 
+          v.name.toLowerCase().includes('dutch') || 
+          v.name.toLowerCase().includes('nederlands') || 
+          v.name.toLowerCase().includes('flemish')
+        );
+      }
+      if (!chosenVoice && this.cachedVoices.length > 0) {
+        // 3. Linux Fallback: If no Dutch voice installed on Linux system,
+        // use default voice but keep lang="nl-NL" so speech engine renders phonetics
+        chosenVoice = this.cachedVoices.find(v => v.default) || this.cachedVoices[0];
+      }
+
+      if (chosenVoice) {
+        utterance.voice = chosenVoice;
+      }
+
+      // IMPORTANT LINUX CHROMIUM FIX:
+      // Keep a reference on the class instance to prevent JavaScript garbage collector
+      // from cancelling the utterance mid-speech on Linux Chrome!
+      this.activeUtterance = utterance;
+
+      // Keep synthesis alive during long sentences on Linux
+      if (this.resumeTimer) clearInterval(this.resumeTimer);
+      this.resumeTimer = setInterval(() => {
+        if (!window.speechSynthesis.speaking) {
+          clearInterval(this.resumeTimer);
+        } else {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        }
+      }, 3500);
+
+      utterance.onend = () => {
+        this.activeUtterance = null;
+        if (this.resumeTimer) clearInterval(this.resumeTimer);
+      };
+
+      utterance.onerror = (e) => {
+        console.warn('Speech synthesis note:', e);
+        this.activeUtterance = null;
+        if (this.resumeTimer) clearInterval(this.resumeTimer);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn('TTS execution fallback:', err);
+    }
   }
 }
 
 export const AudioFX = new SoundEffects();
+
