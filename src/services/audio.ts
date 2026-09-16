@@ -447,6 +447,55 @@ class SoundEffects {
    * 3. Browser Native SpeechSynthesis
    */
   private playAutoTtsWithFallbacks(text: string, orderNo: number | string, target: string) {
+    const isStaticStatic = typeof window !== 'undefined' && (
+      window.location.hostname.endsWith('.github.io') ||
+      window.location.hostname.endsWith('.pages.dev') ||
+      window.location.protocol === 'file:'
+    );
+
+    if (isStaticStatic) {
+      this.updateDiag({ activeEngine: 'auto (Google NL - Statisch)', lastStatus: 'playing' });
+      
+      // Op een statische host (zoals GitHub Pages) proberen we direct Google Translate als stap 1.
+      // Google is uiterst betrouwbaar, heeft prachtige stemmen en wordt nooit geblokkeerd door adblockers!
+      this.playServerTts(text, 'google', (googleSuccess) => {
+        if (googleSuccess) {
+          this.updateDiag({ activeEngine: 'Server Stem (Google NL)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+          return;
+        }
+
+        // Stap 2: Browser Native Speech
+        this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+          if (nativeSuccess) {
+            this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+            return;
+          }
+
+          // Stap 3: StreamElements Ruben (Backup, kan geblokkeerd zijn door adblocker)
+          this.playServerTts(text, 'Ruben', (rubenSuccess) => {
+            if (rubenSuccess) {
+              this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
+              return;
+            }
+
+            // Stap 4: StreamElements Lotte
+            this.playServerTts(text, 'Lotte', (lotteSuccess) => {
+              if (lotteSuccess) {
+                this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
+                return;
+              }
+
+              // Failover: Chime
+              this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
+              this.bell();
+            });
+          });
+        });
+      });
+      return;
+    }
+
+    // NORMAL SERVER-SIDE PREVIEW CASCADE:
     this.updateDiag({ activeEngine: 'auto (Ruben NL)', lastStatus: 'playing' });
 
     // Step 1: Same-Origin Server TTS Ruben
@@ -463,14 +512,22 @@ class SoundEffects {
           return;
         }
 
-        // Step 3: Browser Native Speech
-        this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
-          if (nativeSuccess) {
-            this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
-          } else {
-            this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
-            this.bell();
+        // Step 3: Server TTS Google NL
+        this.playServerTts(text, 'google', (googleSuccess) => {
+          if (googleSuccess) {
+            this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+            return;
           }
+
+          // Step 4: Browser Native Speech
+          this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+            if (nativeSuccess) {
+              this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+            } else {
+              this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
+              this.bell();
+            }
+          });
         });
       });
     });
