@@ -9,9 +9,11 @@ import {
   Coupon, 
   GiftCard, 
   PosUser, 
-  SupabaseConfig 
+  SupabaseConfig,
+  BrandType,
+  BrandConfig
 } from '../types';
-import { DEFAULT_PRODUCTS } from './defaultProducts';
+import { DEFAULT_PRODUCTS, KOEKPLOEG_PRODUCTS, ALL_DEFAULT_PRODUCTS } from './defaultProducts';
 import { AudioFX } from './audio';
 
 // Default Supabase project endpoints provided by the user
@@ -20,6 +22,34 @@ export const DEFAULT_SUPABASE_POS_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey
 
 export const DEFAULT_SUPABASE_PAY_URL = "https://qbncbzchrmbqhfbxgvbr.supabase.co";
 export const DEFAULT_SUPABASE_PAY_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFibmNiemNocm1icWhmYnhndmJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4NjI4OTUsImV4cCI6MjEwNDQzODg5NX0.cBbcg-VQyZ8NoxkVlDWF2ddmyD8MAS2jtHjRvDtrlOo";
+
+// Store / Brand Branding Presets
+export const BRAND_CONFIGS: Record<BrandType, BrandConfig> = {
+  werkdonalds: {
+    id: 'werkdonalds',
+    name: 'Werkdonalds',
+    tagline: 'Vers Bereid • Snelle Kassa & Keuken',
+    logoEmoji: '🍔',
+    themeColor: 'blue',
+    badgeText: 'WERKDONALDS POS',
+    kitchenTitle: 'Werkdonalds Keuken KDS',
+    primaryButtonClass: 'bg-blue-600 hover:bg-blue-500 text-white',
+    accentBadgeClass: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    headerGradient: 'from-blue-600 via-blue-500 to-cyan-400'
+  },
+  koekploeg: {
+    id: 'koekploeg',
+    name: 'De Koekploeg',
+    tagline: 'Ambachtelijke Stroopwafels & Verse Bakkerij',
+    logoEmoji: '🧇',
+    themeColor: 'yellow',
+    badgeText: 'DE KOEKPLOEG 🧇',
+    kitchenTitle: 'De Koekploeg Bakkerij Keuken',
+    primaryButtonClass: 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-black shadow-lg shadow-amber-500/20',
+    accentBadgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    headerGradient: 'from-amber-500 via-yellow-400 to-amber-600'
+  }
+};
 
 // Initial Demo data
 export const INITIAL_BANK_ACCOUNTS: BankAccount[] = [

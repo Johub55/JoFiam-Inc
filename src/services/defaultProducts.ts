@@ -193,3 +193,65 @@ export const DEFAULT_PRODUCTS: Product[] = [
   { id: 154, name: "Verse Muntthee met Honing", price: 3.25, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "🍵", inStock: true },
   { id: 155, name: "Earl Grey Bloemige Thee", price: 2.65, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "🫖", inStock: true }
 ];
+
+// ==============================================================================
+// 🧇 DE KOEKPLOEG - AMBACHTELIJKE STROOPWAFELS, KOEKEN & BAKKERIJ MENUKAART
+// ==============================================================================
+export const KOEKPLOEG_PRODUCTS: Product[] = [
+  // 🧇 STROOPWAFELS & SPECIALS
+  { id: 201, name: "Verse Warme Goudse Stroopwafel (Original)", price: 2.50, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🧇", inStock: true },
+  { id: 202, name: "Mega Stroopwafel XL Karamel-Zeezout", price: 3.75, salePrice: 2.95, onSale: true, cat: "Stroopwafels & Specials", emoji: "🧇", inStock: true },
+  { id: 203, name: "Stroopwafel met Belgische Melkchocolade", price: 3.45, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🍫", inStock: true },
+  { id: 204, name: "Stroopwafel Pure Chocolade & Hazelnoot", price: 3.65, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🍫", inStock: true },
+  { id: 205, name: "Stroopwafel Witte Chocolade & Smarties", price: 3.75, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🧇", inStock: true },
+  { id: 206, name: "Verse Stroopwafel Kruimelzak (Warm & Krokant)", price: 2.00, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🧇", inStock: true },
+  { id: 207, name: "Stroopwafel Kruimelzak met Warme Stroop Shot", price: 2.75, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🍯", inStock: true },
+  { id: 208, name: "Stroopwafel Tosti met Karamel & Banaan", price: 4.50, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🍌", inStock: true },
+  { id: 209, name: "Mini Stroopwafeltjes Beker (12st)", price: 3.50, salePrice: 0, onSale: false, cat: "Stroopwafels & Specials", emoji: "🧇", inStock: true },
+
+  // 🥮 LUXE HOLLANDSE KOEKEN & GEBAK
+  { id: 210, name: "Ambachtelijke Gevulde Koek (100% Amandelspijs)", price: 2.25, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥮", inStock: true },
+  { id: 211, name: "Double Gevulde Amandelkoek XL", price: 3.10, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥮", inStock: true },
+  { id: 212, name: "Klassieke Roze Glazuurkoek", price: 1.95, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🌸", inStock: true },
+  { id: 213, name: "Goudbruine Bakkers Kano met Spijs", price: 2.10, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🛶", inStock: true },
+  { id: 214, name: "Gevuld Speculaas Blok met Amandelen", price: 2.65, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🪵", inStock: true },
+  { id: 215, name: "Oma's Warme Appeltaart Punt met Kaneel", price: 3.95, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥧", inStock: true },
+  { id: 216, name: "Warme Appeltaart Punt met Echte Slagroom", price: 4.50, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥧", inStock: true },
+  { id: 217, name: "Romige Boterkoek Punt met Citroenrasp", price: 2.20, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥮", inStock: true },
+  { id: 218, name: "Echte Bossche Bol met Slagroom & Chocolade", price: 3.85, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🍫", inStock: true },
+  { id: 219, name: "Krakelingen Roomboter (Zakje 6st)", price: 2.80, salePrice: 0, onSale: false, cat: "Luxe Hollandse Koeken", emoji: "🥨", inStock: true },
+
+  // 🍪 KOEK BITES & CHOCOLADE
+  { id: 220, name: "Chocolade Bokkenpootjes (Portie 4st)", price: 2.95, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🐐", inStock: true },
+  { id: 221, name: "Warme Chocolate Chip Cookie", price: 2.50, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🍪", inStock: true },
+  { id: 222, name: "Triple Dark Chocolate Fudge Cookie", price: 2.75, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🍪", inStock: true },
+  { id: 223, name: "Red Velvet White Chocolate Cookie", price: 2.75, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🍪", inStock: true },
+  { id: 224, name: "Krokante Kletskoppen Buidel", price: 2.35, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🥨", inStock: true },
+  { id: 225, name: "Karamel Kokosmakronen (2st)", price: 2.45, salePrice: 0, onSale: false, cat: "Koek Bites & Chocolade", emoji: "🥥", inStock: true },
+
+  // ☕ WARME DRANKEN & BAKKERS KOFFIE
+  { id: 226, name: "Koekploeg Koffie Compleet (+ Mini Stroopwafel)", price: 3.25, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "☕", inStock: true },
+  { id: 227, name: "Romige Cappuccino met Kaneelstroop", price: 3.65, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "☕", inStock: true },
+  { id: 228, name: "Latte Macchiato Karamel & Kruimels", price: 4.10, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "☕", inStock: true },
+  { id: 229, name: "Warme Chocomel met Slagroom & Karamel", price: 3.85, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "🍫", inStock: true },
+  { id: 230, name: "Verse Muntthee met Honing & Mini Koek", price: 3.20, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "🍵", inStock: true },
+  { id: 231, name: "Verse Gember-Citroenthee", price: 3.20, salePrice: 0, onSale: false, cat: "Warme Dranken & Koffie", emoji: "🫖", inStock: true },
+
+  // 🍦 IJS & STROOPWAFEL SPECIALS
+  { id: 232, name: "Stroopwafel Softijs Sundae met Karamel", price: 3.50, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🍦", inStock: true },
+  { id: 233, name: "KoekFlurry Stroopwafel Crunch", price: 3.95, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🍦", inStock: true },
+  { id: 234, name: "KoekFlurry Gevulde Koek & Amandel", price: 3.95, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🍦", inStock: true },
+  { id: 235, name: "Warme Stroopwafel met Bol Vanille-ijs", price: 4.95, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🍨", inStock: true },
+  { id: 236, name: "Stroopwafel Milkshake Karamel (Medium)", price: 4.25, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🥤", inStock: true },
+  { id: 237, name: "Stroopwafel Milkshake Karamel (Groot)", price: 4.95, salePrice: 0, onSale: false, cat: "IJs & Specials", emoji: "🥤", inStock: true },
+
+  // 🎁 VOORDEEL & CADEAU BLIKKEN
+  { id: 238, name: "Koekploeg Bewaarblik (10 Verse Koeken Assorti)", price: 14.95, salePrice: 12.50, onSale: true, cat: "Voordeel & Cadeaus", emoji: "🎁", inStock: true },
+  { id: 239, name: "Stroopwafel Cadeaupakket met Karamel Likeur", price: 18.50, salePrice: 0, onSale: false, cat: "Voordeel & Cadeaus", emoji: "🎁", inStock: true },
+  { id: 240, name: "Koekploeg Familiebox (4 Stroopwafels + 4 Koeken)", price: 16.00, salePrice: 13.50, onSale: true, cat: "Voordeel & Cadeaus", emoji: "📦", inStock: true }
+];
+
+export const ALL_DEFAULT_PRODUCTS: Product[] = [
+  ...DEFAULT_PRODUCTS,
+  ...KOEKPLOEG_PRODUCTS
+];

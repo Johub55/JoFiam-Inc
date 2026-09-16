@@ -1,5 +1,20 @@
 export type AppMode = 'pos' | 'werkpay' | 'split' | 'setup';
 
+export type BrandType = 'werkdonalds' | 'koekploeg';
+
+export interface BrandConfig {
+  id: BrandType;
+  name: string;
+  tagline: string;
+  logoEmoji: string;
+  themeColor: string;
+  badgeText: string;
+  kitchenTitle: string;
+  primaryButtonClass: string;
+  accentBadgeClass: string;
+  headerGradient: string;
+}
+
 export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'volgscherm' | 'voorraad' | 'manager';
 
 export type WerkPayScreenType = 'wallet' | 'overboeken' | 'accounts';

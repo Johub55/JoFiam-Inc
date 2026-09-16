@@ -406,30 +406,27 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon,
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
 
--- 5. REALTIME AANZETTEN (LIVE SYNCHRONISATIE TUSSEN KASSA, KEUKEN EN WERKPAY)
+-- 5. REALTIME AANZETTEN (LIVE SYNCHRONISATIE TUSSEN KASSA, KEUKEN, TELEFOON, USERS EN WERKPAY)
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.orders REPLICA IDENTITY FULL;
 ALTER TABLE public.bank_accounts REPLICA IDENTITY FULL;
 ALTER TABLE public.bank_transactions REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_users REPLICA IDENTITY FULL;
 ALTER TABLE public.products REPLICA IDENTITY FULL;
+ALTER TABLE public.inventory REPLICA IDENTITY FULL;
+ALTER TABLE public.cash_requests REPLICA IDENTITY FULL;
+ALTER TABLE public.phone_messages REPLICA IDENTITY FULL;
 
 DO $$
 BEGIN
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
-
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
-
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_transactions;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
-
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
-  EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.orders; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_transactions; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_users; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.products; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.phone_messages; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.cash_requests; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 
 -- 6. STANDAARD DEMO DATA
@@ -438,9 +435,7 @@ END $$;
 -- 6.1 WerkPay Accounts
 INSERT INTO public.bank_accounts (username, password, account_holder, card_uid, pin_code, balance, is_admin)
 VALUES 
-  ('joas', 'admin123', 'Joas Thorig', '4129 8831 5504 9012', '0000', 999999.00, TRUE),
-  ('klant01', 'klant123', 'Daan de Vries', '5542 1198 3320 4411', '1234', 45.50, FALSE),
-  ('emma', 'emma123', 'Emma Bakker', '4890 2214 7731 9904', '4321', 28.75, FALSE)
+  ('joas', 'admin123', 'Joas Thorig', '4129 8831 5504 9012', '0000', 999999.00, TRUE)
 ON CONFLICT (username) DO UPDATE SET
   password = EXCLUDED.password,
   account_holder = EXCLUDED.account_holder,
@@ -452,9 +447,13 @@ ON CONFLICT (username) DO UPDATE SET
 -- 6.2 POS Medewerkers
 INSERT INTO public.pos_users (name, username, password, perms, is_admin)
 VALUES 
-  ('Joas (Manager)', 'joas', 'admin123', '["pos","cash_pay","kitchen","pickup","inventory","manager","users","products","coupons","orders_manage","reset"]'::jsonb, TRUE),
-  ('Kassa Medewerker', 'kassa1', 'kassa123', '["pos","cash_pay","kitchen","pickup"]'::jsonb, FALSE)
-ON CONFLICT (username) DO NOTHING;
+  ('Joas Thorig', 'joas', 'admin123', '["pos","cash_pay","kitchen","pickup","inventory","manager","users","products","coupons","orders_manage","reset"]'::jsonb, TRUE),
+  ('Kassa Medewerker', 'kassa1', '1234', '["pos","cash_pay","kitchen","pickup"]'::jsonb, FALSE),
+  ('Keuken Chef', 'keuken1', '1234', '["kitchen"]'::jsonb, FALSE)
+ON CONFLICT (username) DO UPDATE SET
+  password = EXCLUDED.password,
+  perms = EXCLUDED.perms,
+  is_admin = EXCLUDED.is_admin;
 
 -- 6.3 Cadeaubonnen
 INSERT INTO public.gift_cards (code, initial_balance, current_balance, is_active)

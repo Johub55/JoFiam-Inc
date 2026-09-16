@@ -16,7 +16,9 @@ import type {
   BankAccount,
   BankTransaction,
   SupabaseConfig,
-  CashPaymentRequest
+  CashPaymentRequest,
+  BrandType,
+  BrandConfig
 } from '../types';
 import {
   DEFAULT_SUPABASE_POS_URL,
@@ -28,9 +30,10 @@ import {
   INITIAL_COUPONS,
   INITIAL_GIFT_CARDS,
   INITIAL_POS_USERS,
-  ORDER_KIOSK_USER
+  ORDER_KIOSK_USER,
+  BRAND_CONFIGS
 } from '../services/store';
-import { DEFAULT_PRODUCTS } from '../services/defaultProducts';
+import { DEFAULT_PRODUCTS, ALL_DEFAULT_PRODUCTS, KOEKPLOEG_PRODUCTS } from '../services/defaultProducts';
 import { AudioFX } from '../services/audio';
 import { 
   formatDbOrder, 
@@ -42,13 +45,17 @@ import {
 } from '../services/syncHelpers';
 
 interface AppContextType {
-  // Navigation
+  // Navigation & Brand
   appMode: AppMode;
   setAppMode: (mode: AppMode) => void;
   posScreen: PosScreenType;
   setPosScreen: (screen: PosScreenType) => void;
   werkpayScreen: WerkPayScreenType;
   setWerkpayScreen: (screen: WerkPayScreenType) => void;
+  activeBrand: BrandType;
+  setActiveBrand: (brand: BrandType) => void;
+  brandConfig: BrandConfig;
+  brandProducts: Product[];
 
   // Connection & Supabase
   supabaseConfig: SupabaseConfig;
@@ -169,6 +176,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [posScreen, setPosScreen] = useState<PosScreenType>('kassa');
   const [werkpayScreen, setWerkpayScreen] = useState<WerkPayScreenType>('wallet');
 
+  // Active Brand ('werkdonalds' | 'koekploeg') - Defaults to 'koekploeg'
+  const [activeBrand, setActiveBrandState] = useState<BrandType>(() => {
+    const saved = localStorage.getItem('wd_active_brand');
+    if (saved === 'werkdonalds' || saved === 'koekploeg') {
+      return saved as BrandType;
+    }
+    return 'koekploeg';
+  });
+
+  const setActiveBrand = (b: BrandType) => {
+    setActiveBrandState(b);
+    localStorage.setItem('wd_active_brand', b);
+  };
+
+  const brandConfig = BRAND_CONFIGS[activeBrand] || BRAND_CONFIGS.koekploeg;
+
   // Supabase Config
   const [supabaseConfig, setSupabaseConfigState] = useState<SupabaseConfig>(() => {
     const saved = localStorage.getItem('wd_sb_cfg');
@@ -215,18 +238,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [products, setProducts] = useState<Product[]>(() => {
     const version = localStorage.getItem('wd_products_version');
     const saved = localStorage.getItem('wd_products');
-    if (saved && version === 'v7_customization_drinks_155') {
+    if (saved && version === 'v8_koekploeg_and_werkdonalds') {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 150) {
+        if (Array.isArray(parsed) && parsed.length >= 10) {
           return parsed;
         }
       } catch {}
     }
-    // Update to newest default product catalog (all 155 items, rich drinks, coffee & sauces)
-    localStorage.setItem('wd_products', JSON.stringify(DEFAULT_PRODUCTS));
-    localStorage.setItem('wd_products_version', 'v7_customization_drinks_155');
-    return DEFAULT_PRODUCTS;
+    localStorage.setItem('wd_products', JSON.stringify(ALL_DEFAULT_PRODUCTS));
+    localStorage.setItem('wd_products_version', 'v8_koekploeg_and_werkdonalds');
+    return ALL_DEFAULT_PRODUCTS;
+  });
+
+  // Filtered products for active brand
+  const brandProducts = products.filter(p => {
+    if (activeBrand === 'koekploeg') {
+      return p.id >= 200;
+    }
+    return p.id < 200;
   });
 
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -536,6 +566,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
 
+      // 3. Fetch POS users from Supabase (to guarantee live password sync!)
+      const { data: dbUsers, error: userErr } = await posClient
+        .from('pos_users')
+        .select('*');
+
+      if (!userErr && dbUsers && dbUsers.length > 0) {
+        const parsedUsers: PosUser[] = dbUsers.map(u => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          password: u.password,
+          perms: Array.isArray(u.perms) ? u.perms : (typeof u.perms === 'string' ? JSON.parse(u.perms) : ['pos', 'pickup']),
+          is_admin: Boolean(u.is_admin)
+        }));
+        setPosUsers(parsedUsers);
+        localStorage.setItem('wd_pos_users', JSON.stringify(parsedUsers));
+      }
+
       setSyncStatus('synced');
       setLastSyncTime(new Date());
       setIsOnline(true);
@@ -557,7 +605,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const initProducts = async () => {
       try {
         const { data: dbProds } = await posClient.from('products').select('*');
-        if (dbProds && dbProds.length >= DEFAULT_PRODUCTS.length) {
+        if (dbProds && dbProds.length >= ALL_DEFAULT_PRODUCTS.length) {
           setProducts(dbProds.map(p => ({
             id: p.id,
             name: p.name,
@@ -569,7 +617,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             inStock: Boolean(p.in_stock)
           })));
         } else if (posClient) {
-          const rows = DEFAULT_PRODUCTS.map(p => ({
+          const rows = ALL_DEFAULT_PRODUCTS.map(p => ({
             id: p.id,
             name: p.name,
             price: p.price,
@@ -580,7 +628,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             in_stock: p.inStock
           }));
           await posClient.from('products').upsert(rows);
-          setProducts(DEFAULT_PRODUCTS);
+          setProducts(ALL_DEFAULT_PRODUCTS);
         }
       } catch (err) {
         console.warn('Product init error:', err);
@@ -1755,35 +1803,69 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: true, message: 'Ingelogd als Klant (Bestel Account)!' };
     }
 
-    // 1. Try Supabase pos_users table if available
+    // 1. Check live in Supabase pos_users table first (guarantees Supabase password changes work instantly)
     if (posClient) {
       try {
         const { data, error } = await posClient
           .from('pos_users')
           .select('*')
           .ilike('username', cleanU)
-          .eq('password', cleanPass)
           .single();
 
         if (data && !error) {
-          const user: PosUser = {
-            id: data.id,
-            name: data.name,
-            username: data.username,
-            password: data.password,
-            perms: Array.isArray(data.perms) ? data.perms : ['pos', 'pickup'],
-            is_admin: Boolean(data.is_admin)
-          };
-          setCurrentPosUser(user);
-          setPosScreen('kassa');
-          return { success: true, message: `Welkom, ${user.name}!` };
+          if (data.password === cleanPass || data.password === pass) {
+            const user: PosUser = {
+              id: data.id,
+              name: data.name,
+              username: data.username,
+              password: data.password,
+              perms: Array.isArray(data.perms) ? data.perms : (typeof data.perms === 'string' ? JSON.parse(data.perms) : ['pos', 'pickup']),
+              is_admin: Boolean(data.is_admin)
+            };
+            setCurrentPosUser(user);
+            setPosScreen('kassa');
+            // update local list
+            setPosUsers(prev => [user, ...prev.filter(u => u.username.toLowerCase() !== cleanU)]);
+            return { success: true, message: `Welkom, ${user.name}!` };
+          }
         }
       } catch (err) {
-        // Fallback to local
+        console.warn('Supabase pos_users login error:', err);
       }
     }
 
-    // 2. Try local users
+    // 2. Check live in Supabase bank_accounts (if changed there)
+    const targetPay = payClient || posClient;
+    if (targetPay) {
+      try {
+        const { data: bankData, error: bErr } = await targetPay
+          .from('bank_accounts')
+          .select('*')
+          .ilike('username', cleanU)
+          .single();
+
+        if (bankData && !bErr) {
+          if (bankData.password === cleanPass || bankData.pin_code === cleanPass || bankData.password === pass) {
+            const bankUser: PosUser = {
+              id: typeof bankData.id === 'number' ? bankData.id : Date.now(),
+              name: bankData.account_holder,
+              username: bankData.username,
+              perms: bankData.is_admin 
+                ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
+                : ['pos', 'pickup'],
+              is_admin: bankData.is_admin
+            };
+            setCurrentPosUser(bankUser);
+            setPosScreen('kassa');
+            return { success: true, message: `Welkom, ${bankUser.name}!` };
+          }
+        }
+      } catch (err) {
+        console.warn('Supabase bank_accounts login error:', err);
+      }
+    }
+
+    // 3. Try local cached users (fallback if offline)
     const user = posUsers.find(u => 
       u.username.toLowerCase() === cleanU && 
       (!u.password || u.password === cleanPass || cleanPass === '1234' || cleanPass === 'admin123')
@@ -1794,7 +1876,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: true, message: `Welkom, ${user.name}!` };
     }
 
-    // 3. Try Bank Accounts (customers & admins)
+    // 4. Try local Bank Accounts
     const bankAcc = bankAccounts.find(
       a => a.username.toLowerCase() === cleanU && (a.password === cleanPass || a.pin_code === cleanPass)
     );
@@ -1813,7 +1895,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: true, message: `Welkom, ${bankUser.name}!` };
     }
 
-    // 4. Manager / Joas PIN fallback
+    // 5. Manager / Joas PIN fallback
     if ((cleanU === 'manager' || cleanU === 'admin' || cleanU === 'joas') && (cleanPass === '1234' || cleanPass === 'admin123' || cleanPass === '0000')) {
       const managerUser: PosUser = {
         id: 1,
@@ -2086,6 +2168,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setPosScreen,
         werkpayScreen,
         setWerkpayScreen,
+        activeBrand,
+        setActiveBrand,
+        brandConfig,
+        brandProducts,
         supabaseConfig,
         setSupabaseConfig,
         posClient,

@@ -43,6 +43,9 @@ interface PosScreenProps {
 export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   const {
     products,
+    brandProducts,
+    activeBrand,
+    brandConfig,
     resetProductsToDefault,
     cart,
     addToCart,
@@ -59,6 +62,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     currentPosUser,
     setCurrentPosUser
   } = useApp();
+
+  const isKoekploeg = activeBrand === 'koekploeg';
+  const displayProducts = brandProducts && brandProducts.length > 0 ? brandProducts : products;
 
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [selectedCat, setSelectedCat] = useState<string>('Alles');
@@ -168,18 +174,18 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
 
   // Categories list
   const categories = useMemo(() => {
-    const cats = ['Alles', ...Array.from(new Set(products.map(p => p.cat)))];
+    const cats = ['Alles', ...Array.from(new Set(displayProducts.map(p => p.cat)))];
     return cats;
-  }, [products]);
+  }, [displayProducts]);
 
   // Filtered products
   const filteredProducts = useMemo(() => {
-    return products.filter(p => {
+    return displayProducts.filter(p => {
       const matchCat = selectedCat === 'Alles' || p.cat === selectedCat;
       const matchQuery = !searchQuery.trim() || p.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchQuery;
     });
-  }, [products, selectedCat, searchQuery]);
+  }, [displayProducts, selectedCat, searchQuery]);
 
   // Filtered drinks for menu selection
   const filteredMenuDrinks = useMemo(() => {
@@ -587,13 +593,19 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     return (
       <div className="flex-1 flex items-center justify-center p-6 bg-slate-950 overflow-y-auto pb-12">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-6 shadow-2xl">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center text-white text-3xl font-black mx-auto shadow-lg shadow-blue-500/30">
-            W
+          <div 
+            className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl font-black mx-auto shadow-lg ${
+              isKoekploeg 
+                ? 'bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 text-slate-950 shadow-amber-500/30' 
+                : 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 text-white shadow-blue-500/30'
+            }`}
+          >
+            {brandConfig.logoEmoji}
           </div>
           <div>
-            <h2 className="text-xl sm:text-2xl font-black text-white">Welkom bij Werkdonalds</h2>
+            <h2 className="text-xl sm:text-2xl font-black text-white">Welkom bij {brandConfig.name}</h2>
             <p className="text-xs sm:text-sm text-slate-400 mt-1.5 leading-relaxed">
-              Log in voordat je kunt bestellen of de kassa kunt bedienen.
+              Log in met je medewerkers- of manager account, of bestel direct als klant.
             </p>
           </div>
 
@@ -603,10 +615,14 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               onClick={() => {
                 setCurrentPosUser(ORDER_KIOSK_USER);
               }}
-              className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-sm flex items-center justify-center gap-3 transition shadow-lg shadow-emerald-500/25 active:scale-98"
+              className={`w-full py-4 px-5 rounded-2xl font-black text-sm flex items-center justify-center gap-3 transition shadow-lg active:scale-98 ${
+                isKoekploeg 
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 shadow-amber-500/25' 
+                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-emerald-500/25'
+              }`}
             >
               <ShoppingBag className="w-5 h-5 text-slate-950" />
-              <span>🍔 Direct Bestellen (Bestel Account)</span>
+              <span>{isKoekploeg ? '🧇 Direct Bestellen (Klant Kassa)' : '🍔 Direct Bestellen (Bestel Account)'}</span>
             </button>
 
             <button
@@ -614,7 +630,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               onClick={() => setShowLoginModal(true)}
               className="w-full py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs flex items-center justify-center gap-2 border border-slate-700 transition"
             >
-              <Lock className="w-4 h-4 text-blue-400" />
+              <Lock className="w-4 h-4 text-amber-400" />
               <span>🔑 Inloggen als Medewerker / Manager</span>
             </button>
           </div>
@@ -656,8 +672,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Zoek burger, snack, drankje of ijsje..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
+              placeholder={isKoekploeg ? "Zoek stroopwafel, koek, koffie of drankje..." : "Zoek burger, snack, drankje of ijsje..."}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
             />
             {searchQuery && (
               <button 
@@ -674,7 +690,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               onClick={() => setShowCustomItemModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
             >
-              <Plus className="w-4 h-4 text-blue-400" />
+              <Plus className="w-4 h-4 text-amber-400" />
               <span>Handmatig Bedrag</span>
             </button>
 
@@ -682,16 +698,24 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               onClick={() => {
                 resetProductsToDefault();
               }}
-              title="Herlaad de complete 138 Werkdonalds productencatalogus"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition"
+              title="Herlaad de complete productencatalogus"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition ${
+                isKoekploeg 
+                  ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/30' 
+                  : 'bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border-blue-500/30'
+              }`}
             >
               <RefreshCw className="w-4 h-4" />
-              <span>Menu Herladen ({products.length})</span>
+              <span>Menu Herladen ({displayProducts.length})</span>
             </button>
 
             <button
               onClick={handleSurpriseMe}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400 hover:from-blue-500 hover:to-cyan-300 text-white shadow-md shadow-blue-500/20 transition"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-black shadow-md transition ${
+                isKoekploeg 
+                  ? 'bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-slate-950 hover:from-amber-400 shadow-amber-500/25' 
+                  : 'bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400 text-white shadow-blue-500/20'
+              }`}
             >
               <Sparkles className="w-4 h-4" />
               <span>Verras Me!</span>
@@ -707,7 +731,9 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               onClick={() => setSelectedCat(cat)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
                 selectedCat === cat
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                  ? isKoekploeg 
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30' 
+                    : 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                   : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-slate-800'
               }`}
             >

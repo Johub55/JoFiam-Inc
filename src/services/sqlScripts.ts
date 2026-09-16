@@ -366,13 +366,23 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres, anon,
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON ROUTINES TO postgres, anon, authenticated, service_role;
 
--- 5. REALTIME AANZETTEN (INCLUSIEF TELEFOON CHAT & WERKPAY)
+-- 5. REALTIME AANZETTEN (INCLUSIEF POS USERS, TELEFOON CHAT, PRODUCTEN & WERKPAY)
 -- ------------------------------------------------------------------------------
+ALTER TABLE public.orders REPLICA IDENTITY FULL;
+ALTER TABLE public.bank_accounts REPLICA IDENTITY FULL;
+ALTER TABLE public.bank_transactions REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_users REPLICA IDENTITY FULL;
+ALTER TABLE public.products REPLICA IDENTITY FULL;
+ALTER TABLE public.inventory REPLICA IDENTITY FULL;
+ALTER TABLE public.cash_requests REPLICA IDENTITY FULL;
+ALTER TABLE public.phone_messages REPLICA IDENTITY FULL;
+
 DO $$
 BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.orders; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_transactions; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_users; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.products; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.phone_messages; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.cash_requests; EXCEPTION WHEN OTHERS THEN NULL; END;
@@ -380,10 +390,9 @@ BEGIN
 END $$;
 `;
 
-// 2. BASIS SCHEMA (Alleen 5 kern tabellen)
+// 2. BASIS SCHEMA (Alleen kern tabellen)
 export const BASIS_SUPABASE_SQL = `-- ==============================================================================
--- WERKDONALDS POS & WERKPAY BANK - BASIS SUPABASE DATABASE SCHEMA
--- Bevat uitsluitend de 5 kern-tabellen: bank_accounts, bank_transactions, orders, products, pos_users.
+-- WERKDONALDS POS, DE KOEKPLOEG & WERKPAY BANK - BASIS DATABASE SCHEMA
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.bank_accounts (
   id BIGSERIAL PRIMARY KEY,
@@ -453,11 +462,24 @@ ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_users ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE public.orders REPLICA IDENTITY FULL;
+ALTER TABLE public.bank_accounts REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_users REPLICA IDENTITY FULL;
+ALTER TABLE public.products REPLICA IDENTITY FULL;
+
 CREATE POLICY "Public access bank_accounts" ON public.bank_accounts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access bank_transactions" ON public.bank_transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access products" ON public.products FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access pos_users" ON public.pos_users FOR ALL USING (true) WITH CHECK (true);
+
+DO $$
+BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.orders; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_users; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.products; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
 `;
@@ -470,27 +492,45 @@ export const UNIFIED_SUPABASE_SQL = `${SCHEMA_ONLY_SUPABASE_SQL}
 INSERT INTO public.bank_accounts (username, password, account_holder, card_uid, pin_code, balance, is_admin)
 VALUES 
   ('joas', 'admin123', 'Joas Thorig', '4129 8831 5504 9012', '0000', 999999.00, TRUE),
-  ('test', '1234', 'Test Gebruiker', '1002 3004 5006 7008', '1234', 150.00, FALSE),
   ('kassa', '1234', 'Werkdonalds Kassa 1', '9900 1100 2200 3300', '1234', 10000.00, TRUE)
 ON CONFLICT (username) DO NOTHING;
 
 INSERT INTO public.pos_users (name, username, password, perms, is_admin)
 VALUES 
+  ('Joas Thorig', 'joas', 'admin123', '["pos","kitchen","pickup","voorraad","manager","medewerkers","producten","coupons_giftcards","cash_pay"]'::jsonb, TRUE),
   ('Manager Admin', 'admin', 'admin123', '["pos","kitchen","pickup","voorraad","manager","medewerkers","producten","coupons_giftcards","cash_pay"]'::jsonb, TRUE),
   ('Kassa Medewerker 1', 'kassa1', '1234', '["pos","cash_pay"]'::jsonb, FALSE),
   ('Keuken Chef', 'keuken1', '1234', '["kitchen"]'::jsonb, FALSE)
 ON CONFLICT (username) DO NOTHING;
 
+-- Werkdonalds & De Koekploeg Producten
 INSERT INTO public.products (id, name, price, sale_price, on_sale, cat, emoji, in_stock) VALUES
-  (1, 'WerkPounder Cheese', 4.95, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (2, 'Double WerkPounder Cheese', 6.95, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (3, 'Triple WerkPounder Cheese', 8.45, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
+  -- Werkdonalds
+  (1, 'WerkDonalds Classic Burger', 6.25, 3.95, FALSE, 'Burgers & Wraps', '🍔', TRUE),
+  (2, 'Double WerkBurger', 8.25, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
+  (3, 'Triple WerkBurger Extra Beef', 9.45, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
   (4, 'Big Werk Mac', 5.85, 3.95, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (5, 'Double Big Werk Mac', 7.50, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (6, 'Mega Werk Mac XL', 8.95, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (7, 'WerkPounder Royal', 6.25, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (8, 'Double WerkPounder Royal', 7.95, 0.00, FALSE, 'Burgers & Wraps', '🍔', TRUE),
-  (9, 'BBQ WerkRib Burger', 6.75, 0.00, FALSE, 'Burgers & Wraps', '🥩', TRUE),
-  (10, 'WerkChicken', 5.95, 3.50, FALSE, 'Burgers & Wraps', '🍗', TRUE)
-ON CONFLICT (id) DO NOTHING;
+  (5, 'WerkChicken', 5.95, 3.50, FALSE, 'Burgers & Wraps', '🍗', TRUE),
+  (6, '9 WerkNuggets', 6.95, 0.00, FALSE, 'Chicken & Snacks', '🍗', TRUE),
+  (7, 'Medium Franse WerkFriet', 3.65, 0.00, FALSE, 'Friet & Sides', '🍟', TRUE),
+  (8, 'Coca-Cola Zero', 3.35, 0.00, FALSE, 'Koude Dranken & WerkShakes', '🥤', TRUE),
+  -- De Koekploeg (Stroopwafels & Verse Bakkerij)
+  (201, 'Verse Warme Goudse Stroopwafel (Original)', 2.50, 0.00, FALSE, 'Stroopwafels & Specials', '🧇', TRUE),
+  (202, 'Mega Stroopwafel XL Karamel-Zeezout', 3.75, 2.95, TRUE, 'Stroopwafels & Specials', '🧇', TRUE),
+  (203, 'Stroopwafel met Belgische Melkchocolade', 3.45, 0.00, FALSE, 'Stroopwafels & Specials', '🍫', TRUE),
+  (206, 'Verse Stroopwafel Kruimelzak (Warm & Krokant)', 2.00, 0.00, FALSE, 'Stroopwafels & Specials', '🧇', TRUE),
+  (210, 'Ambachtelijke Gevulde Koek (100% Amandelspijs)', 2.25, 0.00, FALSE, 'Luxe Hollandse Koeken', '🥮', TRUE),
+  (212, 'Klassieke Roze Glazuurkoek', 1.95, 0.00, FALSE, 'Luxe Hollandse Koeken', '🌸', TRUE),
+  (213, 'Goudbruine Bakkers Kano met Spijs', 2.10, 0.00, FALSE, 'Luxe Hollandse Koeken', '🛶', TRUE),
+  (215, 'Oma''s Warme Appeltaart Punt met Kaneel', 3.95, 0.00, FALSE, 'Luxe Hollandse Koeken', '🥧', TRUE),
+  (220, 'Chocolade Bokkenpootjes (Portie 4st)', 2.95, 0.00, FALSE, 'Koek Bites & Chocolade', '🐐', TRUE),
+  (221, 'Warme Chocolate Chip Cookie', 2.50, 0.00, FALSE, 'Koek Bites & Chocolade', '🍪', TRUE),
+  (226, 'Koekploeg Koffie Compleet (+ Mini Stroopwafel)', 3.25, 0.00, FALSE, 'Warme Dranken & Koffie', '☕', TRUE),
+  (232, 'Stroopwafel Softijs Sundae met Karamel', 3.50, 0.00, FALSE, 'IJs & Specials', '🍦', TRUE),
+  (238, 'Koekploeg Bewaarblik (10 Verse Koeken Assorti)', 14.95, 12.50, TRUE, 'Voordeel & Cadeaus', '🎁', TRUE)
+ON CONFLICT (id) DO UPDATE SET 
+  name = EXCLUDED.name,
+  price = EXCLUDED.price,
+  cat = EXCLUDED.cat,
+  emoji = EXCLUDED.emoji;
 `;

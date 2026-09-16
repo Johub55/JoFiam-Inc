@@ -42,6 +42,9 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
     setPosScreen,
     werkpayScreen,
     setWerkpayScreen,
+    activeBrand,
+    setActiveBrand,
+    brandConfig,
     currentPosUser, 
     canAccess,
     logoutPos,
@@ -93,21 +96,29 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
     setPosScreen(screen);
   };
 
+  const isKoekploeg = activeBrand === 'koekploeg';
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-xl">
       {/* Top Banner with App Switcher & User Statuses */}
       <div className="px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md">
         
-        {/* Brand Identification */}
+        {/* Brand Identification with Brand Switcher */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 flex items-center justify-center font-black text-white text-xl shadow-lg shadow-blue-500/25">
-            W
+          <div 
+            className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-2xl shadow-lg transition-all ${
+              isKoekploeg 
+                ? 'bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 text-slate-950 shadow-amber-500/30'
+                : 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 text-white shadow-blue-500/25'
+            }`}
+          >
+            {brandConfig.logoEmoji}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight text-white">Werkdonalds</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                POS
+              <span className="font-extrabold text-lg tracking-tight text-white">{brandConfig.name}</span>
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${brandConfig.accentBadgeClass}`}>
+                {brandConfig.badgeText}
               </span>
               <span className="text-slate-500">×</span>
               <span className="font-extrabold text-lg tracking-tight text-cyan-400">WerkPay</span>
@@ -116,23 +127,53 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
-              Geïntegreerd kassasysteem met live bankbetalingen &amp; Supabase Cloud
+              {brandConfig.tagline}
             </p>
+          </div>
+
+          {/* Quick Brand Switcher Toggle */}
+          <div className="ml-2 flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
+            <button
+              onClick={() => setActiveBrand('koekploeg')}
+              className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${
+                isKoekploeg 
+                  ? 'bg-amber-500 text-slate-950 shadow-sm' 
+                  : 'text-slate-400 hover:text-amber-300'
+              }`}
+              title="Wissel naar De Koekploeg (Stroopwafels & Geel thema)"
+            >
+              <span>🧇</span>
+              <span className="hidden md:inline">Koekploeg</span>
+            </button>
+            <button
+              onClick={() => setActiveBrand('werkdonalds')}
+              className={`px-2 py-1 rounded-md text-xs font-bold flex items-center gap-1 transition-all ${
+                !isKoekploeg 
+                  ? 'bg-blue-600 text-white shadow-sm' 
+                  : 'text-slate-400 hover:text-blue-300'
+              }`}
+              title="Wissel naar Werkdonalds (Burgers & Blauw thema)"
+            >
+              <span>🍔</span>
+              <span className="hidden md:inline">Werkdonalds</span>
+            </button>
           </div>
         </div>
 
-        {/* Primary App Switcher (Werkdonalds POS vs WerkPay vs Split vs Setup) */}
+        {/* Primary App Switcher (POS vs WerkPay) */}
         <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 shadow-inner">
           <button
             onClick={() => setAppMode('pos')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition-all ${
               appMode === 'pos'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
+                ? isKoekploeg 
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/25 font-black' 
+                  : 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
             <Utensils className="w-4 h-4" />
-            <span>Werkdonalds POS</span>
+            <span>{isKoekploeg ? 'De Koekploeg Kassa' : 'Werkdonalds POS'}</span>
             {activeKitchenCount > 0 && (
               <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-black bg-rose-600 text-white animate-pulse">
                 {activeKitchenCount}
@@ -151,8 +192,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             <CreditCard className="w-4 h-4" />
             <span>WerkPay Bank</span>
           </button>
-
-
         </div>
 
         {/* Right Status Bars: Supabase Live Dot & User Status */}
