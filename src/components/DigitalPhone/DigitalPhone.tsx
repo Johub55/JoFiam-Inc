@@ -1359,9 +1359,9 @@ export const DigitalPhone: React.FC = () => {
 
             {/* 2. APP: WERKPAY BANK (WITH SECURE PIN CODE LOGIN) */}
             {activeApp === 'werkpay' && (
-              <div className="flex-1 flex flex-col bg-slate-950">
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                 {/* Header */}
-                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => { setActiveApp('home'); playClick(); }} className="text-slate-400 hover:text-white">
                       <ArrowLeft className="w-4 h-4" />
@@ -1385,7 +1385,7 @@ export const DigitalPhone: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 text-xs">
+                <div className="flex-1 overflow-y-auto custom-scroll min-h-0 p-3.5 space-y-3.5 text-xs">
                   {/* STEP 1: CHOOSE BANK ACCOUNT */}
                   {!wpIsLoggedIn && !wpAuthPendingAccount && (
                     <div className="space-y-3">
@@ -1599,9 +1599,9 @@ export const DigitalPhone: React.FC = () => {
 
             {/* 3. APP: WERKDONALDS STAFF EMPLOYEE PORTAL APP */}
             {activeApp === 'werkdonalds' && (
-              <div className="flex-1 flex flex-col bg-slate-950">
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                 {/* Header */}
-                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => { setActiveApp('home'); playClick(); }} className="text-slate-400 hover:text-white">
                       <ArrowLeft className="w-4 h-4" />
@@ -1621,7 +1621,7 @@ export const DigitalPhone: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-3.5 text-xs">
+                <div className="flex-1 overflow-y-auto custom-scroll min-h-0 p-3.5 text-xs">
                   {/* LOGGED OUT PORTAL: LOGIN SCREEN */}
                   {!wdEmpUser ? (
                     <div className="space-y-3.5 py-1">
@@ -2116,11 +2116,11 @@ export const DigitalPhone: React.FC = () => {
 
             {/* 5. APP: MESSAGES / SMS APP (PERSISTENT & DELETABLE CHATS) */}
             {activeApp === 'messages' && (
-              <div className="flex-1 flex flex-col bg-slate-950">
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                 {activeContactId === null ? (
                   /* CONVERSATION LIST */
                   <>
-                    <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                    <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-1.5">
                         <button onClick={() => { setActiveApp('home'); playClick(); }} className="text-slate-400 hover:text-white">
                           <ArrowLeft className="w-4 h-4" />
@@ -2142,7 +2142,7 @@ export const DigitalPhone: React.FC = () => {
 
                     {/* NEW CHAT / USER DIRECTORY OVERLAY */}
                     {showNewChatList ? (
-                      <div className="flex-1 flex flex-col bg-slate-950 p-3 space-y-3.5 overflow-y-auto">
+                      <div className="flex-1 flex flex-col bg-slate-950 p-3 space-y-3.5 overflow-y-auto custom-scroll min-h-0">
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Start chat met collega:</span>
                           <button onClick={() => { playClick(); setShowNewChatList(false); }} className="text-slate-500 hover:text-white text-[10px] font-bold">
@@ -2216,7 +2216,7 @@ export const DigitalPhone: React.FC = () => {
                       </div>
                     ) : (
                       /* ACTIVE CHAT LIST */
-                      <div className="flex-1 overflow-y-auto divide-y divide-slate-900">
+                      <div className="flex-1 overflow-y-auto custom-scroll min-h-0 divide-y divide-slate-900">
                         {contacts.length === 0 ? (
                           <div className="p-8 text-center text-slate-500 text-[11px] italic">
                             Geen actieve gesprekken. Klik op 'Nieuw' om te chatten.
@@ -2503,9 +2503,9 @@ export const DigitalPhone: React.FC = () => {
 
             {/* 6. APP: SETTINGS APP (IN-PHONE) */}
             {activeApp === 'settings' && (
-              <div className="flex-1 flex flex-col bg-slate-950">
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
                 {/* Header */}
-                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+                <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
                   <div className="flex items-center gap-1.5">
                     <button onClick={() => { setActiveApp('home'); playClick(); }} className="text-slate-400 hover:text-white">
                       <ArrowLeft className="w-4 h-4" />
@@ -2516,7 +2516,7 @@ export const DigitalPhone: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+                <div className="flex-1 overflow-y-auto custom-scroll min-h-0 p-4 space-y-4 text-xs">
                   {/* ACHTERGROND / WALLPAPER SELECTOR */}
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 space-y-2.5">
                     <span className="text-[10px] text-cyan-400 font-bold block uppercase tracking-wider flex items-center gap-1">

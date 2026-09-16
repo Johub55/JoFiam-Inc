@@ -584,6 +584,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.setItem('wd_pos_users', JSON.stringify(parsedUsers));
       }
 
+      // 4. Fetch coupons from Supabase
+      const { data: dbCoupons, error: couponErr } = await posClient
+        .from('coupons')
+        .select('*');
+      if (!couponErr && dbCoupons) {
+        const parsedCoupons: Coupon[] = dbCoupons.map(c => ({
+          id: Number(c.id),
+          code: c.code,
+          discount_type: c.discount_type as any,
+          discount_val: Number(c.discount_val),
+          min_subtotal: c.min_subtotal ? Number(c.min_subtotal) : undefined,
+          target_product_name: c.target_product_name || undefined,
+          is_active: Boolean(c.is_active)
+        }));
+        setCoupons(parsedCoupons);
+        localStorage.setItem('wd_coupons', JSON.stringify(parsedCoupons));
+      }
+
+      // 5. Fetch gift cards from Supabase
+      const { data: dbGiftCards, error: gcErr } = await posClient
+        .from('gift_cards')
+        .select('*');
+      if (!gcErr && dbGiftCards) {
+        const parsedGiftCards: GiftCard[] = dbGiftCards.map(g => ({
+          id: Number(g.id),
+          code: g.code,
+          initial_balance: Number(g.initial_balance),
+          current_balance: Number(g.current_balance),
+          is_active: Boolean(g.is_active)
+        }));
+        setGiftCards(parsedGiftCards);
+        localStorage.setItem('wd_gift_cards', JSON.stringify(parsedGiftCards));
+      }
+
       setSyncStatus('synced');
       setLastSyncTime(new Date());
       setIsOnline(true);
@@ -670,6 +704,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let orderChannel: any = null;
     let bankChannel: any = null;
     let prodChannel: any = null;
+    let couponChannel: any = null;
+    let gcChannel: any = null;
 
     try {
       // 1. Orders Realtime
@@ -798,6 +834,94 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         )
         .subscribe();
 
+      // 4. Coupons Realtime
+      couponChannel = posClient
+        .channel('realtime_coupons_live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'coupons' },
+          (payload) => {
+            if (!isMounted) return;
+            console.log('⚡ Realtime Coupon Event received:', payload.eventType);
+            if (payload.eventType === 'INSERT') {
+              const newC = payload.new;
+              const parsed: Coupon = {
+                id: Number(newC.id),
+                code: newC.code,
+                discount_type: newC.discount_type as any,
+                discount_val: Number(newC.discount_val),
+                min_subtotal: newC.min_subtotal ? Number(newC.min_subtotal) : undefined,
+                target_product_name: newC.target_product_name || undefined,
+                is_active: Boolean(newC.is_active)
+              };
+              setCoupons(prev => {
+                if (prev.some(c => c.id === parsed.id || c.code === parsed.code)) return prev;
+                return [...prev, parsed];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedC = payload.new;
+              const parsed: Coupon = {
+                id: Number(updatedC.id),
+                code: updatedC.code,
+                discount_type: updatedC.discount_type as any,
+                discount_val: Number(updatedC.discount_val),
+                min_subtotal: updatedC.min_subtotal ? Number(updatedC.min_subtotal) : undefined,
+                target_product_name: updatedC.target_product_name || undefined,
+                is_active: Boolean(updatedC.is_active)
+              };
+              setCoupons(prev => prev.map(c => c.id === parsed.id ? parsed : c));
+            } else if (payload.eventType === 'DELETE') {
+              const idToDelete = payload.old?.id;
+              if (idToDelete) {
+                setCoupons(prev => prev.filter(c => c.id !== Number(idToDelete)));
+              }
+            }
+          }
+        )
+        .subscribe();
+
+      // 5. Gift Cards Realtime
+      gcChannel = posClient
+        .channel('realtime_gift_cards_live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'gift_cards' },
+          (payload) => {
+            if (!isMounted) return;
+            console.log('⚡ Realtime Gift Card Event received:', payload.eventType);
+            if (payload.eventType === 'INSERT') {
+              const newG = payload.new;
+              const parsed: GiftCard = {
+                id: Number(newG.id),
+                code: newG.code,
+                initial_balance: Number(newG.initial_balance),
+                current_balance: Number(newG.current_balance),
+                is_active: Boolean(newG.is_active)
+              };
+              setGiftCards(prev => {
+                if (prev.some(g => g.id === parsed.id || g.code === parsed.code)) return prev;
+                return [...prev, parsed];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              const updatedG = payload.new;
+              const parsed: GiftCard = {
+                id: Number(updatedG.id),
+                code: updatedG.code,
+                initial_balance: Number(updatedG.initial_balance),
+                current_balance: Number(updatedG.current_balance),
+                is_active: Boolean(updatedG.is_active)
+              };
+              setGiftCards(prev => prev.map(g => g.id === parsed.id ? parsed : g));
+            } else if (payload.eventType === 'DELETE') {
+              const idToDelete = payload.old?.id;
+              if (idToDelete) {
+                setGiftCards(prev => prev.filter(g => g.id !== Number(idToDelete)));
+              }
+            }
+          }
+        )
+        .subscribe();
+
     } catch (err) {
       console.warn('Realtime subscription error:', err);
     }
@@ -807,6 +931,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (orderChannel && posClient) posClient.removeChannel(orderChannel);
       if (bankChannel && (payClient || posClient)) (payClient || posClient).removeChannel(bankChannel);
       if (prodChannel && posClient) posClient.removeChannel(prodChannel);
+      if (couponChannel && posClient) posClient.removeChannel(couponChannel);
+      if (gcChannel && posClient) posClient.removeChannel(gcChannel);
     };
   }, [posClient, payClient]);
 
@@ -1149,7 +1275,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (card.current_balance < finalTotal) {
         return { success: false, message: `Onvoldoende saldo op cadeaubon (${card.current_balance.toFixed(2)})` };
       }
-      setGiftCards(prev => prev.map(g => g.id === card.id ? { ...g, current_balance: g.current_balance - finalTotal } : g));
+      const nextBalance = card.current_balance - finalTotal;
+      setGiftCards(prev => prev.map(g => g.id === card.id ? { ...g, current_balance: nextBalance } : g));
+      if (posClient) {
+        try {
+          await posClient.from('gift_cards').update({ current_balance: nextBalance }).eq('id', card.id);
+        } catch (err) {
+          console.error('Error updating gift card balance in DB during checkout:', err);
+        }
+      }
     }
 
     // 3. Create the order
@@ -2111,24 +2245,91 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   // Coupons & Gift Cards
-  const createGiftCard = (code: string, amount: number) => {
-    setGiftCards(prev => [...prev, { id: Date.now(), code: code.toUpperCase(), initial_balance: amount, current_balance: amount, is_active: true }]);
+  const createGiftCard = async (code: string, amount: number) => {
+    const cleanCode = code.toUpperCase();
+    const newGc: GiftCard = {
+      id: Date.now(),
+      code: cleanCode,
+      initial_balance: amount,
+      current_balance: amount,
+      is_active: true
+    };
+    setGiftCards(prev => [...prev, newGc]);
+    if (posClient) {
+      try {
+        await posClient.from('gift_cards').insert({
+          id: newGc.id,
+          code: newGc.code,
+          initial_balance: newGc.initial_balance,
+          current_balance: newGc.current_balance,
+          is_active: newGc.is_active
+        });
+      } catch (err) {
+        console.error('Error creating gift card in DB:', err);
+      }
+    }
   };
 
-  const topUpGiftCard = (id: number, amount: number) => {
+  const topUpGiftCard = async (id: number, amount: number) => {
     setGiftCards(prev => prev.map(g => g.id === id ? { ...g, current_balance: g.current_balance + amount } : g));
+    if (posClient) {
+      try {
+        const { data } = await posClient.from('gift_cards').select('current_balance').eq('id', id).single();
+        const currentBalance = data ? Number(data.current_balance) : 0;
+        await posClient.from('gift_cards').update({ current_balance: currentBalance + amount }).eq('id', id);
+      } catch (err) {
+        console.error('Error topping up gift card in DB:', err);
+      }
+    }
   };
 
-  const deleteGiftCard = (id: number) => {
+  const deleteGiftCard = async (id: number) => {
     setGiftCards(prev => prev.filter(g => g.id !== id));
+    if (posClient) {
+      try {
+        await posClient.from('gift_cards').delete().eq('id', id);
+      } catch (err) {
+        console.error('Error deleting gift card from DB:', err);
+      }
+    }
   };
 
-  const createCoupon = (coupon: Omit<Coupon, 'id'>) => {
-    setCoupons(prev => [...prev, { ...coupon, id: Date.now() }]);
+  const createCoupon = async (coupon: Omit<Coupon, 'id'>) => {
+    const newC: Coupon = { ...coupon, id: Date.now() };
+    setCoupons(prev => [...prev, newC]);
+    if (posClient) {
+      try {
+        await posClient.from('coupons').insert({
+          id: newC.id,
+          code: newC.code.toUpperCase(),
+          discount_type: newC.discount_type,
+          discount_val: newC.discount_val,
+          min_subtotal: newC.min_subtotal || 0,
+          target_product_name: newC.target_product_name || '',
+          is_active: newC.is_active
+        });
+      } catch (err) {
+        console.error('Error creating coupon in DB:', err);
+      }
+    }
   };
 
-  const toggleCouponActive = (id: number) => {
-    setCoupons(prev => prev.map(c => c.id === id ? { ...c, is_active: !c.is_active } : c));
+  const toggleCouponActive = async (id: number) => {
+    let nextActiveState = true;
+    setCoupons(prev => prev.map(c => {
+      if (c.id === id) {
+        nextActiveState = !c.is_active;
+        return { ...c, is_active: nextActiveState };
+      }
+      return c;
+    }));
+    if (posClient) {
+      try {
+        await posClient.from('coupons').update({ is_active: nextActiveState }).eq('id', id);
+      } catch (err) {
+        console.error('Error toggling coupon active state in DB:', err);
+      }
+    }
   };
 
   // Determine if a specific order belongs to the currently active user/account/session

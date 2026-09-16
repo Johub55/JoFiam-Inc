@@ -284,17 +284,18 @@ export const OrderTrackingScreen: React.FC = () => {
               </p>
 
               {isReady && (
-                <div className="pt-4">
+                <div className="pt-4 flex items-center gap-3">
                   <button
                     onClick={async () => {
-                      if (window.confirm("Weet je zeker dat je je bestelling hebt afgehaald?")) {
-                        await updateOrderStatus(order.no, 'afgehaald');
-                      }
+                      try {
+                        AudioFX.bell();
+                      } catch {}
+                      await updateOrderStatus(order.no, 'afgehaald');
                     }}
-                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center gap-2"
+                    className="px-5 py-2.5 rounded-xl text-xs font-black bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center gap-2 cursor-pointer"
                   >
                     <PackageCheck className="w-4 h-4" />
-                    <span>Ik heb mijn bestelling afgehaald</span>
+                    <span>Ik heb mijn bestelling afgehaald / ontvangen</span>
                   </button>
                 </div>
               )}

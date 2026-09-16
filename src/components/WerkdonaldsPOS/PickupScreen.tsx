@@ -550,8 +550,8 @@ export const PickupScreen: React.FC = () => {
 
       {/* Voice & Custom TTS Settings Panel */}
       {showVoiceSettings && (
-        <div className="my-3 p-4 sm:p-5 bg-slate-900 border border-slate-700 rounded-3xl space-y-4 shadow-2xl animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="my-3 p-4 sm:p-5 bg-slate-900 border border-slate-700 rounded-3xl space-y-4 shadow-2xl animate-in fade-in max-h-[82vh] overflow-y-auto custom-scroll">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 sticky top-0 bg-slate-900/95 backdrop-blur z-10">
             <div className="flex items-center gap-2">
               <Sliders className="w-5 h-5 text-amber-400" />
               <div>
@@ -785,19 +785,33 @@ export const PickupScreen: React.FC = () => {
 
           {/* Custom Omroep Tekst Template */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
-            <div>
+            <div className="space-y-2">
               <label className="text-slate-300 font-bold block mb-1">
                 Aangepaste Omroepzin Template:
               </label>
-              <input
-                type="text"
-                value={customTemplate}
-                onChange={(e) => handleSaveCustomTemplate(e.target.value)}
-                placeholder="Bestelling {orderNo} voor {target} is gereed om af te halen!"
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400 text-xs"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">
-                Gebruik <code>{'{orderNo}'}</code> voor het nummer en <code>{'{target}'}</code> voor tafel of klantnaam.
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customTemplate}
+                  onChange={(e) => handleSaveCustomTemplate(e.target.value)}
+                  placeholder="Bestelling {orderNo} voor {target} is gereed om af te halen!"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    AudioFX.unlock();
+                    AudioFX.speakOrder(1005, 'Tafel 7', 'dine_in');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow transition shrink-0 cursor-pointer"
+                  title="Speel de aangepaste omroepzin nu af als test"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Speel Af</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                💡 Gebruik <code>{'{orderNo}'}</code> voor het nummer en <code>{'{target}'}</code> voor tafel of klantnaam (bijv: <em>"Bestelling {'{orderNo}'} voor {'{target}'} is klaar!"</em>).
               </p>
             </div>
 
