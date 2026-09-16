@@ -34,7 +34,8 @@ import {
   Radio,
   Link,
   Play,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Megaphone
 } from 'lucide-react';
 
 export const STAGE_CONFIG: Record<OrderItemStage, {
@@ -142,6 +143,7 @@ export const KitchenScreen: React.FC = () => {
   const [customTemplate, setCustomTemplate] = useState<string>(() => {
     return typeof window !== 'undefined' ? localStorage.getItem('wd_tts_custom_template') || 'Bestelling {orderNo} voor {target} is gereed om af te halen!' : 'Bestelling {orderNo} voor {target} is gereed om af te halen!';
   });
+  const [directText, setDirectText] = useState<string>('');
   const [isAudioUnlocked, setIsAudioUnlocked] = useState<boolean>(() => AudioFX.getIsUnlocked());
   const [diagnostics, setDiagnostics] = useState<any>(() => AudioFX.getDiagnostics());
 
@@ -458,6 +460,82 @@ export const KitchenScreen: React.FC = () => {
                 <Play className="w-3 h-3 fill-white" />
                 <span>Test Spraak</span>
               </button>
+            </div>
+          </div>
+
+          {/* Eenmalige Omroep (Direct Spraak) */}
+          <div className="p-4 sm:p-5 bg-amber-500/5 rounded-2xl border border-amber-500/20 space-y-3">
+            <div className="flex items-center gap-2">
+              <Megaphone className="w-5 h-5 text-amber-400" />
+              <div>
+                <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                  Eenmalige Omroep (Direct Spreken)
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Typ hier een willekeurige tekst om direct om te roepen door de speakers. Dit overschrijft geen templates.
+                </p>
+              </div>
+            </div>
+
+            <form 
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (directText.trim()) {
+                  AudioFX.unlock();
+                  AudioFX.playSpeech(directText.trim());
+                }
+              }}
+              className="flex gap-2"
+            >
+              <input
+                type="text"
+                value={directText}
+                onChange={(e) => setDirectText(e.target.value)}
+                placeholder="Bijv: Gasten voor tafel 4, uw bestelling staat klaar bij de counter!"
+                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400 text-xs"
+              />
+              <button
+                type="submit"
+                disabled={!directText.trim()}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs flex items-center gap-1.5 shadow transition shrink-0 cursor-pointer"
+              >
+                <Megaphone className="w-3.5 h-3.5" />
+                <span>Roep Nu Om</span>
+              </button>
+            </form>
+
+            {/* Quick Chips */}
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <span className="text-[10px] text-slate-400 self-center mr-1">Snelle keuzes:</span>
+              {[
+                'Bestelling staat klaar bij de counter!',
+                'Even geduld alstublieft, we zijn ermee bezig.',
+                'Welkom bij Werkdonalds, u kunt bestellen via de kiosk of app.',
+                'Eet smakelijk en een fijne dag gewenst!',
+                'Beste gasten, we gaan over 10 minuten sluiten.'
+              ].map((text) => (
+                <button
+                  type="button"
+                  key={text}
+                  onClick={() => {
+                    setDirectText(text);
+                    AudioFX.unlock();
+                    AudioFX.playSpeech(text);
+                  }}
+                  className="px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[10px] text-slate-300 transition hover:border-amber-500/30 font-medium"
+                >
+                  "{text.split(',')[0].split('.')[0]}"
+                </button>
+              ))}
+              {directText && (
+                <button
+                  type="button"
+                  onClick={() => setDirectText('')}
+                  className="px-2 py-1 rounded-lg bg-slate-850 hover:bg-slate-800 border border-slate-800 text-[10px] text-rose-400 transition"
+                >
+                  Wis tekst
+                </button>
+              )}
             </div>
           </div>
 
