@@ -365,10 +365,13 @@ class SoundEffects {
     // Custom announcement format or default
     const customTemplate = typeof window !== 'undefined' ? localStorage.getItem('wd_tts_custom_template') : null;
     let textToSpeak = `Bestelling ${orderNo} voor ${target} is gereed om af te halen!`;
-    if (customTemplate && customTemplate.includes('{orderNo}')) {
+    if (customTemplate && customTemplate.trim()) {
       textToSpeak = customTemplate
-        .replace(/{orderNo}/g, String(orderNo))
-        .replace(/{target}/g, target);
+        .replace(/{orderNo}/gi, String(orderNo))
+        .replace(/{order_no}/gi, String(orderNo))
+        .replace(/{nummer}/gi, String(orderNo))
+        .replace(/{target}/gi, target)
+        .replace(/{naam}/gi, target);
     }
 
     // 4. Notify live visual listeners so on-screen ticker updates immediately

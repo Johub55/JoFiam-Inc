@@ -25,7 +25,16 @@ import {
   Zap,
   Filter,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Sliders,
+  X,
+  Activity,
+  Globe,
+  Laptop,
+  Radio,
+  Link,
+  Play,
+  SlidersHorizontal
 } from 'lucide-react';
 
 export const STAGE_CONFIG: Record<OrderItemStage, {
@@ -118,6 +127,83 @@ export const KitchenScreen: React.FC = () => {
   const [filterTab, setFilterTab] = useState<'all' | 'prep' | 'done'>('all');
   const [stationFilter, setStationFilter] = useState<StationType>('all');
   const [soundOn, setSoundOn] = useState<boolean>(AudioFX.isEnabled);
+
+  const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
+  const [availableVoices, setAvailableVoices] = useState<any[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(
+    typeof window !== 'undefined' ? localStorage.getItem('wd_tts_voice') || '' : ''
+  );
+  const [ttsMode, setTtsMode] = useState<any>(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('wd_tts_mode') || 'auto' : 'auto');
+  });
+  const [customTtsUrl, setCustomTtsUrl] = useState<string>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('wd_custom_tts_url') || '' : '';
+  });
+  const [customTemplate, setCustomTemplate] = useState<string>(() => {
+    return typeof window !== 'undefined' ? localStorage.getItem('wd_tts_custom_template') || 'Bestelling {orderNo} voor {target} is gereed om af te halen!' : 'Bestelling {orderNo} voor {target} is gereed om af te halen!';
+  });
+  const [isAudioUnlocked, setIsAudioUnlocked] = useState<boolean>(() => AudioFX.getIsUnlocked());
+  const [diagnostics, setDiagnostics] = useState<any>(() => AudioFX.getDiagnostics());
+
+  // Load available speech synthesis voices
+  useEffect(() => {
+    const refreshVoices = () => {
+      const v = AudioFX.getAvailableVoices();
+      setAvailableVoices(v);
+    };
+
+    refreshVoices();
+    const t = setTimeout(refreshVoices, 500);
+    const t2 = setTimeout(refreshVoices, 1500);
+
+    return () => {
+      clearTimeout(t);
+      clearTimeout(t2);
+    };
+  }, [showVoiceSettings]);
+
+  // Subscribe to live audio diagnostics
+  useEffect(() => {
+    const unsub = AudioFX.subscribeDiagnostics((diag) => {
+      setDiagnostics(diag);
+      if (diag.isUnlocked) {
+        setIsAudioUnlocked(true);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleSelectVoice = (uri: string) => {
+    setSelectedVoiceURI(uri);
+    if (typeof window !== 'undefined') {
+      if (uri) {
+        localStorage.setItem('wd_tts_voice', uri);
+      } else {
+        localStorage.removeItem('wd_tts_voice');
+      }
+    }
+  };
+
+  const handleSelectTtsMode = (mode: any) => {
+    setTtsMode(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_tts_mode', mode);
+    }
+  };
+
+  const handleSaveCustomUrl = (url: string) => {
+    setCustomTtsUrl(url);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_custom_tts_url', url);
+    }
+  };
+
+  const handleSaveCustomTemplate = (template: string) => {
+    setCustomTemplate(template);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_tts_custom_template', template);
+    }
+  };
 
   // Update timers every 5 seconds
   useEffect(() => {
@@ -268,6 +354,19 @@ export const KitchenScreen: React.FC = () => {
             <span>Test Omroep</span>
           </button>
 
+          <button
+            type="button"
+            onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+              showVoiceSettings 
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+            <span>Custom TTS &amp; Audio</span>
+          </button>
+
           {readyCount > 0 && (
             <button
               type="button"
@@ -290,6 +389,297 @@ export const KitchenScreen: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Voice & Custom TTS Settings Panel */}
+      {showVoiceSettings && (
+        <div className="p-4 sm:p-5 bg-slate-900 border border-slate-700 rounded-3xl space-y-4 shadow-2xl animate-in fade-in max-h-[82vh] overflow-y-auto custom-scroll">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3 sticky top-0 bg-slate-900/95 backdrop-blur z-10">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-5 h-5 text-amber-400" />
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                  Natuurlijke Stemmen &amp; Custom TTS Instellingen
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Kies een zuivere menselijke Nederlandse stem of koppel een eigen TTS endpoint.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowVoiceSettings(false)}
+              className="text-slate-400 hover:text-white p-1.5 rounded-xl hover:bg-slate-800"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Real-time Diagnostics Bar */}
+          <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 font-mono">
+                <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span className="text-slate-400">AudioContext:</span>
+                <span className={`font-bold px-2 py-0.5 rounded ${
+                  diagnostics.ctxState === 'running' 
+                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' 
+                    : 'bg-amber-950 text-amber-300 border border-amber-800'
+                }`}>
+                  {diagnostics.ctxState}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Status:</span>
+                <span className="text-slate-200 font-medium">{diagnostics.lastMessage}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  AudioFX.unlock();
+                  AudioFX.bell();
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] border border-slate-700 flex items-center gap-1"
+              >
+                <Play className="w-3 h-3 text-amber-400" />
+                <span>Test Bel</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  AudioFX.unlock();
+                  AudioFX.playSpeech('Bestelling 1002 voor Tafel 4 is gereed om af te halen!');
+                }}
+                className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
+              >
+                <Play className="w-3 h-3 fill-white" />
+                <span>Test Spraak</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Engine Selection Cards */}
+          <div>
+            <label className="text-xs text-slate-300 font-bold block mb-2">
+              Kies Spraakengine:
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              
+              {/* Option 1: Server Ruben */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('server_ruben')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'server_ruben'
+                    ? 'bg-blue-600/20 border-blue-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-blue-400">
+                    <Globe className="w-4 h-4" />
+                    <span>Ruben (Natuurlijke Man - Aanbevolen)</span>
+                  </span>
+                  {ttsMode === 'server_ruben' && <Check className="w-4 h-4 text-blue-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Duidelijke, menselijke studio mannenstem via onze directe backend proxy (/api/tts). Werkt gegarandeerd in Opera &amp; Linux.
+                </p>
+              </button>
+
+              {/* Option 2: Server Lotte */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('server_lotte')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'server_lotte'
+                    ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-purple-400">
+                    <Globe className="w-4 h-4" />
+                    <span>Lotte (Natuurlijke Vrouw)</span>
+                  </span>
+                  {ttsMode === 'server_lotte' && <Check className="w-4 h-4 text-purple-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Vriendelijke, heldere studio vrouwenstem via onze backend proxy.
+                </p>
+              </button>
+
+              {/* Option 3: Google Natural Dutch Audio */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('google_nl')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'google_nl'
+                    ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-emerald-400">
+                    <Radio className="w-4 h-4" />
+                    <span>Google Natural Dutch</span>
+                  </span>
+                  {ttsMode === 'google_nl' && <Check className="w-4 h-4 text-emerald-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Bekende Google Stem audio-stream met vloeiende Nederlandse uitspraak.
+                </p>
+              </button>
+
+              {/* Option 4: Custom URL API */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('custom_url')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'custom_url'
+                    ? 'bg-amber-600/20 border-amber-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-amber-400">
+                    <Link className="w-4 h-4" />
+                    <span>Custom TTS API URL</span>
+                  </span>
+                  {ttsMode === 'custom_url' && <Check className="w-4 h-4 text-amber-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Koppel een eigen TTS endpoint of externe spraakserver (VoiceRSS, ElevenLabs of lokaal).
+                </p>
+              </button>
+
+              {/* Option 5: Native Speech */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('native')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'native'
+                    ? 'bg-cyan-600/20 border-cyan-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-cyan-400">
+                    <Laptop className="w-4 h-4" />
+                    <span>Browser Systeemstem</span>
+                  </span>
+                  {ttsMode === 'native' && <Check className="w-4 h-4 text-cyan-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Lokale stemmen van het besturingssysteem (SAPI5, speech-dispatcher).
+                </p>
+              </button>
+
+              {/* Option 6: Auto Mode */}
+              <button
+                type="button"
+                onClick={() => handleSelectTtsMode('auto')}
+                className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
+                  ttsMode === 'auto'
+                    ? 'bg-rose-600/20 border-rose-500 text-white shadow-md'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-black text-xs flex items-center gap-1.5 text-rose-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span>Automatisch (Aanbevolen)</span>
+                  </span>
+                  {ttsMode === 'auto' && <Check className="w-4 h-4 text-rose-400" />}
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Kiest automatisch de beste stem (Ruben &rarr; Lotte &rarr; Google &rarr; Browser).
+                </p>
+              </button>
+
+            </div>
+          </div>
+
+          {/* Custom TTS URL Input */}
+          {ttsMode === 'custom_url' && (
+            <div className="p-4 bg-slate-950 border border-amber-500/40 rounded-2xl space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                  <Link className="w-4 h-4" />
+                  <span>Aangepaste TTS URL Template:</span>
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Tokens: {'{text}'}, {'{orderNo}'}, {'{target}'}
+                </span>
+              </div>
+              <input
+                type="text"
+                value={customTtsUrl}
+                onChange={(e) => handleSaveCustomUrl(e.target.value)}
+                placeholder="https://api.streamelements.com/kappa/v2/speech?voice=Ruben&text={text}"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
+              />
+            </div>
+          )}
+
+          {/* Custom Omroep Tekst Template */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1">
+            <div className="space-y-2">
+              <label className="text-slate-300 font-bold block mb-1">
+                Aangepaste Omroepzin Template:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customTemplate}
+                  onChange={(e) => handleSaveCustomTemplate(e.target.value)}
+                  placeholder="Bestelling {orderNo} voor {target} is gereed om af te halen!"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    AudioFX.unlock();
+                    AudioFX.speakOrder(1005, 'Tafel 7', 'dine_in');
+                  }}
+                  className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow transition shrink-0 cursor-pointer animate-pulse"
+                  title="Speel de aangepaste omroepzin nu af als test"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Speel Af</span>
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                💡 Gebruik <code>{'{orderNo}'}</code> voor het nummer en <code>{'{target}'}</code> voor tafel of klantnaam (bijv: <em>"Bestelling {'{orderNo}'} voor {'{target}'} is klaar!"</em>).
+              </p>
+            </div>
+
+            {ttsMode === 'native' && (
+              <div>
+                <label className="text-slate-300 font-bold block mb-1">
+                  Kies Lokale Systeemstem:
+                </label>
+                <select
+                  value={selectedVoiceURI}
+                  onChange={e => handleSelectVoice(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-amber-400 text-xs"
+                >
+                  <option value="">-- Automatische Nederlandse Stem --</option>
+                  {availableVoices.map(v => (
+                    <option key={v.voiceURI} value={v.voiceURI}>
+                      {v.name} ({v.lang}) {v.isDutch ? '🇳🇱/🇧🇪' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
 
       {/* Filter Tabs Bar + Station Filters */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
