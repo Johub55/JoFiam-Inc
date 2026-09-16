@@ -488,7 +488,24 @@ class SoundEffects {
       }
 
       const encoded = encodeURIComponent(text);
-      const url = `/api/tts?voice=${voiceName}&text=${encoded}`;
+      let url = `/api/tts?voice=${voiceName}&text=${encoded}`;
+
+      // DYNAMISCHE DETECTIE:
+      // Als we op GitHub Pages draaien (of een andere statische host zonder /api backend),
+      // praten we DIRECT met de upstream API's via het Audio element. Dit omzeilt de ontbrekende server volledig!
+      const isStaticStatic = typeof window !== 'undefined' && (
+        window.location.hostname.endsWith('.github.io') ||
+        window.location.hostname.endsWith('.pages.dev') ||
+        window.location.protocol === 'file:'
+      );
+
+      if (isStaticStatic) {
+        if (voiceName === 'google') {
+          url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
+        } else {
+          url = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voiceName)}&text=${encoded}`;
+        }
+      }
 
       const audio = new Audio(url);
       audio.volume = 1.0;
