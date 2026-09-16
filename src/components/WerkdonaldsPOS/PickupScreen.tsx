@@ -85,7 +85,7 @@ export const PickupScreen: React.FC = () => {
       if (announcement) {
         const timer = setTimeout(() => {
           setActiveAnnouncement(prev => prev?.id === announcement.id ? null : prev);
-        }, 8000);
+        }, 9000);
         return () => clearTimeout(timer);
       }
     });
@@ -117,8 +117,8 @@ export const PickupScreen: React.FC = () => {
     !o.identifier?.toLowerCase().includes('bezorg')
   );
 
-  const prepOrders = pickupOrders.filter(o => isOrderInProgress(o.status)).slice(0, 24);
-  const readyOrders = pickupOrders.filter(o => isOrderReady(o.status)).slice(0, 24);
+  const prepOrders = pickupOrders.filter(o => isOrderInProgress(o.status)).slice(0, 30);
+  const readyOrders = pickupOrders.filter(o => isOrderReady(o.status)).slice(0, 30);
 
   const handleToggleTvMode = () => {
     const next = !isTvMode;
@@ -182,129 +182,332 @@ export const PickupScreen: React.FC = () => {
     AudioFX.speakOrder(orderNum, targetName, 'dine_in');
   };
 
+  // =========================================================================
+  // DEDICATED FULLSCREEN FASTFOOD TV MODE BOARD
+  // =========================================================================
+  if (isTvMode) {
+    return (
+      <div 
+        id="werkdonalds-tv-mode-root"
+        onClick={() => {
+          if (!isAudioUnlocked) {
+            AudioFX.unlock();
+            setIsAudioUnlocked(true);
+          }
+        }}
+        className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-4 sm:p-6 lg:p-8 select-none overflow-hidden"
+      >
+        {/* TV Header with Brand, Big Clock and Exit */}
+        <header className="flex items-center justify-between pb-4 mb-4 border-b-2 border-slate-800 shrink-0">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-3xl shadow-xl font-black">
+              {brandEmoji}
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-white uppercase">
+                  {brandTitle}
+                </h1>
+                <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs sm:text-sm font-black tracking-wider uppercase flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  Live Afhaalscherm
+                </span>
+              </div>
+              <p className="text-sm sm:text-base text-slate-400 font-medium">
+                Kijk op het scherm en luister naar de omroep voor jouw bestelling
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => handleUnlockAndTest(1002, 'Tafel 4')}
+              className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 font-black text-sm flex items-center gap-2 shadow-lg transition active:scale-95"
+              title="Test de live omroepstem direct"
+            >
+              <Volume2 className="w-5 h-5 text-amber-400" />
+              <span>Test Stem</span>
+            </button>
+
+            {/* Giant Digital Time Clock */}
+            <div className="px-6 py-3 rounded-2xl bg-slate-900 border-2 border-slate-700 text-amber-300 font-mono font-black text-2xl sm:text-3xl shadow-2xl tracking-wider">
+              {timeStr}
+            </div>
+
+            {/* Exit Fullscreen Button */}
+            <button
+              onClick={handleToggleTvMode}
+              className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-rose-600 text-slate-300 hover:text-white transition border border-slate-700 flex items-center gap-2 text-sm font-bold shadow-lg"
+              title="Sluit TV scherm"
+            >
+              <Minimize2 className="w-5 h-5" />
+              <span className="hidden md:inline">Sluit TV</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Live Spoken Announcement Overlay Banner on TV */}
+        {activeAnnouncement && (
+          <div className="mb-4 p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-500/30 via-amber-500/30 to-emerald-500/30 border-4 border-emerald-400 shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-6 duration-300 shrink-0">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-400 text-slate-950 flex items-center justify-center font-black animate-bounce shadow-xl">
+                <Megaphone className="w-8 h-8" />
+              </div>
+              <div>
+                <span className="text-xs sm:text-sm font-black uppercase tracking-widest text-emerald-300 flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
+                  OMROEP LUIDSPREKER · BESTELLING #{activeAnnouncement.orderNo}
+                </span>
+                <p className="text-xl sm:text-3xl font-black text-white mt-0.5 tracking-tight">
+                  "{activeAnnouncement.text}"
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveAnnouncement(null)}
+              className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-900/60"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        )}
+
+        {/* Main TV 2-Column Split */}
+        <div className="flex-1 grid grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
+          
+          {/* COLUMN 1: WORDT BEREID */}
+          <section className="flex flex-col bg-slate-900/80 border-2 border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center shadow-inner">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-amber-400 uppercase tracking-tight flex items-center gap-3">
+                    <span>⏳ Wordt bereid</span>
+                    <span className="text-sm px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-black border border-amber-500/40">
+                      {prepOrders.length}
+                    </span>
+                  </h2>
+                  <span className="text-xs sm:text-sm text-slate-400">Onze keuken bereidt je bestelling vers</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pt-5">
+              {prepOrders.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-lg">
+                  <span className="text-5xl mb-2">{brandEmoji}</span>
+                  <span>Geen bestellingen in bereiding</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {prepOrders.map(o => {
+                    const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+                    return (
+                      <div
+                        key={o.no}
+                        className="p-5 rounded-3xl bg-slate-950 border-2 border-dashed border-amber-500/40 text-left shadow-lg flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-black text-3xl sm:text-4xl text-amber-300 tracking-tight">
+                              #{o.no}
+                            </span>
+                            <span className="text-lg">
+                              {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
+                            </span>
+                          </div>
+                          <div className="mt-2 font-black text-base text-slate-200 truncate">
+                            voor <span className="text-amber-200">{displayName}</span>
+                          </div>
+                        </div>
+                        <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-xs text-amber-400 font-bold">
+                          <span>In bereiding</span>
+                          <span className="font-mono text-slate-500">{o.time}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* COLUMN 2: GEREED OM AF TE HALEN */}
+          <section className="flex flex-col bg-slate-900 border-4 border-emerald-500 rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden ring-4 ring-emerald-500/20">
+            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
+                  <BellRing className="w-7 h-7 animate-bounce" />
+                </div>
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-emerald-400 uppercase tracking-tight flex items-center gap-3">
+                    <span>🔔 Gereed om af te halen</span>
+                    <span className="text-sm px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-black border border-emerald-500/40">
+                      {readyOrders.length}
+                    </span>
+                  </h2>
+                  <span className="text-xs sm:text-sm text-slate-400">Kom naar de afhaalbalie met je bestelnummer</span>
+                </div>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-2 text-xs font-black text-emerald-300 bg-emerald-500/20 px-3 py-1.5 rounded-full border border-emerald-500/40">
+                <Sparkles className="w-4 h-4 text-emerald-400" />
+                <span>Balie Ophalen</span>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto pt-5">
+              {readyOrders.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-lg">
+                  <span className="text-5xl mb-2">✨</span>
+                  <span>Nog geen bestellingen gereed</span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {readyOrders.map(o => {
+                    const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+                    const isCurrentAnnounced = activeAnnouncement?.orderNo === o.no;
+
+                    return (
+                      <div
+                        key={o.no}
+                        className={`p-5 rounded-3xl text-left shadow-2xl flex flex-col justify-between transition-all ${
+                          isCurrentAnnounced 
+                            ? 'bg-gradient-to-br from-emerald-900 to-amber-950 border-4 border-amber-400 scale-[1.03] ring-4 ring-amber-400/50' 
+                            : 'bg-gradient-to-br from-emerald-950 to-slate-950 border-3 border-emerald-400'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-black text-4xl sm:text-5xl lg:text-6xl text-emerald-300 tracking-tight">
+                              #{o.no}
+                            </span>
+                            <span className="w-4 h-4 rounded-full bg-emerald-400 animate-ping" />
+                          </div>
+
+                          <div className="mt-2 font-black text-lg sm:text-xl text-white truncate">
+                            voor <span className="text-emerald-300 font-black">{displayName}</span>
+                          </div>
+
+                          <p className="text-xs sm:text-sm font-bold text-emerald-400 mt-1">
+                            ✓ Is gereed om af te halen!
+                          </p>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-emerald-500/40 flex items-center justify-between text-xs sm:text-sm font-bold text-emerald-300">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Meld je bij de balie</span>
+                          </span>
+                          <span className="font-mono text-emerald-400/80">{o.time}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
+        </div>
+
+        {/* TV Bottom Marquee Bar */}
+        <footer className="mt-4 pt-3 border-t-2 border-slate-800 flex items-center justify-between text-xs sm:text-sm text-slate-400 font-bold shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-white font-black">{brandTitle} FASTFOOD SERVICE</span>
+            <span className="hidden md:inline text-slate-500">· Bestel via Kassa of Kiosk · Eet smakelijk!</span>
+          </div>
+          <div className="text-slate-400 font-mono">
+            {timeStr}
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // STANDARD VIEW (WITH TOOLBAR & SETTINGS)
+  // =========================================================================
   return (
     <div 
+      id="werkdonalds-pickup-root"
       onClick={() => {
         if (!isAudioUnlocked) {
           AudioFX.unlock();
           setIsAudioUnlocked(true);
         }
       }}
-      className={`flex-1 flex flex-col overflow-hidden select-none relative ${
-        isTvMode 
-          ? 'fixed inset-0 z-50 bg-slate-950 p-4 sm:p-6 lg:p-8' 
-          : 'h-[calc(100vh-108px)] bg-slate-950 p-3 sm:p-5'
-      }`}
+      className="flex-1 flex flex-col overflow-hidden select-none relative h-[calc(100vh-108px)] bg-slate-950 p-3 sm:p-5"
     >
-      
-      {/* Control Toolbar (Only visible when not in fullscreen TV mode) */}
-      {!isTvMode && (
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-800">
-          <div>
-            <h1 className="text-xl font-black text-white flex items-center gap-2">
-              <Tv className={`w-6 h-6 ${isKoekploeg ? 'text-amber-400' : 'text-blue-400'}`} />
-              <span>{brandTitle} Afhaalscherm (Klantenscherm &amp; TV)</span>
-            </h1>
-            <p className="text-xs text-slate-400">
-              Live omroep en afhaalscherm · Bezorgingen worden automatisch gefilterd en niet omgeroepen.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Audio Unlock / Test Button (Crucial for Linux & Opera autoplay bypass) */}
-            <button
-              onClick={() => handleUnlockAndTest(1002, 'Tafel 4')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition shadow-sm ${
-                isAudioUnlocked 
-                  ? 'bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 border-emerald-800/80'
-                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 animate-pulse font-black'
-              }`}
-              title="Klik om audio en spraaksynthese direct te ontgrendelen en te testen"
-            >
-              <Volume2 className="w-4 h-4 text-emerald-400" />
-              <span>{isAudioUnlocked ? '🔊 Geluid Actief' : '⚡ Klik: Activeer Geluid'}</span>
-            </button>
-
-            {/* Test Voice Button */}
-            <button
-              onClick={() => handleUnlockAndTest(1001, 'Jan')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-              title="Test TTS omroep direct"
-            >
-              <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>Test Omroep</span>
-            </button>
-
-            {/* Voice & Linux TTS settings button */}
-            <button
-              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                showVoiceSettings 
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
-              }`}
-            >
-              <Settings2 className="w-4 h-4 text-amber-400" />
-              <span>Custom TTS &amp; Audio</span>
-            </button>
-
-            {/* Fullscreen TV Mode */}
-            <button
-              onClick={handleToggleTvMode}
-              className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-black shadow-lg transition active:scale-95 ${
-                isKoekploeg
-                  ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20'
-                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
-              }`}
-            >
-              <Maximize2 className="w-4 h-4" />
-              <span>Start TV Modus</span>
-            </button>
-          </div>
+      {/* Control Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-slate-800">
+        <div>
+          <h1 className="text-xl font-black text-white flex items-center gap-2">
+            <Tv className={`w-6 h-6 ${isKoekploeg ? 'text-amber-400' : 'text-blue-400'}`} />
+            <span>{brandTitle} Afhaalscherm (Klantenscherm &amp; TV)</span>
+          </h1>
+          <p className="text-xs text-slate-400">
+            Live omroep en afhaalscherm · Bezorgingen worden automatisch gefilterd en niet omgeroepen.
+          </p>
         </div>
-      )}
 
-      {/* Floating Toolbar when in Fullscreen TV mode */}
-      {isTvMode && (
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800/80">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">{brandEmoji}</span>
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
-                {brandTitle} Afhaalscherm
-              </h1>
-              <p className="text-xs text-slate-400">
-                Let op je bestelnummer en tafelnummer/naam
-              </p>
-            </div>
-          </div>
+        <div className="flex items-center gap-2">
+          {/* Audio Unlock / Status Button */}
+          <button
+            onClick={() => handleUnlockAndTest(1002, 'Tafel 4')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition shadow-sm ${
+              isAudioUnlocked 
+                ? 'bg-emerald-950/40 hover:bg-emerald-900/40 text-emerald-300 border-emerald-800/80'
+                : 'bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 animate-pulse font-black'
+            }`}
+            title="Klik om audio en spraaksynthese direct te ontgrendelen en te testen"
+          >
+            <Volume2 className="w-4 h-4 text-emerald-400" />
+            <span>{isAudioUnlocked ? '🔊 Geluid Actief' : '⚡ Klik: Activeer Geluid'}</span>
+          </button>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => handleUnlockAndTest(1002, 'Tafel 4')}
-              className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-slate-300 flex items-center gap-1.5 hover:bg-slate-800"
-            >
-              <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-              <span>Test Stem</span>
-            </button>
+          {/* Test Voice Button */}
+          <button
+            onClick={() => handleUnlockAndTest(1001, 'Jan')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
+            title="Test TTS omroep direct"
+          >
+            <Play className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+            <span>Test Omroep</span>
+          </button>
 
-            <div className="px-4 py-1.5 rounded-xl bg-slate-900/90 border border-slate-700 text-amber-300 font-mono font-bold text-base shadow-inner">
-              🕒 {timeStr}
-            </div>
+          {/* Voice & Custom TTS settings button */}
+          <button
+            onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+              showVoiceSettings 
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+          >
+            <Settings2 className="w-4 h-4 text-amber-400" />
+            <span>Custom TTS &amp; Audio</span>
+          </button>
 
-            <button
-              onClick={handleToggleTvMode}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 backdrop-blur"
-              title="Sluit TV scherm"
-            >
-              <Minimize2 className="w-3.5 h-3.5" />
-              <span>Verlaat TV</span>
-            </button>
-          </div>
+          {/* Fullscreen TV Mode */}
+          <button
+            onClick={handleToggleTvMode}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-black shadow-lg transition active:scale-95 ${
+              isKoekploeg
+                ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-amber-500/20'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-600/20'
+            }`}
+          >
+            <Maximize2 className="w-4 h-4" />
+            <span>Start TV Modus</span>
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Live Visual Spoken Announcement Banner (Displays on TV & Screen with wave animation) */}
+      {/* Live Visual Spoken Announcement Banner */}
       {activeAnnouncement && (
         <div className="my-2 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-blue-500/20 border-2 border-emerald-400/80 text-white shadow-2xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
           <div className="flex items-center gap-3">
@@ -345,18 +548,18 @@ export const PickupScreen: React.FC = () => {
         </div>
       )}
 
-      {/* Voice, Custom TTS & Linux/Opera Diagnostics Settings Panel */}
-      {showVoiceSettings && !isTvMode && (
+      {/* Voice & Custom TTS Settings Panel */}
+      {showVoiceSettings && (
         <div className="my-3 p-4 sm:p-5 bg-slate-900 border border-slate-700 rounded-3xl space-y-4 shadow-2xl animate-in fade-in">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Sliders className="w-5 h-5 text-amber-400" />
               <div>
                 <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                  Custom TTS &amp; Spraaksynthese Instellingen
+                  Natuurlijke Stemmen &amp; Custom TTS Instellingen
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Speciaal ontworpen voor 100% betrouwbaarheid op Linux, Opera, Windows, macOS &amp; Android.
+                  Kies een zuivere menselijke Nederlandse stem of koppel een eigen TTS endpoint.
                 </p>
               </div>
             </div>
@@ -384,7 +587,7 @@ export const PickupScreen: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-1.5">
-                <span className="text-slate-400">Laatste status:</span>
+                <span className="text-slate-400">Status:</span>
                 <span className="text-slate-200 font-medium">{diagnostics.lastMessage}</span>
               </div>
             </div>
@@ -406,7 +609,7 @@ export const PickupScreen: React.FC = () => {
                 type="button"
                 onClick={() => {
                   AudioFX.unlock();
-                  AudioFX.playSpeech('Dit is een test van de geselecteerde spraakengine.');
+                  AudioFX.playSpeech('Bestelling 1002 voor Tafel 4 is gereed om af te halen!');
                 }}
                 className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
               >
@@ -419,16 +622,16 @@ export const PickupScreen: React.FC = () => {
           {/* Engine Selection Cards */}
           <div>
             <label className="text-xs text-slate-300 font-bold block mb-2">
-              Kies Spraakengine / TTS Bron:
+              Kies Spraakengine:
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               
-              {/* Option 1: StreamElements Ruben */}
+              {/* Option 1: Server Ruben */}
               <button
                 type="button"
-                onClick={() => handleSelectTtsMode('streamelements_ruben')}
+                onClick={() => handleSelectTtsMode('server_ruben')}
                 className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
-                  ttsMode === 'streamelements_ruben'
+                  ttsMode === 'server_ruben'
                     ? 'bg-blue-600/20 border-blue-500 text-white shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                 }`}
@@ -436,21 +639,21 @@ export const PickupScreen: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-black text-xs flex items-center gap-1.5 text-blue-400">
                     <Globe className="w-4 h-4" />
-                    <span>StreamElements (Ruben - Man)</span>
+                    <span>Ruben (Natuurlijke Man - Aanbevolen)</span>
                   </span>
-                  {ttsMode === 'streamelements_ruben' && <Check className="w-4 h-4 text-blue-400" />}
+                  {ttsMode === 'server_ruben' && <Check className="w-4 h-4 text-blue-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Natuurlijke Nederlandse mannenstem (AWS Polly). Werkt direct op Linux, Opera &amp; Windows via directe audio stream.
+                  Duidelijke, menselijke studio mannenstem via onze directe backend proxy (/api/tts). Werkt gegarandeerd in Opera &amp; Linux.
                 </p>
               </button>
 
-              {/* Option 2: StreamElements Lotte */}
+              {/* Option 2: Server Lotte */}
               <button
                 type="button"
-                onClick={() => handleSelectTtsMode('streamelements_lotte')}
+                onClick={() => handleSelectTtsMode('server_lotte')}
                 className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
-                  ttsMode === 'streamelements_lotte'
+                  ttsMode === 'server_lotte'
                     ? 'bg-purple-600/20 border-purple-500 text-white shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                 }`}
@@ -458,34 +661,34 @@ export const PickupScreen: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-black text-xs flex items-center gap-1.5 text-purple-400">
                     <Globe className="w-4 h-4" />
-                    <span>StreamElements (Lotte - Vrouw)</span>
+                    <span>Lotte (Natuurlijke Vrouw)</span>
                   </span>
-                  {ttsMode === 'streamelements_lotte' && <Check className="w-4 h-4 text-purple-400" />}
+                  {ttsMode === 'server_lotte' && <Check className="w-4 h-4 text-purple-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Vriendelijke Nederlandse vrouwenstem (AWS Polly). Snelle laadtijd en zuivere uitspraak.
+                  Vriendelijke, heldere studio vrouwenstem via onze backend proxy.
                 </p>
               </button>
 
-              {/* Option 3: Web Audio Synth (100% Offline / Linux / Opera proof) */}
+              {/* Option 3: Google Natural Dutch Audio */}
               <button
                 type="button"
-                onClick={() => handleSelectTtsMode('webaudio_synth')}
+                onClick={() => handleSelectTtsMode('google_nl')}
                 className={`p-3 rounded-2xl border text-left transition flex flex-col justify-between ${
-                  ttsMode === 'webaudio_synth'
+                  ttsMode === 'google_nl'
                     ? 'bg-emerald-600/20 border-emerald-500 text-white shadow-md'
                     : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
                 }`}
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-black text-xs flex items-center gap-1.5 text-emerald-400">
-                    <Cpu className="w-4 h-4" />
-                    <span>Pure Web Audio Synth (100% Offline)</span>
+                    <Radio className="w-4 h-4" />
+                    <span>Google Natural Dutch</span>
                   </span>
-                  {ttsMode === 'webaudio_synth' && <Check className="w-4 h-4 text-emerald-400" />}
+                  {ttsMode === 'google_nl' && <Check className="w-4 h-4 text-emerald-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Genereert synthetische klanken lokaal via AudioContext. Heeft GEEN internet, GEEN externe codecs en GEEN OS-stemmen nodig.
+                  Bekende Google Stem audio-stream met vloeiende Nederlandse uitspraak.
                 </p>
               </button>
 
@@ -507,7 +710,7 @@ export const PickupScreen: React.FC = () => {
                   {ttsMode === 'custom_url' && <Check className="w-4 h-4 text-amber-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Koppel een eigen TTS endpoint of externe API (zoals VoiceRSS, ElevenLabs of eigen Node server).
+                  Koppel een eigen TTS endpoint of externe spraakserver (VoiceRSS, ElevenLabs of lokaal).
                 </p>
               </button>
 
@@ -524,16 +727,16 @@ export const PickupScreen: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-black text-xs flex items-center gap-1.5 text-cyan-400">
                     <Laptop className="w-4 h-4" />
-                    <span>Browser Systeemstem ({availableVoices.length} stemmen)</span>
+                    <span>Browser Systeemstem</span>
                   </span>
                   {ttsMode === 'native' && <Check className="w-4 h-4 text-cyan-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Lokale stemmen van het besturingssysteem (SAPI5, speech-dispatcher of browser-engine).
+                  Lokale stemmen van het besturingssysteem (SAPI5, speech-dispatcher).
                 </p>
               </button>
 
-              {/* Option 6: Auto Smart Mode */}
+              {/* Option 6: Auto Mode */}
               <button
                 type="button"
                 onClick={() => handleSelectTtsMode('auto')}
@@ -546,19 +749,19 @@ export const PickupScreen: React.FC = () => {
                 <div className="flex items-center justify-between mb-1">
                   <span className="font-black text-xs flex items-center gap-1.5 text-rose-400">
                     <Sparkles className="w-4 h-4" />
-                    <span>Auto Smart Cascade</span>
+                    <span>Automatisch (Aanbevolen)</span>
                   </span>
                   {ttsMode === 'auto' && <Check className="w-4 h-4 text-rose-400" />}
                 </div>
                 <p className="text-[11px] text-slate-400">
-                  Probeert StreamElements Ruben &rarr; Systeemstem &rarr; Web Audio Synthesizer met automatische foutopvang.
+                  Kiest automatisch de beste stem (Ruben &rarr; Lotte &rarr; Google &rarr; Browser).
                 </p>
               </button>
 
             </div>
           </div>
 
-          {/* Custom TTS URL Input & Template Configuration */}
+          {/* Custom TTS URL Input */}
           {ttsMode === 'custom_url' && (
             <div className="p-4 bg-slate-950 border border-amber-500/40 rounded-2xl space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between">
@@ -577,31 +780,6 @@ export const PickupScreen: React.FC = () => {
                 placeholder="https://api.streamelements.com/kappa/v2/speech?voice=Ruben&text={text}"
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 font-mono"
               />
-              
-              <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
-                <span className="text-slate-400 font-bold">Voorbeeld presets:</span>
-                <button
-                  type="button"
-                  onClick={() => handleSaveCustomUrl('https://api.streamelements.com/kappa/v2/speech?voice=Ruben&text={text}')}
-                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-blue-300 border border-slate-700"
-                >
-                  StreamElements Ruben
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveCustomUrl('https://api.streamelements.com/kappa/v2/speech?voice=Lotte&text={text}')}
-                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-purple-300 border border-slate-700"
-                >
-                  StreamElements Lotte
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSaveCustomUrl('https://api.voicerss.org/?key=DEMO_KEY&hl=nl-nl&src={text}')}
-                  className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700"
-                >
-                  VoiceRSS (NL)
-                </button>
-              </div>
             </div>
           )}
 
@@ -663,9 +841,7 @@ export const PickupScreen: React.FC = () => {
           
           <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 overflow-hidden">
             
-            {/* ========================================================= */}
-            {/* COLUMN 1: WORDT BEREID                                    */}
-            {/* ========================================================= */}
+            {/* COLUMN 1: WORDT BEREID */}
             <div className="flex flex-col bg-slate-900/90 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl overflow-hidden">
               <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
                 <div className="flex items-center gap-3">
@@ -713,13 +889,11 @@ export const PickupScreen: React.FC = () => {
                               </span>
                             </div>
 
-                            {/* Customer Name or Table Number */}
                             <div className="mt-1 font-bold text-xs text-slate-200 truncate" title={displayName}>
                               voor {displayName}
                             </div>
                           </div>
 
-                          {/* Live Status Tag */}
                           <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
                             <span className="text-[10px] font-bold text-amber-400/90 flex items-center gap-1 truncate">
                               <span>{meta.emoji}</span>
@@ -737,9 +911,7 @@ export const PickupScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* ========================================================= */}
-            {/* COLUMN 2: GEREED OM AF TE HALEN                           */}
-            {/* ========================================================= */}
+            {/* COLUMN 2: GEREED OM AF TE HALEN */}
             <div className="flex flex-col bg-slate-900 border-2 border-emerald-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl overflow-hidden ring-1 ring-emerald-500/30">
               <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
                 <div className="flex items-center gap-3">
@@ -789,7 +961,6 @@ export const PickupScreen: React.FC = () => {
                               <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
                             </div>
 
-                            {/* Wording according to user requirement */}
                             <div className="mt-2 font-black text-sm text-white truncate" title={displayName}>
                               voor <span className="text-emerald-300">{displayName}</span>
                             </div>

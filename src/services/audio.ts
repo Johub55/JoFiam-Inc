@@ -1,16 +1,10 @@
 /**
- * Audio FX, Custom TTS Engine & Universal Speech Synthesis for Werkdonalds POS & WerkPay.
+ * Audio FX, Studio-Quality Natural Dutch TTS Engine & Fastfood Announcer
+ * for Werkdonalds POS & WerkPay.
  * 
- * Supports:
- * 1. Web Audio Bell Chimes, Cash Register Dings, Beeps, Ringtones.
- * 2. Multi-Engine Dutch TTS:
- *    - 'streamelements_ruben': StreamElements AWS Polly Dutch Male (High quality, CORS friendly)
- *    - 'streamelements_lotte': StreamElements AWS Polly Dutch Female (High quality, CORS friendly)
- *    - 'custom_url': User-configured Custom TTS API URL with {text}, {orderNo}, {target} tokens
- *    - 'webaudio_synth': 100% Offline Web Audio Formant Voice Synthesizer (Works in Linux Opera, Firefox, Chrome, zero dependencies)
- *    - 'native': Browser SpeechSynthesis (SAPI5 / speech-dispatcher)
- *    - 'auto': Intelligent fallback across all engines with diagnostics
- * 3. Opera / Linux Autoplay Policy Unlocker & Audio Diagnostic Logs.
+ * Powered by Server-Side Same-Origin Proxy (/api/tts) to guarantee 100% audio
+ * delivery on Linux, Opera, Windows, macOS, Android & iOS without adblocker,
+ * iframe or CORS blocking!
  */
 
 export interface SpeechVoiceOption {
@@ -22,10 +16,10 @@ export interface SpeechVoiceOption {
 
 export type TtsEngineMode = 
   | 'auto' 
-  | 'streamelements_ruben' 
-  | 'streamelements_lotte' 
+  | 'server_ruben'
+  | 'server_lotte'
+  | 'google_nl'
   | 'custom_url' 
-  | 'webaudio_synth' 
   | 'native' 
   | 'chime_only';
 
@@ -53,10 +47,10 @@ class SoundEffects {
   private currentDiag: AudioDiagnosticStatus = {
     ctxState: 'uninitialized',
     isUnlocked: false,
-    activeEngine: 'auto',
+    activeEngine: 'auto (Ruben NL)',
     lastPlayedText: '',
     lastStatus: 'idle',
-    lastMessage: 'Klaar voor afspelen',
+    lastMessage: 'Klaar voor omroep',
     availableNativeVoicesCount: 0
   };
 
@@ -69,7 +63,7 @@ class SoundEffects {
 
       this.initVoices();
 
-      // Listen for first user interaction anywhere to unlock Web Audio and SpeechSynthesis
+      // Listen for user gestures to unlock Web Audio context
       const unlockAudio = () => {
         this.unlock();
       };
@@ -120,23 +114,21 @@ class SoundEffects {
   }
 
   /**
-   * Explicitly unlock audio context & speech synthesis (bypasses Linux & Opera autoplay restrictions)
+   * Explicitly unlock audio context & speech (bypasses Linux & Opera autoplay restrictions)
    */
   public unlock() {
     this.isUnlocked = true;
     this.initCtx();
 
     if (typeof window !== 'undefined') {
-      // 1. Resume Web Audio Context
       if (this.ctx && this.ctx.state === 'suspended') {
         this.ctx.resume().then(() => {
-          this.updateDiag({ ctxState: 'running', lastMessage: 'Web Audio Context geactiveerd' });
+          this.updateDiag({ ctxState: 'running', lastMessage: 'Audio ontgrendeld' });
         }).catch(() => {});
       } else if (this.ctx) {
         this.updateDiag({ ctxState: this.ctx.state });
       }
 
-      // 2. Unlock SpeechSynthesis in Chrome / Linux / Opera
       if ('speechSynthesis' in window) {
         try {
           if (window.speechSynthesis.paused) {
@@ -392,7 +384,7 @@ class SoundEffects {
       lastMessage: `Omroep gestart voor bestelling #${orderNo}`
     });
 
-    // 5. Execute speech after chime with cross-platform fallback
+    // 5. Execute natural human voice after chime
     setTimeout(() => {
       this.playSpeech(textToSpeak, orderNo, target);
     }, 450);
@@ -405,7 +397,7 @@ class SoundEffects {
 
   /**
    * Universal speech player:
-   * Checks selected engine mode ('auto', 'streamelements_ruben', 'streamelements_lotte', 'custom_url', 'webaudio_synth', 'native', 'chime_only').
+   * Checks selected engine mode.
    */
   public playSpeech(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4') {
     if (typeof window === 'undefined' || !this.isEnabled) return;
@@ -422,16 +414,16 @@ class SoundEffects {
         this.playCustomUrlTts(text, orderNo, target);
         return;
 
-      case 'streamelements_ruben':
-        this.playStreamElementsTts(text, 'Ruben');
+      case 'server_lotte':
+        this.playServerTts(text, 'Lotte');
         return;
 
-      case 'streamelements_lotte':
-        this.playStreamElementsTts(text, 'Lotte');
+      case 'server_ruben':
+        this.playServerTts(text, 'Ruben');
         return;
 
-      case 'webaudio_synth':
-        this.playWebAudioSynthesizer(text);
+      case 'google_nl':
+        this.playServerTts(text, 'google');
         return;
 
       case 'native':
@@ -446,49 +438,46 @@ class SoundEffects {
   }
 
   /**
-   * Automatic Best-Effort Cascade with Diagnostics:
-   * 1. StreamElements Natural Dutch Cloud (Ruben / Lotte) - 100% works on Linux Opera, Chrome, Edge, Windows, Mac
-   * 2. Browser Native SpeechSynthesis (if authentic Dutch voice exists)
-   * 3. Built-in Pure Web Audio Formant Synthesizer (100% offline & codec-free backup)
+   * Automatic High-Quality Human Voice Cascade:
+   * 1. Same-Origin Server TTS Proxy (/api/tts?voice=Ruben) -> 100% works on Opera/Linux/Windows
+   * 2. Same-Origin Server TTS Proxy (/api/tts?voice=Lotte)
+   * 3. Browser Native SpeechSynthesis
    */
   private playAutoTtsWithFallbacks(text: string, orderNo: number | string, target: string) {
-    this.updateDiag({ activeEngine: 'auto (StreamElements Ruben)', lastStatus: 'playing' });
+    this.updateDiag({ activeEngine: 'auto (Ruben NL)', lastStatus: 'playing' });
 
-    // Step 1: High quality StreamElements Ruben (works with permissive CORS on Linux / Opera)
-    this.playStreamElementsTts(text, 'Ruben', (success) => {
+    // Step 1: Same-Origin Server TTS Ruben
+    this.playServerTts(text, 'Ruben', (success) => {
       if (success) {
-        this.updateDiag({ activeEngine: 'StreamElements (Ruben)', lastStatus: 'success', lastMessage: 'Succesvol afgespeeld via StreamElements' });
+        this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Ruben' });
         return;
       }
 
-      // Step 2: Try native speech synthesis
-      this.updateDiag({ activeEngine: 'auto (Native Fallback)', lastStatus: 'playing', lastMessage: 'StreamElements mislukt, probeer browser native' });
-      const voices = this.getAvailableVoices();
-      const hasDutchVoice = voices.some(v => v.isDutch);
+      // Step 2: Same-Origin Server TTS Lotte
+      this.playServerTts(text, 'Lotte', (lotteSuccess) => {
+        if (lotteSuccess) {
+          this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Lotte' });
+          return;
+        }
 
-      if (hasDutchVoice && 'speechSynthesis' in window) {
+        // Step 3: Browser Native Speech
         this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
           if (nativeSuccess) {
-            this.updateDiag({ activeEngine: 'Native Systeemstem', lastStatus: 'success', lastMessage: 'Succesvol afgespeeld via Systeemstem' });
+            this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
           } else {
-            // Step 3: Pure Web Audio Synthesizer (never fails, 100% offline)
-            this.updateDiag({ activeEngine: 'Web Audio Synth (Nood-engine)', lastStatus: 'playing', lastMessage: 'Teruggevallen op Web Audio synthesizer' });
-            this.playWebAudioSynthesizer(text);
+            this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
+            this.bell();
           }
         });
-      } else {
-        // Step 3 direct fallback
-        this.updateDiag({ activeEngine: 'Web Audio Synth', lastStatus: 'playing', lastMessage: 'Teruggevallen op Web Audio synthesizer' });
-        this.playWebAudioSynthesizer(text);
-      }
+      });
     });
   }
 
   /**
-   * StreamElements Public AWS Polly Dutch Voice Stream.
-   * CORS-Friendly, no cookies, works in Opera & Linux!
+   * Plays audio via Same-Origin Server Endpoint `/api/tts`.
+   * Completely immune to CORS, Opera adblocker, tracker block, or 3rd party host blocks!
    */
-  public playStreamElementsTts(text: string, voiceName: 'Ruben' | 'Lotte' = 'Ruben', callback?: (success: boolean) => void) {
+  public playServerTts(text: string, voiceName: 'Ruben' | 'Lotte' | 'google' | string = 'Ruben', callback?: (success: boolean) => void) {
     try {
       if (this.activeAudioElement) {
         this.activeAudioElement.pause();
@@ -496,53 +485,50 @@ class SoundEffects {
       }
 
       const encoded = encodeURIComponent(text);
-      const url = `https://api.streamelements.com/kappa/v2/speech?voice=${voiceName}&text=${encoded}`;
+      const url = `/api/tts?voice=${voiceName}&text=${encoded}`;
 
-      const audio = new Audio();
-      audio.crossOrigin = 'anonymous';
-      audio.src = url;
+      const audio = new Audio(url);
       audio.volume = 1.0;
       this.activeAudioElement = audio;
 
-      let hasEnded = false;
+      let finished = false;
 
       audio.onplay = () => {
         this.updateDiag({ 
-          activeEngine: `StreamElements (${voiceName})`, 
+          activeEngine: `Server TTS (${voiceName})`, 
           lastStatus: 'playing',
-          lastMessage: `Spraak streamt via StreamElements (${voiceName})`
+          lastMessage: `Natuurlijke stem ${voiceName} spreekt...`
         });
       };
 
       audio.onended = () => {
-        hasEnded = true;
+        finished = true;
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'success', lastMessage: 'Spraak afgerond' });
+        this.updateDiag({ lastStatus: 'success', lastMessage: `Omroep ${voiceName} voltooid` });
         if (callback) callback(true);
       };
 
       audio.onerror = (e) => {
-        console.warn(`StreamElements ${voiceName} audio error:`, e);
+        console.warn(`Server TTS (${voiceName}) error:`, e);
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'error', lastMessage: `StreamElements audio fout: ${audio.error?.message || 'onbekend'}` });
-        if (callback && !hasEnded) callback(false);
+        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName}` });
+        if (callback && !finished) callback(false);
       };
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
-          console.warn('Audio play rejection (autoplay policy):', err);
-          this.updateDiag({ lastStatus: 'error', lastMessage: `Autoplay geblokkeerd door browser: klik eerst op het scherm!` });
-          if (callback && !hasEnded) callback(false);
+          console.warn('Audio play rejection:', err);
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
+          if (callback && !finished) callback(false);
         });
       }
     } catch (err) {
-      console.warn('StreamElements TTS error:', err);
-      this.updateDiag({ lastStatus: 'error', lastMessage: `Fout bij starten StreamElements: ${String(err)}` });
+      console.warn('Server TTS error:', err);
       if (callback) callback(false);
     }
   }
@@ -554,7 +540,7 @@ class SoundEffects {
   public playCustomUrlTts(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4', callback?: (success: boolean) => void) {
     const rawUrl = localStorage.getItem('wd_custom_tts_url') || '';
     if (!rawUrl) {
-      this.updateDiag({ lastStatus: 'error', lastMessage: 'Geen Custom TTS URL ingesteld! Schakel over naar StreamElements of Web Audio' });
+      this.updateDiag({ lastStatus: 'error', lastMessage: 'Geen Custom TTS URL ingesteld' });
       if (callback) callback(false);
       return;
     }
@@ -570,15 +556,9 @@ class SoundEffects {
         .replace(/{orderNo}/g, encodeURIComponent(String(orderNo)))
         .replace(/{target}/g, encodeURIComponent(target));
 
-      const audio = new Audio();
-      audio.crossOrigin = 'anonymous';
-      audio.src = formattedUrl;
+      const audio = new Audio(formattedUrl);
       audio.volume = 1.0;
       this.activeAudioElement = audio;
-
-      audio.onplay = () => {
-        this.updateDiag({ activeEngine: 'Custom TTS URL', lastStatus: 'playing', lastMessage: 'Aangepaste TTS URL streamt' });
-      };
 
       audio.onended = () => {
         if (this.activeAudioElement === audio) this.activeAudioElement = null;
@@ -605,88 +585,11 @@ class SoundEffects {
   }
 
   /**
-   * Pure Web Audio Formant Synthesizer:
-   * 100% Offline, ZERO external network, ZERO codec dependencies!
-   * Synthesizes retro airport vocal announcer tones using pure Web Audio oscillator nodes.
-   * Works on 100% of Linux distributions, Opera, Firefox, Safari, Chrome!
-   */
-  public playWebAudioSynthesizer(text: string, callback?: (success: boolean) => void) {
-    try {
-      this.initCtx();
-      if (!this.ctx) {
-        if (callback) callback(false);
-        return;
-      }
-
-      this.updateDiag({ activeEngine: 'Web Audio Synth (Offline)', lastStatus: 'playing', lastMessage: 'Web Audio synthesizer genereert stem...' });
-
-      // Convert text to phoneme-like frequencies & formant vocal bursts
-      const words = text.split(/\s+/);
-      let startTime = this.ctx.currentTime + 0.05;
-
-      words.forEach((word) => {
-        const cleanWord = word.toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (!cleanWord) return;
-
-        // Base pitch determined by word characteristics
-        const isNumber = /^\d+$/.test(cleanWord);
-        const pitch = isNumber ? 260 : 220;
-        const duration = Math.min(0.35, Math.max(0.12, cleanWord.length * 0.04));
-
-        // Vocal Formant Filter 1 (F1: Throat cavity resonance)
-        const osc = this.ctx!.createOscillator();
-        const f1 = this.ctx!.createBiquadFilter();
-        const f2 = this.ctx!.createBiquadFilter();
-        const gain = this.ctx!.createGain();
-
-        osc.type = isNumber ? 'sawtooth' : 'triangle';
-        osc.frequency.setValueAtTime(pitch, startTime);
-        osc.frequency.exponentialRampToValueAtTime(pitch * 0.9, startTime + duration);
-
-        f1.type = 'bandpass';
-        f1.frequency.setValueAtTime(600, startTime);
-        f1.Q.setValueAtTime(4.0, startTime);
-
-        f2.type = 'bandpass';
-        f2.frequency.setValueAtTime(1400, startTime);
-        f2.Q.setValueAtTime(5.0, startTime);
-
-        gain.gain.setValueAtTime(0.001, startTime);
-        gain.gain.linearRampToValueAtTime(0.35, startTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-        osc.connect(f1);
-        f1.connect(gain);
-        osc.connect(f2);
-        f2.connect(gain);
-        gain.connect(this.ctx!.destination);
-
-        osc.start(startTime);
-        osc.stop(startTime + duration);
-
-        startTime += duration + 0.06;
-      });
-
-      const totalTime = (startTime - this.ctx.currentTime) * 1000;
-      setTimeout(() => {
-        this.updateDiag({ lastStatus: 'success', lastMessage: 'Web Audio spraak afgerond' });
-        if (callback) callback(true);
-      }, Math.max(200, totalTime));
-
-    } catch (err) {
-      console.warn('Web Audio Synth error:', err);
-      this.updateDiag({ lastStatus: 'error', lastMessage: `Web Audio synth fout: ${String(err)}` });
-      if (callback) callback(false);
-    }
-  }
-
-  /**
-   * Native browser SpeechSynthesis with full Chromium / Linux bug workarounds:
+   * Native browser SpeechSynthesis
    */
   public playNativeSpeechSynthesis(text: string, fallbackToAuto: boolean = true, callback?: (success: boolean) => void) {
     try {
       if (!('speechSynthesis' in window)) {
-        if (fallbackToAuto) this.playAutoTtsWithFallbacks(text, 1001, 'Tafel');
         if (callback) callback(false);
         return;
       }
@@ -698,7 +601,7 @@ class SoundEffects {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'nl-NL';
       utterance.rate = 0.95;
-      utterance.pitch = 1.05;
+      utterance.pitch = 1.02;
       utterance.volume = 1.0;
 
       if (this.cachedVoices.length === 0) {
@@ -747,23 +650,13 @@ class SoundEffects {
       };
 
       utterance.onerror = (e) => {
-        console.warn('Native speech synthesis error:', e);
         this.activeUtterance = null;
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Systeemstem fout: ${e.error}` });
         if (callback) callback(false);
-        if (fallbackToAuto) {
-          this.playWebAudioSynthesizer(text);
-        }
       };
 
       window.speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.warn('Native speech error:', err);
-      this.updateDiag({ lastStatus: 'error', lastMessage: `Fout in native speech: ${String(err)}` });
+    } catch {
       if (callback) callback(false);
-      if (fallbackToAuto) {
-        this.playWebAudioSynthesizer(text);
-      }
     }
   }
 }
