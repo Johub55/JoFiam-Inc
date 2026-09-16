@@ -715,7 +715,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 };
               }));
               if (updatedOrder.status === 'done' || updatedOrder.status === 'klaar') {
-                AudioFX.speakOrder(updatedOrder.no);
+                AudioFX.speakOrder(updatedOrder.no, updatedOrder.identifier, updatedOrder.orderType);
               }
               setLastSyncTime(new Date());
               setSyncStatus('synced');
@@ -1443,9 +1443,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           } else if (type === 'SYNC_ORDER_STATUS') {
             const { orderNo: targetNo, status, updatedAt } = payload;
             recordLocalOrderMutation(targetNo, { status });
-            setOrders(prev => prev.map(o => o.no === targetNo ? { ...o, status, updatedAt: updatedAt || Date.now() } : o));
+            let targetOrder: Order | undefined;
+            setOrders(prev => {
+              targetOrder = prev.find(o => o.no === targetNo);
+              return prev.map(o => o.no === targetNo ? { ...o, status, updatedAt: updatedAt || Date.now() } : o);
+            });
             if (status === 'done' || status === 'klaar') {
-              AudioFX.speakOrder(targetNo);
+              const matched = targetOrder || orders.find(o => o.no === targetNo);
+              if (matched) {
+                AudioFX.speakOrder(targetNo, matched.identifier, matched.orderType);
+              } else {
+                AudioFX.speakOrder(targetNo);
+              }
             }
           } else if (type === 'SYNC_ORDER_ITEMS') {
             const { orderNo: targetNo, items, updatedAt } = payload;
