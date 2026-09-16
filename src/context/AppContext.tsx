@@ -1081,14 +1081,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setCurrentBankAccount(prev => prev ? { ...prev, balance: newBal } : null);
       }
 
+      // Determine brand for proper transaction logging
+      const currentBrandKey = activeBrand || 'koekploeg';
+      const isKoekploegBrand = currentBrandKey === 'koekploeg';
+      const brandName = isKoekploegBrand ? 'De Koekploeg' : 'Werkdonalds';
+      const toMerchant = `${brandName} Kassa`;
+      const txLabel = `${brandName} Bestelling #${orderNo}`;
+
       // Add bank transaction
       const tx: BankTransaction = {
         id: Date.now(),
         from_account: chargedAccount.username,
-        to_account: 'Werkdonalds Kassa',
+        to_account: toMerchant,
         amount: finalTotal,
-        label: `Werkdonalds Bestelling #${orderNo}`,
-        note: `Betaling via ${mode === 'terminal' ? 'DIY Pinapparaat' : mode === 'card' ? 'WerkPay Kaart' : 'WerkPay Login'}`,
+        label: txLabel,
+        note: `Betaling via ${mode === 'terminal' ? 'DIY Pinapparaat' : mode === 'card' ? 'WerkPay Kaart' : 'WerkPay Login'} (${brandName})`,
         order_no: orderNo,
         when: new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
         timestamp: Date.now()
@@ -1103,18 +1110,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               p_card_uid: paymentMeta.cardUid,
               p_pin: paymentMeta.pin,
               p_amount: finalTotal,
-              p_reference: `WD-ORD-${orderNo}`,
-              p_cashier: currentPosUser?.name || 'Kassa',
-              p_order_no: orderNo
+              p_reference: `${isKoekploegBrand ? 'KP' : 'WD'}-ORD-${orderNo}`,
+              p_cashier: currentPosUser?.name || `${brandName} Kassa`,
+              p_order_no: orderNo,
+              p_brand: brandName
             });
           } else {
             await targetClient.rpc('werkpay_charge_by_login', {
               p_username: chargedAccount.username,
               p_password: chargedAccount.password || paymentMeta.password || paymentMeta.pin,
               p_amount: finalTotal,
-              p_reference: `WD-ORD-${orderNo}`,
-              p_cashier: currentPosUser?.name || 'Kassa',
-              p_order_no: orderNo
+              p_reference: `${isKoekploegBrand ? 'KP' : 'WD'}-ORD-${orderNo}`,
+              p_cashier: currentPosUser?.name || `${brandName} Kassa`,
+              p_order_no: orderNo,
+              p_brand: brandName
             });
           }
           // Direct table update fallback
@@ -1129,6 +1138,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       paymentMeta.account = chargedAccount.username;
       paymentMeta.balance_after = newBal;
+      paymentMeta.brand = currentBrandKey;
+      paymentMeta.brandName = brandName;
     }
 
     // 2. Gift card deduction

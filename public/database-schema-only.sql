@@ -240,7 +240,8 @@ CREATE OR REPLACE FUNCTION public.werkpay_charge_by_login(
   p_amount NUMERIC,
   p_reference TEXT,
   p_cashier TEXT DEFAULT 'Kassa',
-  p_order_no INTEGER DEFAULT NULL
+  p_order_no INTEGER DEFAULT NULL,
+  p_brand TEXT DEFAULT 'Werkdonalds'
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -249,10 +250,23 @@ AS $$
 DECLARE
   v_acc public.bank_accounts%ROWTYPE;
   v_new_balance NUMERIC;
+  v_brand_name TEXT := 'Werkdonalds';
+  v_to_merchant TEXT;
+  v_tx_label TEXT;
 BEGIN
   IF p_amount <= 0 THEN
     RETURN jsonb_build_object('success', false, 'message', 'Bedrag moet groter dan 0 zijn');
   END IF;
+
+  -- Bepaal merk (De Koekploeg vs Werkdonalds)
+  IF p_brand ILIKE '%koek%' OR p_reference ILIKE '%koek%' OR p_cashier ILIKE '%koek%' THEN
+    v_brand_name := 'De Koekploeg';
+  ELSE
+    v_brand_name := 'Werkdonalds';
+  END IF;
+
+  v_to_merchant := v_brand_name || ' Kassa';
+  v_tx_label := v_brand_name || ' Bestelling #' || COALESCE(p_order_no::text, '?');
 
   SELECT * INTO v_acc FROM public.bank_accounts 
   WHERE LOWER(username) = LOWER(p_username) AND (password = p_password OR pin_code = p_password)
@@ -273,8 +287,9 @@ BEGIN
     v_new_balance := v_acc.balance;
   END IF;
 
+  -- Transactie wegschrijven in WerkPay bankrekeningoverzicht
   INSERT INTO public.bank_transactions (from_account, to_account, amount, label, note, order_no)
-  VALUES (v_acc.username, 'Werkdonalds Kassa', p_amount, 'Werkdonalds Bestelling #' || COALESCE(p_order_no::text, '?'), p_reference, p_order_no);
+  VALUES (v_acc.username, v_to_merchant, p_amount, v_tx_label, p_reference, p_order_no);
 
   RETURN jsonb_build_object(
     'success', true,
@@ -282,6 +297,7 @@ BEGIN
     'account_holder', v_acc.account_holder,
     'charged_amount', p_amount,
     'balance_after', v_new_balance,
+    'brand', v_brand_name,
     'reference', p_reference
   );
 END;
@@ -293,7 +309,8 @@ CREATE OR REPLACE FUNCTION public.werkpay_charge_by_card(
   p_amount NUMERIC,
   p_reference TEXT,
   p_cashier TEXT DEFAULT 'Kassa',
-  p_order_no INTEGER DEFAULT NULL
+  p_order_no INTEGER DEFAULT NULL,
+  p_brand TEXT DEFAULT 'Werkdonalds'
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -303,8 +320,20 @@ DECLARE
   v_acc public.bank_accounts%ROWTYPE;
   v_clean_uid TEXT;
   v_new_balance NUMERIC;
+  v_brand_name TEXT := 'Werkdonalds';
+  v_to_merchant TEXT;
+  v_tx_label TEXT;
 BEGIN
   v_clean_uid := REPLACE(p_card_uid, ' ', '');
+
+  IF p_brand ILIKE '%koek%' OR p_reference ILIKE '%koek%' OR p_cashier ILIKE '%koek%' THEN
+    v_brand_name := 'De Koekploeg';
+  ELSE
+    v_brand_name := 'Werkdonalds';
+  END IF;
+
+  v_to_merchant := v_brand_name || ' Kassa';
+  v_tx_label := 'Pasbetaling ' || v_brand_name || ' #' || COALESCE(p_order_no::text, '?');
 
   SELECT * INTO v_acc FROM public.bank_accounts 
   WHERE REPLACE(card_uid, ' ', '') = v_clean_uid AND (pin_code = p_pin OR password = p_pin)
@@ -326,13 +355,75 @@ BEGIN
   END IF;
 
   INSERT INTO public.bank_transactions (from_account, to_account, amount, label, note, order_no)
-  VALUES (v_acc.username, 'Werkdonalds Kassa', p_amount, 'Pasbetaling Werkdonalds #' || COALESCE(p_order_no::text, '?'), p_reference, p_order_no);
+  VALUES (v_acc.username, v_to_merchant, p_amount, v_tx_label, p_reference, p_order_no);
 
   RETURN jsonb_build_object(
     'success', true,
     'username', v_acc.username,
     'account_holder', v_acc.account_holder,
+    'brand', v_brand_name,
     'balance_after', v_new_balance
   );
 END;
 $$;
+
+-- 4.3 AUTOMATISCHE TRIGGER VOOR REALTIME BESTELLINGEN NAAR WERKPAY BANK
+CREATE OR REPLACE FUNCTION public.trg_fn_process_order_bank_payment()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_brand_name TEXT := 'Werkdonalds';
+  v_from_user TEXT;
+  v_meta JSONB;
+BEGIN
+  IF NEW.payment_method = 'workpay' AND NEW.total > 0 THEN
+    v_meta := COALESCE(NEW.payment_meta, '{}'::jsonb);
+    v_from_user := COALESCE(v_meta->>'account', v_meta->>'username', NEW.cashier, 'Klant Kassa');
+
+    IF (
+      NEW.identifier ILIKE '%koekploeg%' 
+      OR NEW.notes ILIKE '%koekploeg%' 
+      OR v_meta->>'brand' = 'koekploeg' 
+      OR NEW.cashier ILIKE '%koek%'
+      OR EXISTS (
+        SELECT 1 FROM jsonb_array_elements(NEW.items) item 
+        WHERE (item->>'name') ILIKE '%stroopwafel%' 
+           OR (item->>'name') ILIKE '%koek%' 
+           OR (item->>'name') ILIKE '%bokkenpoot%'
+      )
+    ) THEN
+      v_brand_name := 'De Koekploeg';
+    ELSE
+      v_brand_name := 'Werkdonalds';
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM public.bank_transactions WHERE order_no = NEW.order_no) THEN
+      INSERT INTO public.bank_transactions (
+        from_account,
+        to_account,
+        amount,
+        label,
+        note,
+        order_no
+      ) VALUES (
+        v_from_user,
+        v_brand_name || ' Kassa',
+        NEW.total,
+        v_brand_name || ' Bestelling #' || NEW.order_no,
+        'Realtime betaling via ' || COALESCE(v_meta->>'mode', 'WerkPay'),
+        NEW.order_no
+      );
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_orders_bank_payment ON public.orders;
+CREATE TRIGGER trg_orders_bank_payment
+  AFTER INSERT OR UPDATE ON public.orders
+  FOR EACH ROW
+  EXECUTE FUNCTION public.trg_fn_process_order_bank_payment();

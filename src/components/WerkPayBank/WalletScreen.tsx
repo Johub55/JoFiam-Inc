@@ -517,7 +517,9 @@ export const WalletScreen: React.FC = () => {
                 ) : (
                   userTransactions.map(tx => {
                     const isCredit = tx.to_account.toLowerCase() === currentBankAccount.username.toLowerCase();
-                    const isFoodOrder = tx.to_account.includes('Werkdonalds') || tx.label.includes('Werkdonalds');
+                    const isKoekploegOrder = tx.to_account.includes('Koekploeg') || tx.label.includes('Koekploeg') || (tx.note && tx.note.includes('Koekploeg'));
+                    const isWerkdonaldsOrder = tx.to_account.includes('Werkdonalds') || tx.label.includes('Werkdonalds');
+                    const isFoodOrder = isKoekploegOrder || isWerkdonaldsOrder;
                     const linkedOrder = orders.find(o => 
                       (tx.order_no && o.no === tx.order_no) || 
                       tx.label.includes(`#${o.no}`)
@@ -529,15 +531,29 @@ export const WalletScreen: React.FC = () => {
                         className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs transition hover:border-slate-700"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                            isFoodOrder 
-                              ? 'bg-amber-500/20 text-amber-400' 
-                              : isCredit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-sm ${
+                            isKoekploegOrder
+                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              : isWerkdonaldsOrder
+                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                : isCredit ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
                           }`}>
-                            {isFoodOrder ? <Utensils className="w-4 h-4" /> : <Receipt className="w-4 h-4" />}
+                            {isKoekploegOrder ? '🧇' : isWerkdonaldsOrder ? '🍔' : isCredit ? <Receipt className="w-4 h-4" /> : <Receipt className="w-4 h-4" />}
                           </div>
                           <div>
-                            <div className="font-bold text-white">{tx.label}</div>
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <span>{tx.label}</span>
+                              {isKoekploegOrder && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                                  Koekploeg
+                                </span>
+                              )}
+                              {isWerkdonaldsOrder && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
+                                  Werkdonalds
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-400">
                               {tx.when} {tx.note ? `· ${tx.note}` : ''}
                             </div>
