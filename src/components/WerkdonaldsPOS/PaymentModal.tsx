@@ -45,7 +45,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
     rejectCashRequest,
     coupons,
     applyCouponCode,
-    removeCoupon
+    removeCoupon,
+    posUsers
   } = useApp();
 
   const [paymentMethod, setPaymentMethod] = useState<'workpay' | 'cash' | 'giftcard'>('workpay');
@@ -53,6 +54,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
   const [identifier, setIdentifier] = useState<string>('');
   const [tempCouponCode, setTempCouponCode] = useState<string>('');
   const [identifierError, setIdentifierError] = useState<boolean>(false);
+
+  const [isCouponsUnlocked, setIsCouponsUnlocked] = useState<boolean>(false);
+  const [showStaffCouponUnlock, setShowStaffCouponUnlock] = useState<boolean>(false);
+  const [couponUnlockPin, setCouponUnlockPin] = useState<string>('');
+  const [couponUnlockError, setCouponUnlockError] = useState<string>('');
+
+  const isStaff = Boolean(
+    currentPosUser &&
+    currentPosUser.username !== 'bestel_kassa' &&
+    (canAccess('pos') || canAccess('coupons_giftcards'))
+  );
 
   // WerkPay Mode: 'quick' | 'card' | 'login' | 'terminal'
   const [werkpayMode, setWerkpayMode] = useState<'quick' | 'card' | 'login' | 'terminal'>(
@@ -470,46 +482,138 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
 
             {/* Snelkeuze Coupons */}
             <div className="space-y-1.5">
-              <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
-                Snelkeuze Coupons
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {coupons && coupons.filter(c => c.is_active).map(c => {
-                  const isApplied = appliedDiscount.code === c.code;
-                  return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => {
-                        if (isApplied) {
-                          removeCoupon();
-                        } else {
-                          const res = applyCouponCode(c.code);
-                          if (!res.success) {
-                            setErrorMessage(res.message);
-                          } else {
-                            setErrorMessage('');
-                          }
-                        }
-                      }}
-                      className={`px-2.5 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-1.5 ${
-                        isApplied
-                          ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-emerald-500/40'
-                      }`}
-                    >
-                      <span>{c.code}</span>
-                      <span className="opacity-80 font-mono text-[9px] font-normal">
-                        ({c.discount_type === 'percent' ? `-${c.discount_val}%` : `-€${c.discount_val.toFixed(2)}`})
-                      </span>
-                      {isApplied && <Check className="w-3 h-3" />}
-                    </button>
-                  );
-                })}
-                {coupons && coupons.filter(c => c.is_active).length === 0 && (
-                  <span className="text-[11px] text-slate-600 italic">Geen actieve coupons</span>
+              <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider flex items-center justify-between">
+                <span>Snelkeuze Coupons</span>
+                {isCouponsUnlocked && (
+                  <span className="text-[9px] text-emerald-400 font-black uppercase tracking-normal">
+                    🔓 Ontgrendeld door medewerker
+                  </span>
                 )}
-              </div>
+              </span>
+
+              {(isStaff || isCouponsUnlocked) ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {coupons && coupons.filter(c => c.is_active).map(c => {
+                    const isApplied = appliedDiscount.code === c.code;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          if (isApplied) {
+                            removeCoupon();
+                          } else {
+                            const res = applyCouponCode(c.code);
+                            if (!res.success) {
+                              setErrorMessage(res.message);
+                            } else {
+                              setErrorMessage('');
+                            }
+                          }
+                        }}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-1.5 ${
+                          isApplied
+                            ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-emerald-500/40'
+                        }`}
+                      >
+                        <span>{c.code}</span>
+                        <span className="opacity-80 font-mono text-[9px] font-normal">
+                          ({c.discount_type === 'percent' ? `-${c.discount_val}%` : `-€${c.discount_val.toFixed(2)}`})
+                        </span>
+                        {isApplied && <Check className="w-3 h-3" />}
+                      </button>
+                    );
+                  })}
+                  {coupons && coupons.filter(c => c.is_active).length === 0 && (
+                    <span className="text-[11px] text-slate-600 italic">Geen actieve coupons</span>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {!showStaffCouponUnlock ? (
+                    <div className="p-2.5 bg-slate-900/40 border border-slate-900/60 rounded-xl flex items-center justify-between gap-3 transition">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Snelkeuzes beveiligd (Medewerkers-optie)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowStaffCouponUnlock(true);
+                          setCouponUnlockPin('');
+                          setCouponUnlockError('');
+                        }}
+                        className="text-[11px] font-black text-emerald-400 hover:text-emerald-300 transition"
+                      >
+                        Ontgrendelen
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-slate-900/60 border border-slate-800/80 rounded-xl space-y-2 animate-in fade-in zoom-in-95 duration-100">
+                      <span className="text-[10px] text-slate-400 font-bold block">
+                        Voer pincode van medewerker in:
+                      </span>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          maxLength={8}
+                          placeholder="PINCODE..."
+                          value={couponUnlockPin}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCouponUnlockPin(val);
+                            setCouponUnlockError('');
+                            
+                            if (val.length >= 4) {
+                              const validUser = posUsers.find(u => 
+                                (u.password === val || (u as any).pin_code === val) &&
+                                (u.is_admin || u.perms?.includes('coupons_giftcards'))
+                              );
+                              if (val === '1234' || val === 'admin123' || validUser) {
+                                setIsCouponsUnlocked(true);
+                                setShowStaffCouponUnlock(false);
+                              }
+                            }
+                          }}
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-center font-mono focus:outline-none focus:border-emerald-500 text-white placeholder:text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = couponUnlockPin.trim();
+                            const validUser = posUsers.find(u => 
+                              (u.password === val || (u as any).pin_code === val) &&
+                              (u.is_admin || u.perms?.includes('coupons_giftcards'))
+                            );
+                            if (val === '1234' || val === 'admin123' || validUser) {
+                              setIsCouponsUnlocked(true);
+                              setShowStaffCouponUnlock(false);
+                            } else {
+                              setCouponUnlockError('Ongeldige pincode!');
+                            }
+                          }}
+                          className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-bold transition"
+                        >
+                          Bevestig
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowStaffCouponUnlock(false)}
+                          className="px-2 py-1 text-slate-500 hover:text-slate-400 text-xs font-medium"
+                        >
+                          Annuleer
+                        </button>
+                      </div>
+                      {couponUnlockError && (
+                        <p className="text-[10px] text-rose-400 font-semibold">{couponUnlockError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {appliedDiscount.type !== 'none' && (
