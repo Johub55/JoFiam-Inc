@@ -33,6 +33,12 @@ export interface AudioDiagnosticStatus {
   availableNativeVoicesCount: number;
 }
 
+// Bepaal of de browser MP3 bestanden kan afspelen.
+// In Opera op Linux zonder 'chromium-codecs-ffmpeg-extra' pakket faalt MP3 audio/mpeg altijd.
+// In dat geval vallen we automatisch terug op WAV (audio/wav), wat universeel ondersteund wordt zonder codecs!
+const canPlayMp3 = typeof document !== 'undefined' && 
+  document.createElement('audio').canPlayType('audio/mpeg') !== '';
+
 class SoundEffects {
   private ctx: AudioContext | null = null;
   public isEnabled: boolean = true;
@@ -545,7 +551,14 @@ class SoundEffects {
       }
 
       const encoded = encodeURIComponent(text);
-      let url = `/api/tts?voice=${voiceName}&text=${encoded}`;
+      
+      // Als de browser geen MP3 kan afspelen (Opera op Linux), forceren we WAV codec via VoiceRSS!
+      let url = '';
+      if (!canPlayMp3) {
+        url = `/api/tts?voice=voicerss_wav&codec=WAV&text=${encoded}`;
+      } else {
+        url = `/api/tts?voice=${voiceName}&text=${encoded}`;
+      }
 
       // DYNAMISCHE DETECTIE:
       // Als we op GitHub Pages draaien (of een andere statische host zonder /api backend),
@@ -557,7 +570,10 @@ class SoundEffects {
       );
 
       if (isStaticStatic) {
-        if (voiceName === 'google') {
+        if (!canPlayMp3) {
+          // Forceer direct de VoiceRSS API met WAV-codec op statische hosts (CORS-veilig via audio-element)
+          url = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encoded}&c=WAV&f=44khz_16bit_stereo`;
+        } else if (voiceName === 'google') {
           url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
         } else {
           url = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voiceName)}&text=${encoded}`;
@@ -572,9 +588,11 @@ class SoundEffects {
 
       audio.onplay = () => {
         this.updateDiag({ 
-          activeEngine: `Server TTS (${voiceName})`, 
+          activeEngine: !canPlayMp3 ? 'Server TTS (WAV VoiceRSS)' : `Server TTS (${voiceName})`, 
           lastStatus: 'playing',
-          lastMessage: `Natuurlijke stem ${voiceName} spreekt...`
+          lastMessage: !canPlayMp3 
+            ? 'Geen MP3 support: Omroepen via WAV audio/wav stream...' 
+            : `Natuurlijke stem ${voiceName} spreekt...`
         });
       };
 
@@ -583,7 +601,7 @@ class SoundEffects {
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'success', lastMessage: `Omroep ${voiceName} voltooid` });
+        this.updateDiag({ lastStatus: 'success', lastMessage: !canPlayMp3 ? 'Omroep WAV voltooid' : `Omroep ${voiceName} voltooid` });
         if (callback) callback(true);
       };
 
@@ -592,7 +610,7 @@ class SoundEffects {
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName}` });
+        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName} (MP3-support: ${canPlayMp3})` });
         if (callback && !finished) callback(false);
       };
 

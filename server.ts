@@ -22,13 +22,30 @@ async function startServer() {
     try {
       const text = typeof req.query.text === 'string' ? req.query.text.trim() : '';
       const voice = (typeof req.query.voice === 'string' ? req.query.voice : 'Ruben') || 'Ruben';
+      const codec = typeof req.query.codec === 'string' ? req.query.codec : 'MP3';
 
       if (!text) {
         return res.status(400).json({ error: "Text parameter is required" });
       }
 
+      // Als codec=WAV is gevraagd of als we expliciet VoiceRSS in WAV-formaat willen
+      if (codec.toUpperCase() === 'WAV' || voice === 'voicerss_wav') {
+        try {
+          const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
+          const rssResponse = await fetch(voiceRssUrl);
+          if (rssResponse.ok) {
+            res.setHeader("Content-Type", "audio/wav");
+            res.setHeader("Cache-Control", "public, max-age=86400");
+            const buffer = await rssResponse.arrayBuffer();
+            return res.send(Buffer.from(buffer));
+          }
+        } catch (e) {
+          console.warn("VoiceRSS WAV fetch failed on server:", e);
+        }
+      }
+
       // 1. If voice is google or default, route appropriately
-      if (voice !== 'google') {
+      if (voice !== 'google' && voice !== 'voicerss_wav') {
         try {
           const streamUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`;
           const upstreamResponse = await fetch(streamUrl, {
