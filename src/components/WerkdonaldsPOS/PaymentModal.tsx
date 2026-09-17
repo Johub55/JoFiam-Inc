@@ -22,7 +22,8 @@ import {
   Radio,
   CheckCircle2,
   Clock,
-  Loader2
+  Loader2,
+  Tag
 } from 'lucide-react';
 
 interface PaymentModalProps {
@@ -50,6 +51,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
   const [paymentMethod, setPaymentMethod] = useState<'workpay' | 'cash' | 'giftcard'>('workpay');
   const [orderType, setOrderType] = useState<'dine_in' | 'takeaway' | 'delivery'>('dine_in');
   const [identifier, setIdentifier] = useState<string>('');
+  const [tempCouponCode, setTempCouponCode] = useState<string>('');
+  const [identifierError, setIdentifierError] = useState<boolean>(false);
 
   // WerkPay Mode: 'quick' | 'card' | 'login' | 'terminal'
   const [werkpayMode, setWerkpayMode] = useState<'quick' | 'card' | 'login' | 'terminal'>(
@@ -187,6 +190,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
 
   const handleConfirmPayment = async () => {
     setErrorMessage('');
+
+    if (!identifier.trim()) {
+      setIdentifierError(true);
+      setErrorMessage(
+        orderType === 'dine_in'
+          ? 'Voer verplicht een tafelnummer of klantnaam in.'
+          : orderType === 'delivery'
+          ? 'Voer verplicht een bezorgadres en naam in.'
+          : 'Voer verplicht een klantnaam of bestelcode in.'
+      );
+      return;
+    }
 
     // Check if Cash requires staff authorization on another screen
     if (paymentMethod === 'cash') {
@@ -378,17 +393,28 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
           </div>
 
           <div>
-            <label className="text-xs text-slate-400 font-semibold block mb-1">
-              {orderType === 'dine_in'
-                ? 'Tafelnummer of Klantnaam'
-                : orderType === 'delivery'
-                ? 'Bezorgadres & Klantnaam (Geen omroep)'
-                : 'Klantnaam of Bestelcode'}
+            <label className="text-xs text-slate-400 font-semibold block mb-1 flex items-center justify-between">
+              <span>
+                {orderType === 'dine_in'
+                  ? 'Tafelnummer of Klantnaam'
+                  : orderType === 'delivery'
+                  ? 'Bezorgadres & Klantnaam (Geen omroep)'
+                  : 'Klantnaam of Bestelcode'}
+              </span>
+              <span className="text-rose-400 text-[10px] font-black uppercase flex items-center gap-0.5">
+                <span className="animate-ping w-1.5 h-1.5 bg-rose-400 rounded-full inline-block mr-1" />
+                * Verplicht veld
+              </span>
             </label>
             <input
               type="text"
               value={identifier}
-              onChange={e => setIdentifier(e.target.value)}
+              onChange={e => {
+                setIdentifier(e.target.value);
+                if (e.target.value.trim()) {
+                  setIdentifierError(false);
+                }
+              }}
               placeholder={
                 orderType === 'dine_in'
                   ? 'bijv. Tafel 4 of Jan'
@@ -396,12 +422,110 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
                   ? 'bijv. Dorpsstraat 12 (Jan)'
                   : 'bijv. Afhaal Jan'
               }
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none transition ${
+                identifierError 
+                  ? 'border-rose-500 ring-2 ring-rose-500/20 focus:border-rose-500' 
+                  : 'border-slate-800 focus:border-blue-500'
+              }`}
             />
             {orderType === 'delivery' && (
               <p className="text-[11px] text-amber-400/90 font-medium mt-1">
                 ℹ️ Bezorgbestellingen worden niet omgeroepen via de speakers en niet op het afhaalscherm getoond.
               </p>
+            )}
+          </div>
+
+          {/* Universal Coupon & Kortingscode Section inside PaymentModal */}
+          <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+            <span className="text-xs text-slate-300 font-bold block flex items-center gap-1.5">
+              <Tag className="w-4 h-4 text-emerald-400" />
+              Coupon of Kortingscode
+            </span>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={tempCouponCode}
+                onChange={e => setTempCouponCode(e.target.value.toUpperCase())}
+                placeholder="KORTINGSCODE INVOEREN..."
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-emerald-300 font-mono uppercase focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (!tempCouponCode.trim()) return;
+                  const res = applyCouponCode(tempCouponCode);
+                  if (!res.success) {
+                    setErrorMessage(res.message);
+                  } else {
+                    setErrorMessage('');
+                    setTempCouponCode('');
+                  }
+                }}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-800 hover:border-emerald-500/50 transition"
+              >
+                Toepassen
+              </button>
+            </div>
+
+            {/* Snelkeuze Coupons */}
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-slate-500 font-bold block uppercase tracking-wider">
+                Snelkeuze Coupons
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {coupons && coupons.filter(c => c.is_active).map(c => {
+                  const isApplied = appliedDiscount.code === c.code;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        if (isApplied) {
+                          removeCoupon();
+                        } else {
+                          const res = applyCouponCode(c.code);
+                          if (!res.success) {
+                            setErrorMessage(res.message);
+                          } else {
+                            setErrorMessage('');
+                          }
+                        }
+                      }}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-1.5 ${
+                        isApplied
+                          ? 'bg-emerald-500 border-emerald-400 text-slate-950 font-black shadow-lg shadow-emerald-500/10'
+                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-emerald-500/40'
+                      }`}
+                    >
+                      <span>{c.code}</span>
+                      <span className="opacity-80 font-mono text-[9px] font-normal">
+                        ({c.discount_type === 'percent' ? `-${c.discount_val}%` : `-€${c.discount_val.toFixed(2)}`})
+                      </span>
+                      {isApplied && <Check className="w-3 h-3" />}
+                    </button>
+                  );
+                })}
+                {coupons && coupons.filter(c => c.is_active).length === 0 && (
+                  <span className="text-[11px] text-slate-600 italic">Geen actieve coupons</span>
+                )}
+              </div>
+            </div>
+
+            {appliedDiscount.type !== 'none' && (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs mt-1.5 animate-in fade-in slide-in-from-top-1">
+                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  Actieve korting: {appliedDiscount.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeCoupon()}
+                  className="text-rose-400 hover:text-rose-300 font-black"
+                >
+                  Verwijder
+                </button>
+              </div>
             )}
           </div>
 
@@ -809,63 +933,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
                       </span>
                     </div>
                   )}
-
-                  {/* Snelkeuze Coupons voor Kassamedewerker */}
-                  <div className="pt-3 border-t border-slate-800/60 space-y-2">
-                    <span className="text-[11px] text-slate-400 font-bold block flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      Snelkeuze Coupons (Kassakorting)
-                    </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {coupons && coupons.filter(c => c.is_active).map(c => {
-                        const isApplied = appliedDiscount.code === c.code;
-                        return (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              if (isApplied) {
-                                removeCoupon();
-                              } else {
-                                const res = applyCouponCode(c.code);
-                                if (!res.success) {
-                                  setErrorMessage(res.message);
-                                } else {
-                                  setErrorMessage('');
-                                }
-                              }
-                            }}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-1.5 ${
-                              isApplied
-                                ? 'bg-amber-500 border-amber-400 text-slate-950'
-                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-500/50 hover:text-white'
-                            }`}
-                          >
-                            <span>{c.code}</span>
-                            <span className="opacity-85 font-mono text-[10px]">
-                              ({c.discount_type === 'percent' ? `-${c.discount_val}%` : `-€${c.discount_val.toFixed(2)}`})
-                            </span>
-                            {isApplied && <Check className="w-3 h-3" />}
-                          </button>
-                        );
-                      })}
-                      {coupons && coupons.filter(c => c.is_active).length === 0 && (
-                        <span className="text-xs text-slate-500 italic">Geen actieve coupons beschikbaar</span>
-                      )}
-                    </div>
-                    {appliedDiscount.type !== 'none' && (
-                      <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs mt-2">
-                        <span className="text-amber-300 font-bold">Actieve korting: {appliedDiscount.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeCoupon()}
-                          className="text-rose-400 hover:text-rose-300 font-black"
-                        >
-                          Verwijder korting
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>

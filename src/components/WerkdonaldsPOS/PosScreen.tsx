@@ -909,44 +909,6 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
         {/* Checkout Controls Area */}
         <div className="p-4 border-t border-slate-800 bg-slate-950/70 space-y-3">
           
-          {/* Coupon Input */}
-          <form onSubmit={handleApplyCoupon} className="flex gap-2">
-            <input
-              type="text"
-              value={typedCoupon}
-              onChange={e => setTypedCoupon(e.target.value.toUpperCase())}
-              placeholder="Kortingscode invoeren..."
-              className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 uppercase font-mono focus:outline-none focus:border-blue-400"
-            />
-            <button
-              type="submit"
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-            >
-              Toepassen
-            </button>
-          </form>
-
-          {couponFeedback && (
-            <p className="text-[11px] text-blue-400 font-medium">
-              {couponFeedback}
-            </p>
-          )}
-
-          {appliedDiscount.type !== 'none' && (
-            <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-              <span className="flex items-center gap-1.5 font-bold">
-                <Tag className="w-3.5 h-3.5" />
-                {appliedDiscount.label}
-              </span>
-              <button
-                onClick={removeCoupon}
-                className="text-rose-400 hover:text-rose-300 font-bold ml-2"
-              >
-                ✕ Verwijder
-              </button>
-            </div>
-          )}
-
           {/* Pricing breakdown */}
           <div className="space-y-1.5 text-xs text-slate-400 pt-1">
             <div className="flex justify-between">
