@@ -28,6 +28,7 @@ import {
   X,
   CreditCard,
   AlertTriangle,
+  AlertCircle,
   Flame,
   CheckCircle2,
   RefreshCw,
@@ -224,6 +225,10 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
 
   // Open Kiosk modal
   const openKiosk = (p: Product) => {
+    if (orderStopActive && !currentPosUser?.is_admin) {
+      alert('Bestellingen zijn momenteel gepauzeerd door de bestelstop.');
+      return;
+    }
     if (!p.inStock) return;
     if (p.name.includes('Bouw je Eigen')) {
       setShowBuilderModal(true);
@@ -962,16 +967,25 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
 
           {/* Checkout Button */}
           <button
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || (orderStopActive && !currentPosUser?.is_admin)}
             onClick={onOpenPaymentModal}
             className={`w-full py-3.5 px-4 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${
-              cart.length === 0
+              cart.length === 0 || (orderStopActive && !currentPosUser?.is_admin)
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
                 : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-emerald-500/20 active:translate-y-0.5'
             }`}
           >
-            <CreditCard className="w-4 h-4" />
-            <span>AFREKENEN ({euro(finalTotal)})</span>
+            {orderStopActive && !currentPosUser?.is_admin ? (
+              <>
+                <AlertCircle className="w-4 h-4 text-rose-500" />
+                <span className="text-rose-400">BESTELSTOP ACTIEF</span>
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-4 h-4" />
+                <span>AFREKENEN ({euro(finalTotal)})</span>
+              </>
+            )}
           </button>
         </div>
       </div>

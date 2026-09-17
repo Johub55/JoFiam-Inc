@@ -41,7 +41,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
     orderNo,
     cashRequests,
     createCashRequest,
-    rejectCashRequest
+    rejectCashRequest,
+    coupons,
+    applyCouponCode,
+    removeCoupon
   } = useApp();
 
   const [paymentMethod, setPaymentMethod] = useState<'workpay' | 'cash' | 'giftcard'>('workpay');
@@ -806,6 +809,63 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
                       </span>
                     </div>
                   )}
+
+                  {/* Snelkeuze Coupons voor Kassamedewerker */}
+                  <div className="pt-3 border-t border-slate-800/60 space-y-2">
+                    <span className="text-[11px] text-slate-400 font-bold block flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      Snelkeuze Coupons (Kassakorting)
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {coupons && coupons.filter(c => c.is_active).map(c => {
+                        const isApplied = appliedDiscount.code === c.code;
+                        return (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              if (isApplied) {
+                                removeCoupon();
+                              } else {
+                                const res = applyCouponCode(c.code);
+                                if (!res.success) {
+                                  setErrorMessage(res.message);
+                                } else {
+                                  setErrorMessage('');
+                                }
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black border transition flex items-center gap-1.5 ${
+                              isApplied
+                                ? 'bg-amber-500 border-amber-400 text-slate-950'
+                                : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-amber-500/50 hover:text-white'
+                            }`}
+                          >
+                            <span>{c.code}</span>
+                            <span className="opacity-85 font-mono text-[10px]">
+                              ({c.discount_type === 'percent' ? `-${c.discount_val}%` : `-€${c.discount_val.toFixed(2)}`})
+                            </span>
+                            {isApplied && <Check className="w-3 h-3" />}
+                          </button>
+                        );
+                      })}
+                      {coupons && coupons.filter(c => c.is_active).length === 0 && (
+                        <span className="text-xs text-slate-500 italic">Geen actieve coupons beschikbaar</span>
+                      )}
+                    </div>
+                    {appliedDiscount.type !== 'none' && (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs mt-2">
+                        <span className="text-amber-300 font-bold">Actieve korting: {appliedDiscount.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCoupon()}
+                          className="text-rose-400 hover:text-rose-300 font-black"
+                        >
+                          Verwijder korting
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

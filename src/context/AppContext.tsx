@@ -1081,6 +1081,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     identifier: string,
     paymentMeta: any
   ): Promise<{ success: boolean; message: string; order?: Order }> => {
+    if (orderStopActive && (!currentPosUser || !currentPosUser.is_admin)) {
+      return { success: false, message: 'Bestellingen zijn momenteel gepauzeerd door de bestelstop.' };
+    }
+
     if (cart.length === 0) {
       return { success: false, message: 'Winkelwagen is leeg.' };
     }
