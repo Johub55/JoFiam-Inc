@@ -618,6 +618,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         localStorage.setItem('wd_gift_cards', JSON.stringify(parsedGiftCards));
       }
 
+      // 6. Fetch pos_settings from Supabase
+      const { data: dbSettings, error: settingsErr } = await posClient
+        .from('pos_settings')
+        .select('*')
+        .eq('id', 'default')
+        .maybeSingle();
+      if (!settingsErr && dbSettings) {
+        setOrderStopActive(Boolean(dbSettings.order_stop_active));
+        setPickupClosed(Boolean(dbSettings.pickup_closed));
+      } else if (!settingsErr && !dbSettings) {
+        // Create initial row if missing
+        await posClient.from('pos_settings').insert({ id: 'default', order_stop_active: false, pickup_closed: false });
+      }
+
       setSyncStatus('synced');
       setLastSyncTime(new Date());
       setIsOnline(true);
@@ -706,6 +720,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let prodChannel: any = null;
     let couponChannel: any = null;
     let gcChannel: any = null;
+    let settingsChannel: any = null;
 
     try {
       // 1. Orders Realtime
@@ -922,6 +937,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         )
         .subscribe();
 
+      // 6. Settings Realtime
+      settingsChannel = posClient
+        .channel('realtime_settings_live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'pos_settings' },
+          (payload) => {
+            if (!isMounted) return;
+            console.log('⚡ Realtime Settings Event received:', payload.eventType);
+            if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+              const settings = payload.new;
+              if (settings && settings.id === 'default') {
+                setOrderStopActive(Boolean(settings.order_stop_active));
+                setPickupClosed(Boolean(settings.pickup_closed));
+              }
+            }
+          }
+        )
+        .subscribe();
+
     } catch (err) {
       console.warn('Realtime subscription error:', err);
     }
@@ -933,6 +968,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (prodChannel && posClient) posClient.removeChannel(prodChannel);
       if (couponChannel && posClient) posClient.removeChannel(couponChannel);
       if (gcChannel && posClient) posClient.removeChannel(gcChannel);
+      if (settingsChannel && posClient) posClient.removeChannel(settingsChannel);
     };
   }, [posClient, payClient]);
 
@@ -1039,12 +1075,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setAppliedDiscount({ type: 'none', val: 0, label: 'Geen' });
   };
 
-  const toggleOrderStop = () => {
-    setOrderStopActive(prev => !prev);
+  const toggleOrderStop = async () => {
+    const nextVal = !orderStopActive;
+    setOrderStopActive(nextVal);
+    if (posClient) {
+      await posClient.from('pos_settings').upsert({
+        id: 'default',
+        order_stop_active: nextVal,
+        pickup_closed: pickupClosed
+      });
+    }
   };
 
-  const togglePickupClosed = () => {
-    setPickupClosed(prev => !prev);
+  const togglePickupClosed = async () => {
+    const nextVal = !pickupClosed;
+    setPickupClosed(nextVal);
+    if (posClient) {
+      await posClient.from('pos_settings').upsert({
+        id: 'default',
+        order_stop_active: orderStopActive,
+        pickup_closed: nextVal
+      });
+    }
   };
 
   // Inventory deductions

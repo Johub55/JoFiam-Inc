@@ -144,6 +144,19 @@ CREATE TABLE IF NOT EXISTS public.phone_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 1.12 Systeembesturing & Stops (Bestelstop & Afhaalscherm sluiten)
+CREATE TABLE IF NOT EXISTS public.pos_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
+  pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Zorg dat er altijd een default rij bestaat voor instellingen
+INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
+VALUES ('default', FALSE, FALSE)
+ON CONFLICT (id) DO NOTHING;
+
 -- 2. INDEXEN & KOLOM MIGRATIES
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(10, 2) DEFAULT 0.00;
@@ -416,6 +429,7 @@ ALTER TABLE public.pos_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cash_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phone_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pos_settings ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -451,6 +465,9 @@ BEGIN
 
   DROP POLICY IF EXISTS "Public full access phone_messages" ON public.phone_messages;
   CREATE POLICY "Public full access phone_messages" ON public.phone_messages FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Public full access pos_settings" ON public.pos_settings;
+  CREATE POLICY "Public full access pos_settings" ON public.pos_settings FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
@@ -474,6 +491,7 @@ ALTER TABLE public.cash_requests REPLICA IDENTITY FULL;
 ALTER TABLE public.phone_messages REPLICA IDENTITY FULL;
 ALTER TABLE public.coupons REPLICA IDENTITY FULL;
 ALTER TABLE public.gift_cards REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_settings REPLICA IDENTITY FULL;
 
 DO $$
 BEGIN
@@ -487,6 +505,7 @@ BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.inventory; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.coupons; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.gift_cards; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_settings; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 `;
 
@@ -556,22 +575,36 @@ CREATE TABLE IF NOT EXISTS public.pos_users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.pos_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
+  pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
+VALUES ('default', FALSE, FALSE)
+ON CONFLICT (id) DO NOTHING;
+
 ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bank_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pos_settings ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.orders REPLICA IDENTITY FULL;
 ALTER TABLE public.bank_accounts REPLICA IDENTITY FULL;
 ALTER TABLE public.pos_users REPLICA IDENTITY FULL;
 ALTER TABLE public.products REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_settings REPLICA IDENTITY FULL;
 
 CREATE POLICY "Public access bank_accounts" ON public.bank_accounts FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access bank_transactions" ON public.bank_transactions FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access products" ON public.products FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Public access pos_users" ON public.pos_users FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access pos_settings" ON public.pos_settings FOR ALL USING (true) WITH CHECK (true);
 
 DO $$
 BEGIN
@@ -579,6 +612,7 @@ BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.bank_accounts; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_users; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.products; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_settings; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
