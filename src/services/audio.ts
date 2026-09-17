@@ -36,7 +36,7 @@ export interface AudioDiagnosticStatus {
 // Bepaal of de browser MP3 bestanden kan afspelen.
 // In Opera op Linux zonder 'chromium-codecs-ffmpeg-extra' pakket faalt MP3 audio/mpeg altijd.
 // In dat geval vallen we automatisch terug op WAV (audio/wav), wat universeel ondersteund wordt zonder codecs!
-const canPlayMp3 = typeof document !== 'undefined' && 
+let dynamicMp3Supported = typeof document !== 'undefined' && 
   document.createElement('audio').canPlayType('audio/mpeg') !== '';
 
 class SoundEffects {
@@ -127,13 +127,31 @@ class SoundEffects {
     this.initCtx();
 
     if (typeof window !== 'undefined') {
-      if (this.ctx && this.ctx.state === 'suspended') {
-        this.ctx.resume().then(() => {
-          this.updateDiag({ ctxState: 'running', lastMessage: 'Audio ontgrendeld' });
-        }).catch(() => {});
-      } else if (this.ctx) {
-        this.updateDiag({ ctxState: this.ctx.state });
+      if (this.ctx) {
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().then(() => {
+            this.updateDiag({ ctxState: 'running', lastMessage: 'Audio ontgrendeld' });
+          }).catch(() => {});
+        }
+        
+        // Speel een uiterst zacht, onhoorbaar toontje om de AudioContext te ontgrendelen
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.01);
+        } catch {}
       }
+
+      // Speel een kort stil WAV-bestand om HTML5 <audio> elementen te ontgrendelen
+      try {
+        const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAAA");
+        silentAudio.volume = 0.01;
+        silentAudio.play().catch(() => {});
+      } catch {}
 
       if ('speechSynthesis' in window) {
         try {
@@ -554,7 +572,7 @@ class SoundEffects {
       
       // Als de browser geen MP3 kan afspelen (Opera op Linux), forceren we WAV codec via VoiceRSS!
       let url = '';
-      if (!canPlayMp3) {
+      if (!dynamicMp3Supported) {
         url = `/api/tts?voice=voicerss_wav&codec=WAV&text=${encoded}`;
       } else {
         url = `/api/tts?voice=${voiceName}&text=${encoded}`;
@@ -570,7 +588,7 @@ class SoundEffects {
       );
 
       if (isStaticStatic) {
-        if (!canPlayMp3) {
+        if (!dynamicMp3Supported) {
           // Forceer direct de VoiceRSS API met WAV-codec op statische hosts (CORS-veilig via audio-element)
           url = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encoded}&c=WAV&f=44khz_16bit_stereo`;
         } else if (voiceName === 'google') {
@@ -588,9 +606,9 @@ class SoundEffects {
 
       audio.onplay = () => {
         this.updateDiag({ 
-          activeEngine: !canPlayMp3 ? 'Server TTS (WAV VoiceRSS)' : `Server TTS (${voiceName})`, 
+          activeEngine: !dynamicMp3Supported ? 'Server TTS (WAV VoiceRSS)' : `Server TTS (${voiceName})`, 
           lastStatus: 'playing',
-          lastMessage: !canPlayMp3 
+          lastMessage: !dynamicMp3Supported 
             ? 'Geen MP3 support: Omroepen via WAV audio/wav stream...' 
             : `Natuurlijke stem ${voiceName} spreekt...`
         });
@@ -601,7 +619,7 @@ class SoundEffects {
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'success', lastMessage: !canPlayMp3 ? 'Omroep WAV voltooid' : `Omroep ${voiceName} voltooid` });
+        this.updateDiag({ lastStatus: 'success', lastMessage: !dynamicMp3Supported ? 'Omroep WAV voltooid' : `Omroep ${voiceName} voltooid` });
         if (callback) callback(true);
       };
 
@@ -610,7 +628,16 @@ class SoundEffects {
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName} (MP3-support: ${canPlayMp3})` });
+
+        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
+        if (dynamicMp3Supported && voiceName !== 'voicerss_wav') {
+          console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
+          dynamicMp3Supported = false;
+          this.playServerTts(text, 'voicerss_wav', callback);
+          return;
+        }
+
+        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName} (MP3-support: ${dynamicMp3Supported})` });
         if (callback && !finished) callback(false);
       };
 

@@ -92,6 +92,41 @@ export const PickupScreen: React.FC = () => {
     return unsub;
   }, []);
 
+  // Synchroniseer afsluiten van volledig scherm (Esc / F11) met React-state van de TV-modus
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      if (!isCurrentlyFullscreen && isTvMode) {
+        setIsTvMode(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isTvMode) {
+        if (e.key === 'Escape') {
+          setIsTvMode(false);
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+          }
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isTvMode]);
+
   // Load available speech synthesis voices (with Linux reload detection)
   useEffect(() => {
     const refreshVoices = () => {
@@ -117,6 +152,8 @@ export const PickupScreen: React.FC = () => {
     !o.identifier?.toLowerCase().includes('bezorg')
   );
 
+  const waitingOrders = pickupOrders.filter(o => o.status === 'new' || o.status === 'wachten').slice(0, 15);
+  const preparingOrders = pickupOrders.filter(o => o.status !== 'new' && o.status !== 'wachten' && isOrderInProgress(o.status)).slice(0, 15);
   const prepOrders = pickupOrders.filter(o => isOrderInProgress(o.status)).slice(0, 30);
   const readyOrders = pickupOrders.filter(o => isOrderReady(o.status)).slice(0, 30);
 
@@ -220,29 +257,10 @@ export const PickupScreen: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => handleUnlockAndTest(1002, 'Tafel 4')}
-              className="px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-amber-300 border border-slate-700 font-black text-sm flex items-center gap-2 shadow-lg transition active:scale-95"
-              title="Test de live omroepstem direct"
-            >
-              <Volume2 className="w-5 h-5 text-amber-400" />
-              <span>Test Stem</span>
-            </button>
-
             {/* Giant Digital Time Clock */}
             <div className="px-6 py-3 rounded-2xl bg-slate-900 border-2 border-slate-700 text-amber-300 font-mono font-black text-2xl sm:text-3xl shadow-2xl tracking-wider">
               {timeStr}
             </div>
-
-            {/* Exit Fullscreen Button */}
-            <button
-              onClick={handleToggleTvMode}
-              className="p-3.5 rounded-2xl bg-slate-800/80 hover:bg-rose-600 text-slate-300 hover:text-white transition border border-slate-700 flex items-center gap-2 text-sm font-bold shadow-lg"
-              title="Sluit TV scherm"
-            >
-              <Minimize2 className="w-5 h-5" />
-              <span className="hidden md:inline">Sluit TV</span>
-            </button>
           </div>
         </header>
 
@@ -275,55 +293,86 @@ export const PickupScreen: React.FC = () => {
         {/* Main TV 2-Column Split */}
         <div className="flex-1 grid grid-cols-2 gap-6 lg:gap-8 overflow-hidden">
           
-          {/* COLUMN 1: WORDT BEREID */}
+          {/* COLUMN 1: WACHTEN & WORDT BEREID */}
           <section className="flex flex-col bg-slate-900/80 border-2 border-amber-500/40 rounded-3xl p-5 sm:p-6 shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800 shrink-0">
+            <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800 shrink-0 mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center shadow-inner">
-                  <Clock className="w-6 h-6" />
+                  <Clock className="w-6 h-6 animate-pulse" />
                 </div>
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black text-amber-400 uppercase tracking-tight flex items-center gap-3">
-                    <span>⏳ Wordt bereid</span>
+                    <span>⏳ Wachten / Bereiden</span>
                     <span className="text-sm px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-black border border-amber-500/40">
                       {prepOrders.length}
                     </span>
                   </h2>
-                  <span className="text-xs sm:text-sm text-slate-400">Onze keuken bereidt je bestelling vers</span>
+                  <span className="text-xs sm:text-sm text-slate-400">Volg hier de status van je bestelling</span>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pt-5">
-              {prepOrders.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-lg">
-                  <span className="text-5xl mb-2">{brandEmoji}</span>
-                  <span>Geen bestellingen in bereiding</span>
+            {/* SUB-SECTION 1: 📥 IN DE WACHT (Wachtrij) */}
+            <div className="mb-5 pb-5 border-b border-slate-800 shrink-0">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                <span className="w-2 h-2 rounded-full bg-slate-500 animate-pulse" />
+                📥 IN DE WACHTRIJ ({waitingOrders.length})
+              </h3>
+              {waitingOrders.length === 0 ? (
+                <p className="py-2 px-3 rounded-xl bg-slate-950/30 text-slate-500 text-xs font-bold border border-dashed border-slate-800/80">
+                  Er staan op dit moment geen bestellingen in de wachtrij
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2.5 max-h-[85px] overflow-y-auto">
+                  {waitingOrders.map(o => (
+                    <div 
+                      key={o.no} 
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-1 font-mono font-black text-lg text-slate-300 shadow-sm"
+                    >
+                      <span className="text-slate-500 text-xs">#</span>
+                      <span>{o.no}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* SUB-SECTION 2: 🍳 WORDT BEREID */}
+            <div className="flex-1 overflow-y-auto pr-1">
+              <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                🍳 IN DE KEUKEN BEREID ({preparingOrders.length})
+              </h3>
+
+              {preparingOrders.length === 0 ? (
+                <div className="h-44 flex flex-col items-center justify-center text-slate-600 font-bold text-sm border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/20">
+                  <span className="text-3xl mb-1">{brandEmoji}</span>
+                  <span>Geen bestellingen in actieve bereiding</span>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {prepOrders.map(o => {
+                <div className="grid grid-cols-2 xl:grid-cols-3 gap-3.5">
+                  {preparingOrders.map(o => {
                     const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
                     return (
                       <div
                         key={o.no}
-                        className="p-5 rounded-3xl bg-slate-950 border-2 border-dashed border-amber-500/40 text-left shadow-lg flex flex-col justify-between"
+                        className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between hover:border-amber-400 transition"
                       >
                         <div>
                           <div className="flex items-center justify-between">
-                            <span className="font-mono font-black text-3xl sm:text-4xl text-amber-300 tracking-tight">
+                            <span className="font-mono font-black text-2xl text-amber-300 tracking-tight">
                               #{o.no}
                             </span>
-                            <span className="text-lg">
+                            <span className="text-sm">
                               {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
                             </span>
                           </div>
-                          <div className="mt-2 font-black text-base text-slate-200 truncate">
+                          <div className="mt-1 font-bold text-xs text-slate-300 truncate">
                             voor <span className="text-amber-200">{displayName}</span>
                           </div>
                         </div>
-                        <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between text-xs text-amber-400 font-bold">
-                          <span>In bereiding</span>
+                        <div className="mt-2.5 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-amber-400/90 font-black">
+                          <span>Bereiden...</span>
                           <span className="font-mono text-slate-500">{o.time}</span>
                         </div>
                       </div>
