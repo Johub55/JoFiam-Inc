@@ -629,6 +629,13 @@ class SoundEffects {
           this.activeAudioElement = null;
         }
 
+        // Als we op GitHub Pages (of een andere statische host) draaien, vallen we direct terug op de native browser stem!
+        if (isStaticStatic) {
+          console.warn("Static Host online stream failed. Falling back to native speech synthesis!");
+          this.playNativeSpeechSynthesis(text, false, callback);
+          return;
+        }
+
         // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
         if (dynamicMp3Supported && voiceName !== 'voicerss_wav') {
           console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
@@ -723,8 +730,9 @@ class SoundEffects {
         console.warn("Custom TTS Proxy failed, trying direct URL as fallback...");
         
         if (isStaticStatic) {
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout bij inladen Custom TTS URL' });
-          if (callback) callback(false);
+          console.warn("Custom TTS failed on Static Host (GitHub Pages). Falling back to native speech synthesis!");
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom URL mislukt op GitHub Pages. Schakelt over naar browserstem...' });
+          this.playNativeSpeechSynthesis(text, false, callback);
           return;
         }
 
