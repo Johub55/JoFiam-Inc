@@ -99,6 +99,94 @@ const AutoScrollingColumn: React.FC<AutoScrollingColumnProps> = ({ children, cla
   );
 };
 
+interface AutoScrollContainerProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, className }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let timer: NodeJS.Timeout;
+    let interval: NodeJS.Timeout;
+    let active = true;
+
+    const startAutoScroll = () => {
+      if (!active || !el) return;
+      
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      if (maxScroll <= 0) {
+        // Content fits, reset scroll and wait
+        el.scrollTop = 0;
+        timer = setTimeout(startAutoScroll, 2000);
+        return;
+      }
+
+      let direction = 1; // 1 = down, -1 = up
+      let currentScroll = el.scrollTop;
+
+      interval = setInterval(() => {
+        if (!active || !el) return;
+
+        const max = el.scrollHeight - el.clientHeight;
+        if (max <= 0) {
+          el.scrollTop = 0;
+          return;
+        }
+
+        if (direction === 1) {
+          currentScroll += 0.5; // slow smooth scroll down
+          if (currentScroll >= max) {
+            currentScroll = max;
+            el.scrollTop = currentScroll;
+            // Pause at the bottom
+            clearInterval(interval);
+            timer = setTimeout(() => {
+              direction = -1;
+              startAutoScroll();
+            }, 3000); // 3 seconds pause at bottom
+            return;
+          }
+        } else {
+          currentScroll -= 1.5; // slightly faster scroll up
+          if (currentScroll <= 0) {
+            currentScroll = 0;
+            el.scrollTop = currentScroll;
+            // Pause at the top
+            clearInterval(interval);
+            timer = setTimeout(() => {
+              direction = 1;
+              startAutoScroll();
+            }, 3000); // 3 seconds pause at top
+            return;
+          }
+        }
+
+        el.scrollTop = currentScroll;
+      }, 30); // ~33 fps
+    };
+
+    // Delay start of scrolling slightly
+    timer = setTimeout(startAutoScroll, 2500);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
+  }, [children]); // Re-run when children change (e.g. orders added/removed)
+
+  return (
+    <div ref={containerRef} className={`${className} overflow-y-auto no-scrollbar`}>
+      {children}
+    </div>
+  );
+};
+
 export const PickupScreen: React.FC = () => {
   const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
@@ -550,7 +638,7 @@ export const PickupScreen: React.FC = () => {
                 </div>
 
                 {/* WORDT BEREID DETAILS */}
-                <div className="flex-1 overflow-y-auto pr-1">
+                <AutoScrollContainer className="flex-1 pr-1">
                   <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mb-3">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
                     🍳 BEREIDEN IN DE KEUKEN ({preparingOrders.length})
@@ -566,7 +654,7 @@ export const PickupScreen: React.FC = () => {
                       {preparingOrders.map(o => {
                         const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
                         return (
-                          <div
+                           <div
                             key={o.no}
                             className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between"
                           >
@@ -592,7 +680,7 @@ export const PickupScreen: React.FC = () => {
                       })}
                     </div>
                   )}
-                </div>
+                </AutoScrollContainer>
               </section>
 
               {/* COLUMN 2: GEREED OM AF TE HALEN */}
@@ -614,7 +702,7 @@ export const PickupScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto pt-4">
+                <AutoScrollContainer className="flex-1 pt-4">
                   {readyOrders.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-lg">
                       <span className="text-5xl mb-2">✨</span>
@@ -664,7 +752,7 @@ export const PickupScreen: React.FC = () => {
                       })}
                     </div>
                   )}
-                </div>
+                </AutoScrollContainer>
               </section>
             </div>
           </div>
@@ -953,7 +1041,7 @@ export const PickupScreen: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto pt-4">
+              <AutoScrollContainer className="flex-1 pt-4">
                 {prepOrders.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-sm">
                     <span className="text-3xl mb-1">{brandEmoji}</span>
@@ -1001,7 +1089,7 @@ export const PickupScreen: React.FC = () => {
                     })}
                   </div>
                 )}
-              </div>
+              </AutoScrollContainer>
             </div>
 
             {/* COLUMN 2: GEREED OM AF TE HALEN */}
@@ -1028,7 +1116,7 @@ export const PickupScreen: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto pt-4">
+              <AutoScrollContainer className="flex-1 pt-4">
                 {readyOrders.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-sm">
                     <span className="text-3xl mb-1">✨</span>
@@ -1077,7 +1165,7 @@ export const PickupScreen: React.FC = () => {
                     })}
                   </div>
                 )}
-              </div>
+              </AutoScrollContainer>
             </div>
 
           </div>
