@@ -79,6 +79,7 @@ export const DigitalPhone: React.FC = () => {
   } = useApp();
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   // Apps: 'home', 'werkpay', 'phone', 'messages', 'settings', 'werkdonalds'
   const [activeApp, setActiveApp] = useState<'home' | 'werkpay' | 'phone' | 'messages' | 'settings' | 'werkdonalds'>('home');
   const [time, setTime] = useState<string>('12:00');
@@ -736,11 +737,12 @@ export const DigitalPhone: React.FC = () => {
             title: `SMS van ${senderName}`,
             body: text
           });
-          try { AudioFX.bell(); } catch {}
+          try { AudioFX.beep(); } catch {} // Replaced bell with quiet beep
         }
       }
 
-      // 2. REAL-TIME CALLING PROTOCOL
+      // 2. REAL-TIME CALLING PROTOCOL (Disabled to prevent incoming calls/bells)
+      /*
       // 2.1 CALL_DIAL: Someone is calling me
       if (type === 'CALL_DIAL') {
         const { fromId, fromName, fromPhone, fromRole, toId } = data;
@@ -758,6 +760,7 @@ export const DigitalPhone: React.FC = () => {
           setIsOpen(true); // Open the phone so they see it
         }
       }
+      */
 
       // 2.2 CALL_ACCEPT: Caller receives acceptance from recipient
       if (type === 'CALL_ACCEPT') {
@@ -983,7 +986,7 @@ export const DigitalPhone: React.FC = () => {
 
           if (!isOpen || activeApp !== 'messages' || activeContactId !== senderId) {
             setNotification({ title: row.sender_name || 'Nieuw bericht', body: row.text });
-            try { AudioFX.bell(); } catch {}
+            try { AudioFX.beep(); } catch {} // Replaced bell with quiet beep
           }
         })
         .subscribe();
@@ -1073,6 +1076,15 @@ export const DigitalPhone: React.FC = () => {
       setActiveContactId(null);
     }
   };
+
+  // Scroll to bottom of chat thread when active contact or messages change
+  useEffect(() => {
+    if (activeContactId && messagesEndRef.current) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 50);
+    }
+  }, [activeContactId, contacts]);
 
   // Add/SMS a new custom registered user contact
   const handleStartNewChatWithUser = (user: any, type: 'bank' | 'pos') => {
@@ -2276,7 +2288,7 @@ export const DigitalPhone: React.FC = () => {
                   (() => {
                     const contact = contacts.find(c => c.id === activeContactId)!;
                     return (
-                      <div className="flex-1 flex flex-col justify-between">
+                      <div className="flex-1 flex flex-col justify-between min-h-0">
                         {/* Thread Header */}
                         <div className="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -2299,15 +2311,6 @@ export const DigitalPhone: React.FC = () => {
                           </div>
                           
                           <div className="flex items-center gap-1.5">
-                            {/* Direct call button */}
-                            <button
-                              onClick={() => startCall(contact.name, contact.phone, contact.role)}
-                              className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition"
-                              title="Bellen"
-                            >
-                              <Phone className="w-3 h-3" />
-                            </button>
-                            
                             {/* Delete Chat History button */}
                             <button
                               onClick={() => deleteChatHistory(contact.id)}
@@ -2320,7 +2323,7 @@ export const DigitalPhone: React.FC = () => {
                         </div>
 
                         {/* Message History bubble area */}
-                        <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-slate-950 flex flex-col">
+                        <div className="flex-1 overflow-y-auto custom-scroll min-h-0 p-3.5 space-y-3 bg-slate-950 flex flex-col">
                           {contact.messages.length === 0 ? (
                             <div className="my-auto text-center text-slate-600 text-[10px] italic">
                               Stuur een bericht om de chat te starten met {contact.name}.
@@ -2412,6 +2415,7 @@ export const DigitalPhone: React.FC = () => {
                               );
                             })
                           )}
+                          <div ref={messagesEndRef} />
                         </div>
 
                         {/* Inline Tikkie Generator Drawer */}
