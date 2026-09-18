@@ -685,8 +685,15 @@ class SoundEffects {
         window.location.protocol === 'file:'
       );
 
-      // On standard server-backed environments, proxy custom TTS same-origin to prevent CORS & Opera adblock blocks
-      const finalUrl = isStaticStatic 
+      const isLocalUrl = formattedUrl.includes('localhost') || 
+                         formattedUrl.includes('127.0.0.1') || 
+                         formattedUrl.includes('::1') || 
+                         formattedUrl.includes('192.168.') || 
+                         formattedUrl.includes('10.') || 
+                         formattedUrl.includes('172.');
+
+      // On standard server-backed environments, proxy custom TTS same-origin to prevent CORS & Opera adblock blocks, except for local URLs!
+      const finalUrl = (isStaticStatic || isLocalUrl)
         ? formattedUrl 
         : `/api/custom-tts?url=${encodeURIComponent(formattedUrl)}`;
 
@@ -696,9 +703,13 @@ class SoundEffects {
 
       audio.onplay = () => {
         this.updateDiag({
-          activeEngine: 'Custom TTS (Online Proxy)',
+          activeEngine: isLocalUrl 
+            ? 'Custom TTS (Local Direct)' 
+            : (isStaticStatic ? 'Custom TTS (Direct - Static)' : 'Custom TTS (Online Proxy)'),
           lastStatus: 'playing',
-          lastMessage: 'Custom stem spreekt via online proxy...'
+          lastMessage: isLocalUrl 
+            ? 'Custom stem spreekt direct via lokale url...' 
+            : 'Custom stem spreekt via online proxy...'
         });
       };
 
