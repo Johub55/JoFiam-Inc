@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AudioFX, SpeechVoiceOption, TtsEngineMode, AudioDiagnosticStatus } from '../../services/audio';
 import { getStatusMeta, isOrderInProgress, isOrderReady } from '../../services/orderStatus';
@@ -31,10 +31,85 @@ import {
   Utensils
 } from 'lucide-react';
 
+interface AutoScrollingColumnProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+const AutoScrollingColumn: React.FC<AutoScrollingColumnProps> = ({ children, className }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let animationFrameId: number;
+    let position = 0;
+    let direction = 1; // 1 = down, -1 = up
+    let waitTimer: NodeJS.Timeout | null = null;
+    let active = true;
+
+    const scroll = () => {
+      if (!active || !el) return;
+
+      const maxScroll = el.scrollHeight - el.clientHeight;
+      if (maxScroll <= 0) {
+        animationFrameId = requestAnimationFrame(scroll);
+        return;
+      }
+
+      if (direction === 1) {
+        position += 0.35; // scroll speed
+        if (position >= maxScroll) {
+          position = maxScroll;
+          direction = -1;
+          active = false;
+          waitTimer = setTimeout(() => {
+            active = true;
+            scroll();
+          }, 4000);
+          return;
+        }
+      } else {
+        position -= 1.5; // faster scroll back to top
+        if (position <= 0) {
+          position = 0;
+          direction = 1;
+          active = false;
+          waitTimer = setTimeout(() => {
+            active = true;
+            scroll();
+          }, 4000);
+          return;
+        }
+      }
+
+      el.scrollTop = position;
+      animationFrameId = requestAnimationFrame(scroll);
+    };
+
+    waitTimer = setTimeout(() => {
+      scroll();
+    }, 2000);
+
+    return () => {
+      active = false;
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (waitTimer) clearTimeout(waitTimer);
+    };
+  }, []);
+
+  return (
+    <div ref={containerRef} className={`${className} overflow-y-auto no-scrollbar`}>
+      {children}
+    </div>
+  );
+};
+
 export const PickupScreen: React.FC = () => {
-  const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts } = useApp();
+  const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
-  const [tvView, setTvView] = useState<'pickup' | 'menu' | 'crew'>('pickup');
+  const [tvView, setTvView] = useState<'pickup' | 'menu'>('pickup');
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [timeStr, setTimeStr] = useState<string>('');
   const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
@@ -75,9 +150,7 @@ export const PickupScreen: React.FC = () => {
     if (!isTvMode || !autoRotate) return;
     const interval = setInterval(() => {
       setTvView((current) => {
-        if (current === 'pickup') return 'menu';
-        if (current === 'menu') return 'crew';
-        return 'pickup';
+        return current === 'pickup' ? 'menu' : 'pickup';
       });
     }, 12000);
     return () => clearInterval(interval);
@@ -325,9 +398,7 @@ export const PickupScreen: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                {tvView === 'pickup' && "Houd uw bonnummer bij de hand voor afhalen"}
-                {tvView === 'menu' && "Kies uw favoriete gerecht van onze menukaart"}
-                {tvView === 'crew' && "Maak kennis met de toppers in onze keuken"}
+                {tvView === 'pickup' ? "Houd uw bonnummer bij de hand voor afhalen" : "Kies uw favoriete gerecht van onze menukaart"}
               </p>
             </div>
           </div>
@@ -361,20 +432,6 @@ export const PickupScreen: React.FC = () => {
             >
               <Utensils className="w-3.5 h-3.5" />
               <span>Menukaart</span>
-            </button>
-            <button
-              onClick={() => {
-                setTvView('crew');
-                setAutoRotate(false);
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition ${
-                tvView === 'crew'
-                  ? 'bg-amber-400 text-slate-950'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              <span>Keukenploeg</span>
             </button>
           </div>
 
@@ -611,247 +668,121 @@ export const PickupScreen: React.FC = () => {
           )}
 
           {/* VIEW B: DIGITAL MENUKAART / MENU BOARD */}
-          {tvView === 'menu' && (
-            <div className="h-full flex flex-col bg-slate-900/95 border border-slate-800 rounded-3xl p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
-              <div className="pb-3 border-b border-slate-800 flex items-center justify-between shrink-0 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                    🍔
-                  </div>
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-amber-400 uppercase tracking-tight">
-                      📖 DIGITALE MENUKAART
-                    </h2>
-                    <p className="text-xs text-slate-400">Onze legendarische gerechten, vers voor u bereid</p>
-                  </div>
-                </div>
-                <span className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-full border border-slate-700 font-bold">
-                  🍔 Bestel direct aan de kassa of kiosk!
-                </span>
-              </div>
+          {tvView === 'menu' && (() => {
+            const allInStock = products.filter(p => p.inStock);
 
-              {/* Grid with 3 columns categorized */}
-              <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 overflow-hidden">
-                {/* Column 1: Premium Burgers */}
-                <div className="bg-slate-950/50 rounded-2xl p-4 border border-slate-800/80 flex flex-col overflow-hidden">
-                  <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider pb-2 border-b border-slate-900 flex items-center gap-2 shrink-0">
-                    <span>🍔</span>
-                    <span>Premium Burgers &amp; Menu's</span>
-                  </h3>
-                  <div className="flex-1 overflow-y-auto space-y-3 pt-3.5 pr-1.5">
-                    {brandProducts.filter(p => p.cat === 'burgers' && p.inStock).map(p => (
-                      <div key={p.id} className="flex items-center justify-between border-b border-slate-900/40 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl shrink-0">{p.emoji || '🍔'}</span>
-                          <div>
-                            <p className="text-xs font-black text-white">{p.name}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Warm gegrild</p>
-                          </div>
-                        </div>
-                        <div className="text-right font-mono text-xs font-black text-amber-300">
-                          {p.onSale ? (
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] text-slate-500 line-through">€{p.price.toFixed(2)}</span>
-                              <span className="text-emerald-400">€{p.salePrice.toFixed(2)}</span>
-                            </div>
-                          ) : (
-                            <span>€{p.price.toFixed(2)}</span>
-                          )}
-                        </div>
+            const col1Items = allInStock.filter(p => p.id < 200 && (p.cat.includes('Burger') || p.cat.includes('Meal') || p.cat.includes('Voordeel')));
+            const col2Items = allInStock.filter(p => p.id < 200 && (p.cat.includes('Snack') || p.cat.includes('Friet') || p.cat.includes('Saus') || p.cat.includes('Dip')));
+            const col3Items = allInStock.filter(p => p.id < 200 && (p.cat.includes('Drank') || p.cat.includes('Dessert') || p.cat.includes('IJs') || p.cat.includes('Koffie')));
+            const col4Items = allInStock.filter(p => p.id >= 200);
+
+            const columns = [
+              {
+                brand: "🍔 WERKDONALDS",
+                title: "Burgers & Wraps",
+                icon: "🍔",
+                items: col1Items,
+                brandColor: "border-red-500/30 text-red-400 bg-red-950/20"
+              },
+              {
+                brand: "🍟 WERKDONALDS",
+                title: "Snacks, Frites & Dips",
+                icon: "🍟",
+                items: col2Items,
+                brandColor: "border-amber-500/30 text-amber-400 bg-amber-950/20"
+              },
+              {
+                brand: "🥤 WERKDONALDS",
+                title: "Dranken & Desserts",
+                icon: "🍦",
+                items: col3Items,
+                brandColor: "border-sky-500/30 text-sky-400 bg-sky-950/20"
+              },
+              {
+                brand: "🧇 KOEKPLOEG",
+                title: "Koeken & Stroopwafels",
+                icon: "🧇",
+                items: col4Items,
+                brandColor: "border-amber-400/30 text-amber-300 bg-amber-950/30"
+              }
+            ];
+
+            return (
+              <div className="h-full flex flex-col bg-slate-900/95 border border-slate-800 rounded-3xl p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                <style>{`
+                  .no-scrollbar::-webkit-scrollbar {
+                    display: none;
+                  }
+                  .no-scrollbar {
+                    -ms-overflow-style: none;
+                    scrollbar-width: none;
+                  }
+                `}</style>
+
+                <div className="pb-3 border-b border-slate-800 flex items-center justify-between shrink-0 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+                      📖
+                    </div>
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-amber-400 uppercase tracking-tight">
+                        📖 GEZAMENLIJKE MENUKAART
+                      </h2>
+                      <p className="text-xs text-slate-400">Geniet van onze WerkDonalds &amp; Koekploeg specialiteiten</p>
+                    </div>
+                  </div>
+                  <span className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-full border border-slate-700 font-bold">
+                    🔄 Automatisch scrollende menukaart
+                  </span>
+                </div>
+
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 overflow-hidden">
+                  {columns.map((col, idx) => (
+                    <div key={idx} className="bg-slate-950/50 rounded-2xl p-4 border border-slate-800/80 flex flex-col overflow-hidden">
+                      <div className="pb-2 border-b border-slate-900 shrink-0 space-y-1">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase tracking-wider inline-block ${col.brandColor}`}>
+                          {col.brand}
+                        </span>
+                        <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                          <span>{col.icon}</span>
+                          <span className="truncate">{col.title}</span>
+                          <span className="text-slate-500 text-xs font-medium">({col.items.length})</span>
+                        </h3>
                       </div>
-                    ))}
-                  </div>
-                </div>
 
-                {/* Column 2: Crisp Snacks & Sides */}
-                <div className="bg-slate-950/50 rounded-2xl p-4 border border-slate-800/80 flex flex-col overflow-hidden">
-                  <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider pb-2 border-b border-slate-900 flex items-center gap-2 shrink-0">
-                    <span>🍟</span>
-                    <span>Crispy Snacks &amp; Frites</span>
-                  </h3>
-                  <div className="flex-1 overflow-y-auto space-y-3 pt-3.5 pr-1.5">
-                    {brandProducts.filter(p => p.cat === 'snacks' && p.inStock).map(p => (
-                      <div key={p.id} className="flex items-center justify-between border-b border-slate-900/40 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl shrink-0">{p.emoji || '🍟'}</span>
-                          <div>
-                            <p className="text-xs font-black text-white">{p.name}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Goudgeel gefrituurd</p>
-                          </div>
-                        </div>
-                        <div className="text-right font-mono text-xs font-black text-amber-300">
-                          {p.onSale ? (
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] text-slate-500 line-through">€{p.price.toFixed(2)}</span>
-                              <span className="text-emerald-400">€{p.salePrice.toFixed(2)}</span>
+                      <AutoScrollingColumn className="flex-1 space-y-3 pt-3.5 pr-1.5">
+                        {col.items.length === 0 ? (
+                          <p className="text-slate-600 text-xs font-bold py-4 text-center">Tijdelijk uitverkocht</p>
+                        ) : (
+                          col.items.map(p => (
+                            <div key={p.id} className="flex items-center justify-between border-b border-slate-900/40 pb-2 gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-xl shrink-0">{p.emoji || col.icon}</span>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-black text-white truncate">{p.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-medium">Vers bereid</p>
+                                </div>
+                              </div>
+                              <div className="text-right font-mono text-xs font-black text-amber-300 shrink-0">
+                                {p.onSale && p.salePrice > 0 ? (
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-[10px] text-slate-500 line-through">€{p.price.toFixed(2)}</span>
+                                    <span className="text-emerald-400">€{p.salePrice.toFixed(2)}</span>
+                                  </div>
+                                ) : (
+                                  <span>€{p.price.toFixed(2)}</span>
+                                )}
+                              </div>
                             </div>
-                          ) : (
-                            <span>€{p.price.toFixed(2)}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Column 3: Desserts & Dranken */}
-                <div className="bg-slate-950/50 rounded-2xl p-4 border border-slate-800/80 flex flex-col overflow-hidden">
-                  <h3 className="text-sm font-black text-amber-400 uppercase tracking-wider pb-2 border-b border-slate-900 flex items-center gap-2 shrink-0">
-                    <span>🍦</span>
-                    <span>Desserts &amp; Dranken</span>
-                  </h3>
-                  <div className="flex-1 overflow-y-auto space-y-3 pt-3.5 pr-1.5">
-                    {brandProducts.filter(p => (p.cat === 'drank' || p.cat === 'desserts') && p.inStock).map(p => (
-                      <div key={p.id} className="flex items-center justify-between border-b border-slate-900/40 pb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xl shrink-0">{p.emoji || '🥤'}</span>
-                          <div>
-                            <p className="text-xs font-black text-white">{p.name}</p>
-                            <p className="text-[10px] text-slate-500 font-medium">Ijskoud geserveerd</p>
-                          </div>
-                        </div>
-                        <div className="text-right font-mono text-xs font-black text-amber-300">
-                          {p.onSale ? (
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] text-slate-500 line-through">€{p.price.toFixed(2)}</span>
-                              <span className="text-emerald-400">€{p.salePrice.toFixed(2)}</span>
-                            </div>
-                          ) : (
-                            <span>€{p.price.toFixed(2)}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                          ))
+                        )}
+                      </AutoScrollingColumn>
+                    </div>
+                  ))}
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* VIEW C: KEUKENPLOEG JOFIAM RESTAURANTS */}
-          {tvView === 'crew' && (
-            <div className="h-full flex flex-col bg-slate-900/95 border border-slate-800 rounded-3xl p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
-              <div className="pb-3 border-b border-slate-800 flex items-center justify-between shrink-0 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                    👨‍🍳
-                  </div>
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-black text-amber-400 uppercase tracking-tight">
-                      👨‍🍳 ONTMOET DE KEUKENPLOEG
-                    </h2>
-                    <p className="text-xs text-slate-400">De toppers achter de lekkerste gerechten van JoFiam Restaurants</p>
-                  </div>
-                </div>
-                <span className="text-xs bg-slate-800 text-slate-300 px-3.5 py-1 rounded-full border border-slate-700 font-bold uppercase tracking-wide">
-                  ⭐ Trotse Crew ⭐
-                </span>
-              </div>
-
-              {/* Bento-like grid layout for the crew */}
-              <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4 overflow-y-auto pr-1">
-                
-                {/* 1. JOAS */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center text-center justify-between shadow-lg hover:border-amber-500/30 transition">
-                  <div className="space-y-3 flex flex-col items-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-3xl shadow-md border-2 border-amber-400">
-                      🧑‍🍳
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-white">Joas</h3>
-                      <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider block mt-1">
-                        Keukenchef
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-3">
-                    Zorgt voor de perfect gegaarde burgers en de ultieme smaakbeleving! 🥩🔥
-                  </p>
-                </div>
-
-                {/* 2. FAY */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center text-center justify-between shadow-lg hover:border-amber-500/30 transition">
-                  <div className="space-y-3 flex flex-col items-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-3xl shadow-md border-2 border-purple-400">
-                      👩‍🍳
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-white">Fay</h3>
-                      <span className="text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider block mt-1">
-                        Saus Expert
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-3">
-                    Verdeelt de iconische sauzen met wiskundige precisie over de broodjes! 🍯✨
-                  </p>
-                </div>
-
-                {/* 3. LIAM */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center text-center justify-between shadow-lg hover:border-amber-500/30 transition">
-                  <div className="space-y-3 flex flex-col items-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-500 flex items-center justify-center text-3xl shadow-md border-2 border-emerald-400">
-                      🧑‍🍳
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-white">Liam</h3>
-                      <span className="text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider block mt-1">
-                        Friet Meester
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-3">
-                    Meester over de krokante frites en goudgele nuggets, altijd perfect knapperig! 🍟🎖️
-                  </p>
-                </div>
-
-                {/* 4. FLEUR */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center text-center justify-between shadow-lg hover:border-amber-500/30 transition">
-                  <div className="space-y-3 flex flex-col items-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-teal-500 to-indigo-500 flex items-center justify-center text-3xl shadow-md border-2 border-teal-400">
-                      👩‍🍳
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-white">Fleur</h3>
-                      <span className="text-[9px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider block mt-1">
-                        Quality Control
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-3">
-                    De laatste blik van perfectie voordat de bestelling over de toonbank gaat! 📦💎
-                  </p>
-                </div>
-
-                {/* 5. MILAN */}
-                <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex flex-col items-center text-center justify-between shadow-lg hover:border-amber-500/30 transition">
-                  <div className="space-y-3 flex flex-col items-center">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-sky-500 to-blue-500 flex items-center justify-center text-3xl shadow-md border-2 border-sky-400">
-                      🧑‍🍳
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-black text-white">Milan</h3>
-                      <span className="text-[9px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-black uppercase tracking-wider block mt-1">
-                        Gastheer
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-3">
-                    Verwelkomt elke gast met een stralende glimlach en zorgt voor een warm welkom! 💬❤️
-                  </p>
-                </div>
-
-              </div>
-
-              {/* Did you know section at bottom of crew */}
-              <div className="mt-4 p-3 rounded-2xl bg-slate-950 border border-slate-800/80 flex items-center gap-3 shrink-0">
-                <span className="text-2xl">🌟</span>
-                <p className="text-xs text-slate-400 font-medium">
-                  <strong>Wist u dat?</strong> Onze keukenploeg uitsluitend werkt met vers geoogste ingrediënten en premium burgers om de hoogste JoFiam kwaliteit te leveren!
-                </p>
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
         </div>
 
