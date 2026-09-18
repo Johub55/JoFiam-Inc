@@ -765,9 +765,8 @@ class SoundEffects {
         playPromise.catch((err) => {
           console.warn('Audio play rejection:', err);
           this.isUnlocked = false;
-          this.isPlayingSpeech = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
-          clearTimeout(watchdog);
+          done(false);
         });
       }
     } catch (err) {
@@ -927,6 +926,12 @@ class SoundEffects {
 
       if (this.cachedVoices.length === 0) {
         this.cachedVoices = window.speechSynthesis.getVoices() || [];
+      }
+
+      if (this.cachedVoices.length === 0) {
+        console.warn("Geen native spraakstemmen beschikbaar op dit systeem/browser (Linux/Opera). Schakelt over.");
+        if (callback) callback(false);
+        return;
       }
 
       const selectedVoiceURI = localStorage.getItem('wd_tts_voice');
