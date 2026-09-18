@@ -744,6 +744,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
               setSyncStatus('synced');
             } else if (payload.eventType === 'UPDATE') {
               const updatedOrder = formatDbOrder(payload.new);
+              let statusChangedToDone = false;
               setOrders(prev => prev.map(o => {
                 if (o.no !== updatedOrder.no) return o;
                 const localMutation = pendingOrderMutations.get(o.no);
@@ -756,6 +757,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   ? localMutation.isPrio 
                   : (o.isPrio ?? updatedOrder.isPrio ?? false);
 
+                const isOldStatusDone = o.status === 'done' || o.status === 'klaar';
+                const isNewStatusDone = finalStatus === 'done' || finalStatus === 'klaar';
+                if (isNewStatusDone && !isOldStatusDone) {
+                  statusChangedToDone = true;
+                }
+
                 return {
                   ...o,
                   ...updatedOrder,
@@ -765,7 +772,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                   updatedAt: Math.max(o.updatedAt || 0, updatedOrder.updatedAt || 0)
                 };
               }));
-              if (updatedOrder.status === 'done' || updatedOrder.status === 'klaar') {
+              if (statusChangedToDone) {
                 AudioFX.speakOrder(updatedOrder.no, updatedOrder.identifier, updatedOrder.orderType);
               }
               setLastSyncTime(new Date());
@@ -1634,11 +1641,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const { orderNo: targetNo, status, updatedAt } = payload;
             recordLocalOrderMutation(targetNo, { status });
             let targetOrder: Order | undefined;
+            let statusChangedToDone = false;
             setOrders(prev => {
               targetOrder = prev.find(o => o.no === targetNo);
+              const isOldStatusDone = targetOrder && (targetOrder.status === 'done' || targetOrder.status === 'klaar');
+              const isNewStatusDone = status === 'done' || status === 'klaar';
+              if (isNewStatusDone && !isOldStatusDone) {
+                statusChangedToDone = true;
+              }
               return prev.map(o => o.no === targetNo ? { ...o, status, updatedAt: updatedAt || Date.now() } : o);
             });
-            if (status === 'done' || status === 'klaar') {
+            if (statusChangedToDone) {
               const matched = targetOrder || orders.find(o => o.no === targetNo);
               if (matched) {
                 AudioFX.speakOrder(targetNo, matched.identifier, matched.orderType);

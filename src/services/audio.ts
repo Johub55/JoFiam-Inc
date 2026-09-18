@@ -488,38 +488,37 @@ class SoundEffects {
     );
 
     if (isStaticStatic) {
-      this.updateDiag({ activeEngine: 'auto (Google NL - Statisch)', lastStatus: 'playing' });
+      this.updateDiag({ activeEngine: 'auto (Ruben NL - Statisch)', lastStatus: 'playing' });
       
-      // Op een statische host (zoals GitHub Pages) proberen we direct Google Translate als stap 1.
-      // Google is uiterst betrouwbaar, heeft prachtige stemmen en wordt nooit geblokkeerd door adblockers!
-      this.playServerTts(text, 'google', (googleSuccess) => {
-        if (googleSuccess) {
-          this.updateDiag({ activeEngine: 'Server Stem (Google NL)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+      // Op een statische host (zoals GitHub Pages) proberen we eerst StreamElements (Ruben of Lotte).
+      // Deze zijn open, CORS-vrij, uiterst betrouwbaar en hebben prachtige natuurlijke stemmen!
+      this.playServerTts(text, 'Ruben', (rubenSuccess) => {
+        if (rubenSuccess) {
+          this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
           return;
         }
 
-        // Stap 2: Browser Native Speech
-        this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
-          if (nativeSuccess) {
-            this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+        this.playServerTts(text, 'Lotte', (lotteSuccess) => {
+          if (lotteSuccess) {
+            this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
             return;
           }
 
-          // Stap 3: StreamElements Ruben (Backup, kan geblokkeerd zijn door adblocker)
-          this.playServerTts(text, 'Ruben', (rubenSuccess) => {
-            if (rubenSuccess) {
-              this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
+          // Als StreamElements faalt (door bijv. adblockers), vallen we terug op de browser-eigen stem (SpeechSynthesis)
+          this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+            if (nativeSuccess) {
+              this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
               return;
             }
 
-            // Stap 4: StreamElements Lotte
-            this.playServerTts(text, 'Lotte', (lotteSuccess) => {
-              if (lotteSuccess) {
-                this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
+            // Google Translate TTS als laatste online strohalm (is soms geblokkeerd op GitHub Pages door referrers)
+            this.playServerTts(text, 'google', (googleSuccess) => {
+              if (googleSuccess) {
+                this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
                 return;
               }
 
-              // Failover: Chime
+              // Absolute fallback: Chime belsignaal
               this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
               this.bell();
             });
@@ -639,23 +638,19 @@ class SoundEffects {
           this.activeAudioElement = null;
         }
 
-        // Als we op GitHub Pages (of een andere statische host) draaien, vallen we direct terug op de native browser stem!
-        if (isStaticStatic) {
-          console.warn("Static Host online stream failed. Falling back to native speech synthesis!");
-          this.playNativeSpeechSynthesis(text, false, callback);
-          return;
-        }
-
-        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
-        if (dynamicMp3Supported && voiceName !== 'voicerss_wav') {
+        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een serveromgeving, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
+        if (!isStaticStatic && dynamicMp3Supported && voiceName !== 'voicerss_wav') {
           console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
           dynamicMp3Supported = false;
           this.playServerTts(text, 'voicerss_wav', callback);
           return;
         }
 
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op /api/tts voor ${voiceName} (MP3-support: ${dynamicMp3Supported})` });
-        if (callback && !finished) callback(false);
+        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op TTS stream voor ${voiceName} (MP3-support: ${dynamicMp3Supported})` });
+        if (callback && !finished) {
+          finished = true;
+          callback(false);
+        }
       };
 
       const playPromise = audio.play();
@@ -850,7 +845,17 @@ class SoundEffects {
         if (callback) callback(false);
       };
 
-      window.speechSynthesis.speak(utterance);
+      window.speechSynthesis.cancel();
+
+      // We start speaking after a tiny timeout to let Chrome reset its speech engine completely
+      setTimeout(() => {
+        try {
+          window.speechSynthesis.speak(utterance);
+        } catch (err) {
+          console.warn("speechSynthesis.speak error:", err);
+          if (callback) callback(false);
+        }
+      }, 60);
     } catch {
       if (callback) callback(false);
     }
