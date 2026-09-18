@@ -48,6 +48,8 @@ class SoundEffects {
   private activeAudioElement: HTMLAudioElement | null = null;
   private lastAnnouncedOrders: Map<string | number, number> = new Map();
   private pendingSpeech: { text: string; orderNo: number | string; target: string } | null = null;
+  private speechQueue: Array<{ text: string; orderNo: number | string; target: string }> = [];
+  private isPlayingSpeech: boolean = false;
   
   private listeners: ((announcement: { orderNo: number | string; text: string; id: number } | null) => void)[] = [];
   private diagListeners: ((diag: AudioDiagnosticStatus) => void)[] = [];
@@ -131,10 +133,11 @@ class SoundEffects {
     if (this.pendingSpeech) {
       const { text, orderNo, target } = this.pendingSpeech;
       this.pendingSpeech = null;
-      setTimeout(() => {
-        this.playSpeech(text, orderNo, target);
-      }, 100);
+      this.playSpeech(text, orderNo, target);
     }
+
+    // Robust queue processor trigger
+    this.processQueue();
 
     if (typeof window !== 'undefined') {
       if (this.ctx) {
@@ -218,6 +221,27 @@ class SoundEffects {
     if (typeof window !== 'undefined') {
       localStorage.setItem('wd_sound_enabled', String(val));
     }
+    if (!val) {
+      this.clearSpeechQueue();
+    }
+  }
+
+  public clearSpeechQueue() {
+    this.speechQueue = [];
+    this.isPlayingSpeech = false;
+    this.pendingSpeech = null;
+    if (this.activeAudioElement) {
+      try {
+        this.activeAudioElement.pause();
+      } catch {}
+      this.activeAudioElement = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
+    }
+    this.activeUtterance = null;
   }
 
   private initCtx() {
@@ -442,44 +466,88 @@ class SoundEffects {
   }
 
   /**
-   * Universal speech player:
-   * Checks selected engine mode.
+   * Universal speech player using a common queueing pattern:
+   * Keeps speeches and announcements from overlapping or getting interrupted.
    */
   public playSpeech(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4') {
     if (typeof window === 'undefined' || !this.isEnabled) return;
 
-    this.unlock();
+    // Push the item to the queue
+    this.speechQueue.push({ text, orderNo, target });
+    
+    // Automatically trigger queue processing
+    this.processQueue();
+  }
+
+  /**
+   * Sequential speech queue processor
+   */
+  private processQueue() {
+    if (this.isPlayingSpeech) {
+      return;
+    }
+    if (this.speechQueue.length === 0) {
+      return;
+    }
+
+    const nextItem = this.speechQueue[0];
+    this.isPlayingSpeech = true;
+
+    const onComplete = (success: boolean) => {
+      // Remove the processed item
+      this.speechQueue.shift();
+      this.isPlayingSpeech = false;
+      
+      // Schedule the next item with a tiny natural gap
+      setTimeout(() => {
+        this.processQueue();
+      }, 150);
+    };
+
     const mode = (localStorage.getItem('wd_tts_mode') || 'auto') as TtsEngineMode;
 
     switch (mode) {
       case 'chime_only':
         this.updateDiag({ activeEngine: 'chime_only', lastStatus: 'success', lastMessage: 'Alleen belsignaal afgespeeld' });
-        return;
+        onComplete(true);
+        break;
 
       case 'custom_url':
-        this.playCustomUrlTts(text, orderNo, target);
-        return;
+        this.playCustomUrlTts(nextItem.text, nextItem.orderNo, nextItem.target, (success) => {
+          onComplete(success);
+        });
+        break;
 
       case 'server_lotte':
-        this.playServerTts(text, 'Lotte', undefined, orderNo, target);
-        return;
+        this.playServerTts(nextItem.text, 'Lotte', (success) => {
+          onComplete(success);
+        }, nextItem.orderNo, nextItem.target);
+        break;
 
       case 'server_ruben':
-        this.playServerTts(text, 'Ruben', undefined, orderNo, target);
-        return;
+        this.playServerTts(nextItem.text, 'Ruben', (success) => {
+          onComplete(success);
+        }, nextItem.orderNo, nextItem.target);
+        break;
 
       case 'google_nl':
-        this.playServerTts(text, 'google', undefined, orderNo, target);
-        return;
+        this.playServerTts(nextItem.text, 'google', (success) => {
+          onComplete(success);
+        }, nextItem.orderNo, nextItem.target);
+        break;
 
       case 'native':
-        this.playNativeSpeechSynthesis(text, false);
-        return;
+        this.playNativeSpeechSynthesis(nextItem.text, false, (success) => {
+          onComplete(success);
+        });
+        break;
 
       case 'auto':
       default:
-        this.playAutoTtsWithFallbacks(text, orderNo, target);
-        return;
+        this.playAutoTtsWithFallbacks(nextItem.text, nextItem.orderNo, nextItem.target, (success) => {
+          onComplete(success);
+        });
+        break;
     }
   }
 
@@ -489,7 +557,12 @@ class SoundEffects {
    * 2. Same-Origin Server TTS Proxy (/api/tts?voice=Lotte)
    * 3. Browser Native SpeechSynthesis
    */
-  private playAutoTtsWithFallbacks(text: string, orderNo: number | string, target: string) {
+  private playAutoTtsWithFallbacks(
+    text: string, 
+    orderNo: number | string, 
+    target: string, 
+    callback?: (success: boolean) => void
+  ) {
     const isStaticStatic = typeof window !== 'undefined' && (
       window.location.hostname.endsWith('.github.io') ||
       window.location.hostname.endsWith('.pages.dev') ||
@@ -504,12 +577,14 @@ class SoundEffects {
       this.playServerTts(text, 'Ruben', (rubenSuccess) => {
         if (rubenSuccess) {
           this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
+          if (callback) callback(true);
           return;
         }
 
         this.playServerTts(text, 'Lotte', (lotteSuccess) => {
           if (lotteSuccess) {
             this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
+            if (callback) callback(true);
             return;
           }
 
@@ -517,6 +592,7 @@ class SoundEffects {
           this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
             if (nativeSuccess) {
               this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+              if (callback) callback(true);
               return;
             }
 
@@ -524,12 +600,14 @@ class SoundEffects {
             this.playServerTts(text, 'google', (googleSuccess) => {
               if (googleSuccess) {
                 this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+                if (callback) callback(true);
                 return;
               }
 
               // Absolute fallback: Chime belsignaal
               this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
               this.bell();
+              if (callback) callback(false);
             }, orderNo, target);
           });
         }, orderNo, target);
@@ -544,6 +622,7 @@ class SoundEffects {
     this.playServerTts(text, 'Ruben', (success) => {
       if (success) {
         this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Ruben' });
+        if (callback) callback(true);
         return;
       }
 
@@ -551,6 +630,7 @@ class SoundEffects {
       this.playServerTts(text, 'Lotte', (lotteSuccess) => {
         if (lotteSuccess) {
           this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Lotte' });
+          if (callback) callback(true);
           return;
         }
 
@@ -558,6 +638,7 @@ class SoundEffects {
         this.playServerTts(text, 'google', (googleSuccess) => {
           if (googleSuccess) {
             this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+            if (callback) callback(true);
             return;
           }
 
@@ -565,9 +646,11 @@ class SoundEffects {
           this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
             if (nativeSuccess) {
               this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+              if (callback) callback(true);
             } else {
               this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
               this.bell();
+              if (callback) callback(false);
             }
           });
         }, orderNo, target);
@@ -628,6 +711,23 @@ class SoundEffects {
       this.activeAudioElement = audio;
 
       let finished = false;
+      const done = (status: boolean) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(watchdog);
+        if (this.activeAudioElement === audio) {
+          this.activeAudioElement = null;
+        }
+        if (callback) callback(status);
+      };
+
+      const watchdog = setTimeout(() => {
+        console.warn(`Server TTS (${voiceName}) playback timed out (watchdog triggered)`);
+        try {
+          audio.pause();
+        } catch {}
+        done(false);
+      }, Math.max(10000, text.length * 120));
 
       audio.onplay = () => {
         this.updateDiag({ 
@@ -640,42 +740,34 @@ class SoundEffects {
       };
 
       audio.onended = () => {
-        finished = true;
-        if (this.activeAudioElement === audio) {
-          this.activeAudioElement = null;
-        }
         this.updateDiag({ lastStatus: 'success', lastMessage: !dynamicMp3Supported ? 'Omroep WAV voltooid' : `Omroep ${voiceName} voltooid` });
-        if (callback) callback(true);
+        done(true);
       };
 
       audio.onerror = (e) => {
         console.warn(`Server TTS (${voiceName}) error:`, e);
-        if (this.activeAudioElement === audio) {
-          this.activeAudioElement = null;
-        }
 
         // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een serveromgeving, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
         if (!isStaticStatic && dynamicMp3Supported && voiceName !== 'voicerss_wav') {
           console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
           dynamicMp3Supported = false;
+          clearTimeout(watchdog);
           this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
           return;
         }
 
         this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op TTS stream voor ${voiceName} (MP3-support: ${dynamicMp3Supported})` });
-        if (callback && !finished) {
-          finished = true;
-          callback(false);
-        }
+        done(false);
       };
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
           console.warn('Audio play rejection:', err);
-          this.pendingSpeech = { text, orderNo, target };
+          this.isUnlocked = false;
+          this.isPlayingSpeech = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
-          if (callback && !finished) callback(false);
+          clearTimeout(watchdog);
         });
       }
     } catch (err) {
@@ -746,10 +838,26 @@ class SoundEffects {
         });
       };
 
-      audio.onended = () => {
+      let finished = false;
+      const done = (status: boolean) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(watchdog);
         if (this.activeAudioElement === audio) this.activeAudioElement = null;
+        if (callback) callback(status);
+      };
+
+      const watchdog = setTimeout(() => {
+        console.warn("Custom TTS playback timed out (watchdog triggered)");
+        try {
+          audio.pause();
+        } catch {}
+        done(false);
+      }, Math.max(12000, text.length * 120));
+
+      audio.onended = () => {
         this.updateDiag({ lastStatus: 'success', lastMessage: 'Custom TTS afgerond' });
-        if (callback) callback(true);
+        done(true);
       };
 
       audio.onerror = () => {
@@ -763,9 +871,8 @@ class SoundEffects {
           audio.src = formattedUrl;
           audio.play().catch((err) => {
             console.warn("Custom TTS direct fallback also failed:", err);
-            this.pendingSpeech = { text, orderNo, target };
             this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
-            if (callback) callback(false);
+            done(false);
           });
           return;
         }
@@ -773,20 +880,23 @@ class SoundEffects {
         if (isStaticStatic) {
           console.warn("Custom TTS failed on Static Host (GitHub Pages). Falling back to native speech synthesis!");
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom URL mislukt op GitHub Pages. Schakelt over naar browserstem...' });
+          clearTimeout(watchdog);
           this.playNativeSpeechSynthesis(text, false, callback);
           return;
         }
 
         this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt' });
-        if (callback) callback(false);
+        done(false);
       };
 
       const p = audio.play();
       if (p !== undefined) {
         p.catch((err) => {
-          this.pendingSpeech = { text, orderNo, target };
+          console.warn('Custom TTS play rejection:', err);
+          this.isUnlocked = false;
+          this.isPlayingSpeech = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: `Autoplay geblokkeerd op Custom URL: ${err.message}` });
-          if (callback) callback(false);
+          clearTimeout(watchdog);
         });
       }
     } catch (err) {
@@ -846,6 +956,23 @@ class SoundEffects {
 
       this.activeUtterance = utterance;
 
+      let hasFinished = false;
+      const done = (status: boolean) => {
+        if (hasFinished) return;
+        hasFinished = true;
+        clearTimeout(watchdog);
+        this.activeUtterance = null;
+        if (callback) callback(status);
+      };
+
+      const watchdog = setTimeout(() => {
+        console.warn("SpeechSynthesis native speech took too long (watchdog triggered)");
+        try {
+          window.speechSynthesis.cancel();
+        } catch {}
+        done(false);
+      }, Math.max(8000, text.length * 100));
+
       utterance.onstart = () => {
         this.updateDiag({ 
           activeEngine: `Native (${chosenVoice?.name || 'Standaard'})`, 
@@ -855,14 +982,21 @@ class SoundEffects {
       };
 
       utterance.onend = () => {
-        this.activeUtterance = null;
         this.updateDiag({ lastStatus: 'success', lastMessage: 'Systeemstem klaar' });
-        if (callback) callback(true);
+        done(true);
       };
 
       utterance.onerror = (e) => {
-        this.activeUtterance = null;
-        if (callback) callback(false);
+        console.warn("SpeechSynthesis error event:", e);
+        if (e.error === 'not-allowed' || e.error === 'network') {
+          // Autoplay or permissions block!
+          this.isUnlocked = false;
+          this.isPlayingSpeech = false;
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
+          clearTimeout(watchdog);
+        } else {
+          done(false);
+        }
       };
 
       window.speechSynthesis.cancel();
@@ -873,7 +1007,10 @@ class SoundEffects {
           window.speechSynthesis.speak(utterance);
         } catch (err) {
           console.warn("speechSynthesis.speak error:", err);
-          if (callback) callback(false);
+          this.isUnlocked = false;
+          this.isPlayingSpeech = false;
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
+          clearTimeout(watchdog);
         }
       }, 60);
     } catch {

@@ -23,10 +23,14 @@ export const StaffCashRequestNotifier: React.FC = () => {
     }
   }, [activeReq, lastNotifiedId]);
 
-  // Only employees with cash authorization see this pop-up on their screen
-  const isAuthorizedEmployee = currentPosUser && 
-    currentPosUser.username !== 'bestel_kassa' && 
-    (currentPosUser.is_admin || currentPosUser.perms?.includes('cash_pay') || currentPosUser.perms?.includes('pos'));
+  // Only employees with cash authorization see this pop-up on their screen (ignore kiosk mode)
+  const isKiosk = currentPosUser?.username === 'bestel_kassa';
+  const isAuthorizedEmployee = !isKiosk && (
+    !currentPosUser || 
+    currentPosUser.is_admin || 
+    currentPosUser.perms?.includes('cash_pay') || 
+    currentPosUser.perms?.includes('pos')
+  );
 
   if (!isAuthorizedEmployee || !activeReq) return null;
 

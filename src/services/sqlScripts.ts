@@ -118,10 +118,17 @@ CREATE TABLE IF NOT EXISTS public.pos_users (
 -- 1.9 Contante Verzoeken
 CREATE TABLE IF NOT EXISTS public.cash_requests (
   id BIGSERIAL PRIMARY KEY,
-  amount NUMERIC(10, 2) NOT NULL,
-  cashier TEXT NOT NULL,
+  req_id TEXT UNIQUE,
+  order_no INT DEFAULT 0,
+  order_type TEXT DEFAULT 'takeaway',
+  identifier TEXT DEFAULT '',
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  cashier TEXT DEFAULT 'Kassa',
   status TEXT NOT NULL DEFAULT 'pending',
   approved_by TEXT,
+  received NUMERIC(10, 2) DEFAULT 0.00,
+  change NUMERIC(10, 2) DEFAULT 0.00,
+  rejected_reason TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -178,6 +185,18 @@ ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS contact_id TEXT;
 ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS sender TEXT;
 ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS text TEXT;
 ALTER TABLE public.phone_messages ADD COLUMN IF NOT EXISTS timestamp TEXT;
+
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS req_id TEXT;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS order_no INT DEFAULT 0;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS order_type TEXT DEFAULT 'takeaway';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS identifier TEXT DEFAULT '';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS cashier TEXT DEFAULT 'Kassa';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS approved_by TEXT;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS received NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS change NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS rejected_reason TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created ON public.orders(created_at DESC);

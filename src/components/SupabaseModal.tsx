@@ -332,8 +332,84 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
             </div>
 
             {/* Quick Status / RLS Fix Snippets for Supabase */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               
+              {/* Cash Requests SQL Snippet */}
+              <div className="p-3.5 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                    💵 Contant Verzoeken Realtime &amp; RLS
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cashSql = `CREATE TABLE IF NOT EXISTS public.cash_requests (
+  id BIGSERIAL PRIMARY KEY,
+  req_id TEXT UNIQUE,
+  order_no INT DEFAULT 0,
+  order_type TEXT DEFAULT 'takeaway',
+  identifier TEXT DEFAULT '',
+  amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  cashier TEXT DEFAULT 'Kassa',
+  status TEXT NOT NULL DEFAULT 'pending',
+  approved_by TEXT,
+  received NUMERIC(10, 2) DEFAULT 0.00,
+  change NUMERIC(10, 2) DEFAULT 0.00,
+  rejected_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS req_id TEXT;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS order_no INT DEFAULT 0;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS order_type TEXT DEFAULT 'takeaway';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS identifier TEXT DEFAULT '';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS cashier TEXT DEFAULT 'Kassa';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS approved_by TEXT;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS received NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS change NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.cash_requests ADD COLUMN IF NOT EXISTS rejected_reason TEXT;
+
+ALTER TABLE public.cash_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public full access cash_requests" ON public.cash_requests;
+CREATE POLICY "Public full access cash_requests" ON public.cash_requests FOR ALL USING (true) WITH CHECK (true);
+GRANT ALL ON TABLE public.cash_requests TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+
+DO $$ BEGIN
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.cash_requests; EXCEPTION WHEN OTHERS THEN NULL; END;
+END $$;`;
+                      try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                          navigator.clipboard.writeText(cashSql);
+                        } else {
+                          const textArea = document.createElement("textarea");
+                          textArea.value = cashSql;
+                          textArea.style.position = "fixed";
+                          textArea.style.left = "-999999px";
+                          textArea.style.top = "-999999px";
+                          document.body.appendChild(textArea);
+                          textArea.focus();
+                          textArea.select();
+                          document.execCommand('copy');
+                          document.body.removeChild(textArea);
+                        }
+                      } catch (e) {
+                        console.warn("Fallback copy method used due to clipboard error:", e);
+                      }
+                      alert('Contant Verzoeken SQL gekopieerd! Plak dit in de Supabase SQL Editor om verzoeken direct over kassa-schermen te synchroniseren.');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg transition shrink-0"
+                  >
+                    Kopieer Contant SQL
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  Zorgt ervoor dat contante betaalverzoeken live tussen alle schermen gesynchroniseerd worden met RLS &amp; Realtime.
+                </p>
+              </div>
+
               {/* Phone Only SQL Snippet */}
               <div className="p-3.5 bg-cyan-950/30 border border-cyan-500/30 rounded-2xl space-y-2">
                 <div className="flex items-center justify-between gap-2">

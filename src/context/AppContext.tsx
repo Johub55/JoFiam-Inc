@@ -545,6 +545,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   }, [supabaseConfig]);
 
+// Helper to convert DB cash_request row to CashPaymentRequest
+const formatDbCashRequest = (row: any): CashPaymentRequest => {
+  return {
+    id: row.req_id || `req_${row.id}`,
+    orderNo: Number(row.order_no || 0),
+    orderType: row.order_type || 'takeaway',
+    identifier: row.identifier || row.cashier || '',
+    total: Number(row.amount || 0),
+    status: row.status as 'pending' | 'approved' | 'rejected',
+    requestedAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
+    approvedBy: row.approved_by || undefined,
+    received: row.received !== null && row.received !== undefined ? Number(row.received) : undefined,
+    change: row.change !== null && row.change !== undefined ? Number(row.change) : undefined,
+    rejectedReason: row.rejected_reason || undefined
+  };
+};
+
   // Unified cloud data fetch
   const fetchCloudData = useCallback(async (isBackground = false) => {
     if (!posClient) return;
@@ -660,6 +677,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await posClient.from('pos_settings').insert({ id: 'default', order_stop_active: false, pickup_closed: false });
       }
 
+      // 7. Fetch cash_requests from Supabase (for cross-terminal staff notifications)
+      const { data: dbCashReqs, error: cashErr } = await posClient
+        .from('cash_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (!cashErr && dbCashReqs) {
+        const parsedCashReqs = dbCashReqs.map(formatDbCashRequest);
+        setCashRequests(parsedCashReqs);
+        localStorage.setItem('wd_cash_requests', JSON.stringify(parsedCashReqs));
+      }
+
       setSyncStatus('synced');
       setLastSyncTime(new Date());
       setIsOnline(true);
@@ -749,6 +778,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     let couponChannel: any = null;
     let gcChannel: any = null;
     let settingsChannel: any = null;
+    let cashReqChannel: any = null;
 
     try {
       // 1. Orders Realtime
@@ -992,6 +1022,39 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         )
         .subscribe();
 
+      // 7. Cash Requests Realtime
+      cashReqChannel = posClient
+        .channel('realtime_cash_requests_live')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'cash_requests' },
+          (payload) => {
+            if (!isMounted) return;
+            console.log('⚡ Realtime Cash Request Event received:', payload.eventType);
+            if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+              const parsed = formatDbCashRequest(payload.new);
+              setCashRequests(prev => {
+                const idx = prev.findIndex(r => r.id === parsed.id);
+                if (idx !== -1) {
+                  const copy = [...prev];
+                  copy[idx] = { ...copy[idx], ...parsed };
+                  return copy;
+                }
+                return [parsed, ...prev];
+              });
+              if (payload.eventType === 'INSERT' && parsed.status === 'pending') {
+                try { AudioFX.bell(); } catch {}
+              }
+            } else if (payload.eventType === 'DELETE') {
+              const reqId = payload.old?.req_id || `req_${payload.old?.id}`;
+              if (reqId) {
+                setCashRequests(prev => prev.filter(r => r.id !== reqId));
+              }
+            }
+          }
+        )
+        .subscribe();
+
     } catch (err) {
       console.warn('Realtime subscription error:', err);
     }
@@ -1004,6 +1067,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (couponChannel && posClient) posClient.removeChannel(couponChannel);
       if (gcChannel && posClient) posClient.removeChannel(gcChannel);
       if (settingsChannel && posClient) posClient.removeChannel(settingsChannel);
+      if (cashReqChannel && posClient) posClient.removeChannel(cashReqChannel);
     };
   }, [posClient, payClient]);
 
@@ -1855,8 +1919,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     orderType: 'dine_in' | 'takeaway' | 'delivery',
     identifier: string
   ): CashPaymentRequest => {
+    const reqId = `req_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     const newReq: CashPaymentRequest = {
-      id: `req_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      id: reqId,
       orderNo,
       orderType,
       identifier,
@@ -1866,6 +1931,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     const updated = [newReq, ...cashRequests];
     syncCashRequests(updated);
+
+    if (posClient) {
+      posClient.from('cash_requests').insert({
+        req_id: reqId,
+        order_no: orderNo,
+        order_type: orderType,
+        identifier: identifier,
+        amount: total,
+        cashier: identifier,
+        status: 'pending'
+      }).then(({ error }) => {
+        if (error) console.warn('Supabase cash_requests insert error:', error);
+      });
+    }
+
     return newReq;
   };
 
@@ -1881,15 +1961,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         : r
     );
     syncCashRequests(updated);
+
+    if (posClient) {
+      posClient.from('cash_requests').update({
+        status: 'approved',
+        approved_by: approvedBy,
+        received: received,
+        change: change
+      }).or(`req_id.eq.${requestId},id.eq.${requestId.replace('req_', '')}`)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase cash_requests approve error:', error);
+        });
+    }
   };
 
   const rejectCashRequest = (requestId: string, reason?: string) => {
+    const rejectedReason = reason || 'Geweigerd door medewerker';
     const updated = cashRequests.map(r =>
       r.id === requestId
-        ? { ...r, status: 'rejected' as const, rejectedReason: reason || 'Geweigerd door medewerker' }
+        ? { ...r, status: 'rejected' as const, rejectedReason }
         : r
     );
     syncCashRequests(updated);
+
+    if (posClient) {
+      posClient.from('cash_requests').update({
+        status: 'rejected',
+        rejected_reason: rejectedReason
+      }).or(`req_id.eq.${requestId},id.eq.${requestId.replace('req_', '')}`)
+        .then(({ error }) => {
+          if (error) console.warn('Supabase cash_requests reject error:', error);
+        });
+    }
   };
 
   // WerkPay Actions
