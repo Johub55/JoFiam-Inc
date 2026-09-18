@@ -44,64 +44,57 @@ const AutoScrollingColumn: React.FC<AutoScrollingColumnProps> = ({ children, cla
     if (!el) return;
 
     let animationFrameId: number;
-    let position = 0;
-    let direction = 1; // 1 = down, -1 = up
-    let waitTimer: NodeJS.Timeout | null = null;
+    let position = el.scrollTop;
     let active = true;
 
     const scroll = () => {
       if (!active || !el) return;
 
-      const maxScroll = el.scrollHeight - el.clientHeight;
-      if (maxScroll <= 0) {
+      const halfHeight = el.scrollHeight / 2;
+      if (halfHeight <= el.clientHeight) {
+        el.scrollTop = 0;
+        position = 0;
         animationFrameId = requestAnimationFrame(scroll);
         return;
       }
 
-      if (direction === 1) {
-        position += 0.35; // scroll speed
-        if (position >= maxScroll) {
-          position = maxScroll;
-          direction = -1;
-          active = false;
-          waitTimer = setTimeout(() => {
-            active = true;
-            scroll();
-          }, 4000);
-          return;
-        }
-      } else {
-        position -= 1.5; // faster scroll back to top
-        if (position <= 0) {
-          position = 0;
-          direction = 1;
-          active = false;
-          waitTimer = setTimeout(() => {
-            active = true;
-            scroll();
-          }, 4000);
-          return;
-        }
+      // Sync with manual scrolls if the user dragged or focused an item
+      if (Math.abs(el.scrollTop - position) > 1.5) {
+        position = el.scrollTop;
+      }
+
+      position += 0.35; // Continuous smooth scrolling speed
+
+      if (position >= halfHeight) {
+        position -= halfHeight;
       }
 
       el.scrollTop = position;
       animationFrameId = requestAnimationFrame(scroll);
     };
 
-    waitTimer = setTimeout(() => {
-      scroll();
-    }, 2000);
+    // Delay start of scrolling slightly
+    const delayTimer = setTimeout(() => {
+      if (active) {
+        scroll();
+      }
+    }, 1500);
 
     return () => {
       active = false;
+      clearTimeout(delayTimer);
       if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      if (waitTimer) clearTimeout(waitTimer);
     };
   }, []);
 
   return (
     <div ref={containerRef} className={`${className} overflow-y-auto no-scrollbar`}>
-      {children}
+      <div className="flex flex-col space-y-3 pb-3">
+        {children}
+      </div>
+      <div className="flex flex-col space-y-3 pb-3" aria-hidden="true">
+        {children}
+      </div>
     </div>
   );
 };
@@ -145,16 +138,19 @@ export const PickupScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Automatic rotation timer for TV views
+  // Automatic rotation timer with dynamic timing for TV views
   useEffect(() => {
     if (!isTvMode || !autoRotate) return;
-    const interval = setInterval(() => {
-      setTvView((current) => {
-        return current === 'pickup' ? 'menu' : 'pickup';
-      });
-    }, 12000);
-    return () => clearInterval(interval);
-  }, [isTvMode, autoRotate]);
+
+    // Show pickup (afhaallijst) for 15 seconds, and menu for 45 seconds
+    const delay = tvView === 'pickup' ? 15000 : 45000;
+
+    const timer = setTimeout(() => {
+      setTvView((current) => (current === 'pickup' ? 'menu' : 'pickup'));
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isTvMode, autoRotate, tvView]);
 
   // Subscribe to live audio diagnostics
   useEffect(() => {
@@ -447,7 +443,7 @@ export const PickupScreen: React.FC = () => {
               title="Schakel automatisch wisselen van schermen in of uit"
             >
               <span className={`w-2 h-2 rounded-full ${autoRotate ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-              <span>{autoRotate ? 'Auto-Wissel (12s)' : 'Vastgezet'}</span>
+              <span>{autoRotate ? 'Auto-Wissel (15s/45s)' : 'Vastgezet'}</span>
             </button>
 
             {/* Giant Digital Time Clock */}
@@ -501,8 +497,14 @@ export const PickupScreen: React.FC = () => {
         <div className="flex-1 overflow-hidden relative">
 
           {/* VIEW A: LIVE AFHAAL LIJST (ORDERS) */}
-          {tvView === 'pickup' && (
-            <div className="h-full grid grid-cols-2 gap-6 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+          <div 
+            className={`absolute inset-0 w-full h-full transition-all duration-500 transform ${
+              tvView === 'pickup' 
+                ? 'opacity-100 scale-100 pointer-events-auto z-10' 
+                : 'opacity-0 scale-95 pointer-events-none z-0'
+            }`}
+          >
+            <div className="h-full grid grid-cols-2 gap-6 overflow-hidden">
               {/* COLUMN 1: WACHTEN & WORDT BEREID */}
               <section className="flex flex-col bg-slate-900/80 border-2 border-amber-500/40 rounded-3xl p-5 shadow-2xl overflow-hidden">
                 <div className="flex items-center justify-between pb-4 border-b-2 border-slate-800 shrink-0 mb-4">
@@ -665,10 +667,17 @@ export const PickupScreen: React.FC = () => {
                 </div>
               </section>
             </div>
-          )}
+          </div>
 
           {/* VIEW B: DIGITAL MENUKAART / MENU BOARD */}
-          {tvView === 'menu' && (() => {
+          <div 
+            className={`absolute inset-0 w-full h-full transition-all duration-500 transform ${
+              tvView === 'menu' 
+                ? 'opacity-100 scale-100 pointer-events-auto z-10' 
+                : 'opacity-0 scale-95 pointer-events-none z-0'
+            }`}
+          >
+            {(() => {
             const allInStock = products.filter(p => p.inStock);
 
             const col1Items = allInStock.filter(p => p.id < 200 && (p.cat.includes('Burger') || p.cat.includes('Meal') || p.cat.includes('Voordeel')));
@@ -783,6 +792,7 @@ export const PickupScreen: React.FC = () => {
               </div>
             );
           })()}
+          </div>
 
         </div>
 
