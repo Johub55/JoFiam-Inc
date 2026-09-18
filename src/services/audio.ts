@@ -46,6 +46,7 @@ class SoundEffects {
   private activeUtterance: SpeechSynthesisUtterance | null = null;
   private cachedVoices: SpeechSynthesisVoice[] = [];
   private activeAudioElement: HTMLAudioElement | null = null;
+  private lastAnnouncedOrders: Map<string | number, number> = new Map();
   
   private listeners: ((announcement: { orderNo: number | string; text: string; id: number } | null) => void)[] = [];
   private diagListeners: ((diag: AudioDiagnosticStatus) => void)[] = [];
@@ -364,6 +365,15 @@ class SoundEffects {
    * Never announces delivery orders.
    */
   public speakOrder(orderNo: number | string, identifier?: string, orderType?: string) {
+    // Deduplication check: ignore if called within 5 seconds for the same order number
+    const nowTime = Date.now();
+    const lastTime = this.lastAnnouncedOrders.get(orderNo);
+    if (lastTime && nowTime - lastTime < 5000) {
+      console.log(`Deduplicated duplicate speakOrder call for order #${orderNo}`);
+      return;
+    }
+    this.lastAnnouncedOrders.set(orderNo, nowTime);
+
     // 1. Delivery orders are NEVER announced
     if (orderType === 'delivery' || (identifier && identifier.toLowerCase().includes('bezorg'))) {
       return;
@@ -682,9 +692,12 @@ class SoundEffects {
       }
 
       const formattedUrl = rawUrl
-        .replace(/{text}/g, encodeURIComponent(text))
-        .replace(/{orderNo}/g, encodeURIComponent(String(orderNo)))
-        .replace(/{target}/g, encodeURIComponent(target));
+        .replace(/{text}/gi, encodeURIComponent(text))
+        .replace(/{orderNo}/gi, encodeURIComponent(String(orderNo)))
+        .replace(/{order_no}/gi, encodeURIComponent(String(orderNo)))
+        .replace(/{nummer}/gi, encodeURIComponent(String(orderNo)))
+        .replace(/{target}/gi, encodeURIComponent(target))
+        .replace(/{naam}/gi, encodeURIComponent(target));
 
       const isStaticStatic = typeof window !== 'undefined' && (
         window.location.hostname.endsWith('.github.io') ||
@@ -727,8 +740,22 @@ class SoundEffects {
       };
 
       audio.onerror = () => {
-        console.warn("Custom TTS Proxy failed, trying direct URL as fallback...");
-        
+        // If we tried proxied and failed, try direct on SAME element to bypass autoplay restrictions!
+        const currentSrc = audio.src || '';
+        const isCurrentlyProxied = currentSrc.includes('/api/custom-tts?url=');
+
+        if (isCurrentlyProxied) {
+          console.warn("Custom TTS via proxy failed. Re-trying direct URL as fallback on same audio element...");
+          this.updateDiag({ lastStatus: 'playing', lastMessage: 'Proxy mislukt, probeert lokaal direct af te spelen...' });
+          audio.src = formattedUrl;
+          audio.play().catch((err) => {
+            console.warn("Custom TTS direct fallback also failed:", err);
+            this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
+            if (callback) callback(false);
+          });
+          return;
+        }
+
         if (isStaticStatic) {
           console.warn("Custom TTS failed on Static Host (GitHub Pages). Falling back to native speech synthesis!");
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom URL mislukt op GitHub Pages. Schakelt over naar browserstem...' });
@@ -736,32 +763,8 @@ class SoundEffects {
           return;
         }
 
-        // Try direct as backup
-        try {
-          if (this.activeAudioElement) this.activeAudioElement.pause();
-          const backupAudio = new Audio(formattedUrl);
-          backupAudio.volume = 1.0;
-          this.activeAudioElement = backupAudio;
-          
-          backupAudio.onended = () => {
-            if (this.activeAudioElement === backupAudio) this.activeAudioElement = null;
-            this.updateDiag({ lastStatus: 'success', lastMessage: 'Custom TTS afgerond (directe fallback)' });
-            if (callback) callback(true);
-          };
-          
-          backupAudio.onerror = () => {
-            this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
-            if (callback) callback(false);
-          };
-          
-          backupAudio.play().catch(() => {
-            this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
-            if (callback) callback(false);
-          });
-        } catch {
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout bij inladen Custom TTS' });
-          if (callback) callback(false);
-        }
+        this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt' });
+        if (callback) callback(false);
       };
 
       const p = audio.play();
