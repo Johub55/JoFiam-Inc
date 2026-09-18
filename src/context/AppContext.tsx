@@ -44,6 +44,34 @@ import {
   pendingOrderMutations 
 } from '../services/syncHelpers';
 
+const getMajorityStatus = (items: any[]): OrderStatus => {
+  if (!items || items.length === 0) return 'wachten';
+  const counts = { wachten: 0, bereiden: 0, inpakken: 0, klaar: 0 };
+  items.forEach(it => {
+    const stage = it.stage || (it.done ? 'klaar' : 'wachten');
+    if (stage in counts) {
+      counts[stage as keyof typeof counts] += (it.qty || 1);
+    }
+  });
+
+  const totalQty = items.reduce((sum, it) => sum + (it.qty || 1), 0);
+  if (counts.klaar === totalQty) {
+    return 'klaar';
+  }
+
+  let bestStage: OrderStatus = 'wachten';
+  let maxVal = -1;
+  const stagesOrdered: OrderStatus[] = ['klaar', 'wachten', 'inpakken', 'bereiden'];
+  for (const st of stagesOrdered) {
+    const val = counts[st as keyof typeof counts] || 0;
+    if (val > maxVal) {
+      maxVal = val;
+      bestStage = st;
+    }
+  }
+  return bestStage;
+};
+
 interface AppContextType {
   // Navigation & Brand
   appMode: AppMode;
@@ -1450,10 +1478,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateOrderItemStage = async (orderNum: number, itemIndex: number, stage: OrderItemStage) => {
     const now = Date.now();
     let nextItems: any[] | null = null;
+    let calculatedNextStatus: OrderStatus | null = null;
+    let statusChanged = false;
+    let targetOrderBefore: Order | undefined;
 
     setOrders(prev => {
       const targetOrder = prev.find(o => o.no === orderNum);
       if (!targetOrder) return prev;
+      targetOrderBefore = targetOrder;
 
       nextItems = [...targetOrder.items];
       if (nextItems[itemIndex]) {
@@ -1464,17 +1496,30 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
       }
 
+      calculatedNextStatus = getMajorityStatus(nextItems);
+      statusChanged = targetOrder.status !== calculatedNextStatus;
+
       // Sync to LocalStorage inside the state updater so we are guaranteed to have the correct state
       const currentStored = localStorage.getItem('wd_orders');
       if (currentStored) {
         try {
           const parsed: Order[] = JSON.parse(currentStored);
-          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          const updated = parsed.map(o => o.no === orderNum ? { 
+            ...o, 
+            items: nextItems!, 
+            status: statusChanged ? calculatedNextStatus! : o.status,
+            updatedAt: now 
+          } : o);
           localStorage.setItem('wd_orders', JSON.stringify(updated));
         } catch {}
       }
 
-      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+      return prev.map(o => o.no === orderNum ? { 
+        ...o, 
+        items: nextItems!, 
+        status: statusChanged ? calculatedNextStatus! : o.status,
+        updatedAt: now 
+      } : o);
     });
 
     // Run this in the next microtask or slightly deferred so we have the calculated nextItems
@@ -1482,9 +1527,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (nextItems) {
         recordLocalOrderMutation(orderNum, { items: nextItems });
         broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+
+        if (statusChanged && calculatedNextStatus) {
+          recordLocalOrderMutation(orderNum, { status: calculatedNextStatus });
+          broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: calculatedNextStatus, updatedAt: now });
+
+          if (calculatedNextStatus === 'klaar') {
+            const orderToAnnounce = targetOrderBefore;
+            if (orderToAnnounce && orderToAnnounce.orderType !== 'delivery') {
+              AudioFX.speakOrder(orderNum, orderToAnnounce.identifier, orderToAnnounce.orderType);
+            }
+          }
+        }
+
         if (posClient) {
           try {
-            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+            const updatePayload: any = { items: nextItems };
+            if (statusChanged && calculatedNextStatus) {
+              updatePayload.status = calculatedNextStatus;
+            }
+            await posClient.from('orders').update(updatePayload).eq('order_no', orderNum);
           } catch {}
         }
       }
@@ -1494,10 +1556,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const toggleOrderItemDone = async (orderNum: number, itemIndex: number) => {
     const now = Date.now();
     let nextItems: any[] | null = null;
+    let calculatedNextStatus: OrderStatus | null = null;
+    let statusChanged = false;
+    let targetOrderBefore: Order | undefined;
 
     setOrders(prev => {
       const targetOrder = prev.find(o => o.no === orderNum);
       if (!targetOrder) return prev;
+      targetOrderBefore = targetOrder;
 
       nextItems = [...targetOrder.items];
       if (nextItems[itemIndex]) {
@@ -1509,25 +1575,55 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         };
       }
 
+      calculatedNextStatus = getMajorityStatus(nextItems);
+      statusChanged = targetOrder.status !== calculatedNextStatus;
+
       const currentStored = localStorage.getItem('wd_orders');
       if (currentStored) {
         try {
           const parsed: Order[] = JSON.parse(currentStored);
-          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          const updated = parsed.map(o => o.no === orderNum ? { 
+            ...o, 
+            items: nextItems!, 
+            status: statusChanged ? calculatedNextStatus! : o.status,
+            updatedAt: now 
+          } : o);
           localStorage.setItem('wd_orders', JSON.stringify(updated));
         } catch {}
       }
 
-      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+      return prev.map(o => o.no === orderNum ? { 
+        ...o, 
+        items: nextItems!, 
+        status: statusChanged ? calculatedNextStatus! : o.status,
+        updatedAt: now 
+      } : o);
     });
 
     setTimeout(async () => {
       if (nextItems) {
         recordLocalOrderMutation(orderNum, { items: nextItems });
         broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+
+        if (statusChanged && calculatedNextStatus) {
+          recordLocalOrderMutation(orderNum, { status: calculatedNextStatus });
+          broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: calculatedNextStatus, updatedAt: now });
+
+          if (calculatedNextStatus === 'klaar') {
+            const orderToAnnounce = targetOrderBefore;
+            if (orderToAnnounce && orderToAnnounce.orderType !== 'delivery') {
+              AudioFX.speakOrder(orderNum, orderToAnnounce.identifier, orderToAnnounce.orderType);
+            }
+          }
+        }
+
         if (posClient) {
           try {
-            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+            const updatePayload: any = { items: nextItems };
+            if (statusChanged && calculatedNextStatus) {
+              updatePayload.status = calculatedNextStatus;
+            }
+            await posClient.from('orders').update(updatePayload).eq('order_no', orderNum);
           } catch {}
         }
       }
@@ -1550,10 +1646,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const now = Date.now();
     let nextItems: any[] | null = null;
     const nextStage: OrderItemStage = done ? 'klaar' : 'wachten';
+    const nextStatus: OrderStatus = done ? 'klaar' : 'wachten';
+    let statusChanged = false;
+    let targetOrderBefore: Order | undefined;
 
     setOrders(prev => {
       const targetOrder = prev.find(o => o.no === orderNum);
       if (!targetOrder) return prev;
+      targetOrderBefore = targetOrder;
+      statusChanged = targetOrder.status !== nextStatus;
 
       nextItems = targetOrder.items.map(it => ({ ...it, done, stage: nextStage }));
 
@@ -1561,21 +1662,48 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (currentStored) {
         try {
           const parsed: Order[] = JSON.parse(currentStored);
-          const updated = parsed.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+          const updated = parsed.map(o => o.no === orderNum ? { 
+            ...o, 
+            items: nextItems!, 
+            status: statusChanged ? nextStatus : o.status,
+            updatedAt: now 
+          } : o);
           localStorage.setItem('wd_orders', JSON.stringify(updated));
         } catch {}
       }
 
-      return prev.map(o => o.no === orderNum ? { ...o, items: nextItems!, updatedAt: now } : o);
+      return prev.map(o => o.no === orderNum ? { 
+        ...o, 
+        items: nextItems!, 
+        status: statusChanged ? nextStatus : o.status,
+        updatedAt: now 
+      } : o);
     });
 
     setTimeout(async () => {
       if (nextItems) {
         recordLocalOrderMutation(orderNum, { items: nextItems });
         broadcastSync('SYNC_ORDER_ITEMS', { orderNo: orderNum, items: nextItems, updatedAt: now });
+
+        if (statusChanged) {
+          recordLocalOrderMutation(orderNum, { status: nextStatus });
+          broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: nextStatus, updatedAt: now });
+
+          if (nextStatus === 'klaar') {
+            const orderToAnnounce = targetOrderBefore;
+            if (orderToAnnounce && orderToAnnounce.orderType !== 'delivery') {
+              AudioFX.speakOrder(orderNum, orderToAnnounce.identifier, orderToAnnounce.orderType);
+            }
+          }
+        }
+
         if (posClient) {
           try {
-            await posClient.from('orders').update({ items: nextItems }).eq('order_no', orderNum);
+            const updatePayload: any = { items: nextItems };
+            if (statusChanged) {
+              updatePayload.status = nextStatus;
+            }
+            await posClient.from('orders').update(updatePayload).eq('order_no', orderNum);
           } catch {}
         }
       }

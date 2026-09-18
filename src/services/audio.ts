@@ -47,6 +47,7 @@ class SoundEffects {
   private cachedVoices: SpeechSynthesisVoice[] = [];
   private activeAudioElement: HTMLAudioElement | null = null;
   private lastAnnouncedOrders: Map<string | number, number> = new Map();
+  private pendingSpeech: { text: string; orderNo: number | string; target: string } | null = null;
   
   private listeners: ((announcement: { orderNo: number | string; text: string; id: number } | null) => void)[] = [];
   private diagListeners: ((diag: AudioDiagnosticStatus) => void)[] = [];
@@ -126,6 +127,14 @@ class SoundEffects {
   public unlock() {
     this.isUnlocked = true;
     this.initCtx();
+    
+    if (this.pendingSpeech) {
+      const { text, orderNo, target } = this.pendingSpeech;
+      this.pendingSpeech = null;
+      setTimeout(() => {
+        this.playSpeech(text, orderNo, target);
+      }, 100);
+    }
 
     if (typeof window !== 'undefined') {
       if (this.ctx) {
@@ -452,15 +461,15 @@ class SoundEffects {
         return;
 
       case 'server_lotte':
-        this.playServerTts(text, 'Lotte');
+        this.playServerTts(text, 'Lotte', undefined, orderNo, target);
         return;
 
       case 'server_ruben':
-        this.playServerTts(text, 'Ruben');
+        this.playServerTts(text, 'Ruben', undefined, orderNo, target);
         return;
 
       case 'google_nl':
-        this.playServerTts(text, 'google');
+        this.playServerTts(text, 'google', undefined, orderNo, target);
         return;
 
       case 'native':
@@ -521,10 +530,10 @@ class SoundEffects {
               // Absolute fallback: Chime belsignaal
               this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
               this.bell();
-            });
+            }, orderNo, target);
           });
-        });
-      });
+        }, orderNo, target);
+      }, orderNo, target);
       return;
     }
 
@@ -561,16 +570,22 @@ class SoundEffects {
               this.bell();
             }
           });
-        });
-      });
-    });
+        }, orderNo, target);
+      }, orderNo, target);
+    }, orderNo, target);
   }
 
   /**
    * Plays audio via Same-Origin Server Endpoint `/api/tts`.
    * Completely immune to CORS, Opera adblocker, tracker block, or 3rd party host blocks!
    */
-  public playServerTts(text: string, voiceName: 'Ruben' | 'Lotte' | 'google' | string = 'Ruben', callback?: (success: boolean) => void) {
+  public playServerTts(
+    text: string, 
+    voiceName: 'Ruben' | 'Lotte' | 'google' | string = 'Ruben', 
+    callback?: (success: boolean) => void,
+    orderNo: number | string = 1001,
+    target: string = 'Tafel 4'
+  ) {
     try {
       if (this.activeAudioElement) {
         this.activeAudioElement.pause();
@@ -609,6 +624,7 @@ class SoundEffects {
 
       const audio = new Audio(url);
       audio.volume = 1.0;
+      (audio as any).referrerPolicy = "no-referrer"; // Bypass browser/referrer restrictions on GitHub Pages
       this.activeAudioElement = audio;
 
       let finished = false;
@@ -642,7 +658,7 @@ class SoundEffects {
         if (!isStaticStatic && dynamicMp3Supported && voiceName !== 'voicerss_wav') {
           console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
           dynamicMp3Supported = false;
-          this.playServerTts(text, 'voicerss_wav', callback);
+          this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
           return;
         }
 
@@ -657,6 +673,7 @@ class SoundEffects {
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
           console.warn('Audio play rejection:', err);
+          this.pendingSpeech = { text, orderNo, target };
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
           if (callback && !finished) callback(false);
         });
@@ -714,6 +731,7 @@ class SoundEffects {
 
       const audio = new Audio(finalUrl);
       audio.volume = 1.0;
+      (audio as any).referrerPolicy = "no-referrer"; // Bypass browser/referrer restrictions on GitHub Pages
       this.activeAudioElement = audio;
 
       audio.onplay = () => {
@@ -745,6 +763,7 @@ class SoundEffects {
           audio.src = formattedUrl;
           audio.play().catch((err) => {
             console.warn("Custom TTS direct fallback also failed:", err);
+            this.pendingSpeech = { text, orderNo, target };
             this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
             if (callback) callback(false);
           });
@@ -765,6 +784,7 @@ class SoundEffects {
       const p = audio.play();
       if (p !== undefined) {
         p.catch((err) => {
+          this.pendingSpeech = { text, orderNo, target };
           this.updateDiag({ lastStatus: 'error', lastMessage: `Autoplay geblokkeerd op Custom URL: ${err.message}` });
           if (callback) callback(false);
         });
