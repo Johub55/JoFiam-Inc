@@ -471,6 +471,7 @@ class SoundEffects {
    */
   public playSpeech(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4') {
     if (typeof window === 'undefined' || !this.isEnabled) return;
+    this.unlock();
 
     // Push the item to the queue
     this.speechQueue.push({ text, orderNo, target });
@@ -493,7 +494,11 @@ class SoundEffects {
     const nextItem = this.speechQueue[0];
     this.isPlayingSpeech = true;
 
+    let hasCompleted = false;
     const onComplete = (success: boolean) => {
+      if (hasCompleted) return;
+      hasCompleted = true;
+      clearTimeout(queueWatchdog);
       // Remove the processed item
       this.speechQueue.shift();
       this.isPlayingSpeech = false;
@@ -503,6 +508,12 @@ class SoundEffects {
         this.processQueue();
       }, 150);
     };
+
+    // Safety watchdog to prevent queue lockup if an engine hangs indefinitely
+    const queueWatchdog = setTimeout(() => {
+      console.warn("Speech queue item timed out, forcing next item.");
+      onComplete(false);
+    }, 15000);
 
     const mode = (localStorage.getItem('wd_tts_mode') || 'auto') as TtsEngineMode;
 
@@ -572,8 +583,7 @@ class SoundEffects {
     if (isStaticStatic) {
       this.updateDiag({ activeEngine: 'auto (Ruben NL - Statisch)', lastStatus: 'playing' });
       
-      // Op een statische host (zoals GitHub Pages) proberen we eerst StreamElements (Ruben of Lotte).
-      // Deze zijn open, CORS-vrij, uiterst betrouwbaar en hebben prachtige natuurlijke stemmen!
+      // Op een statische host (zoals GitHub Pages) proberen we eerst Ruben, dan Lotte, dan Google NL, dan Native, dan Chime.
       this.playServerTts(text, 'Ruben', (rubenSuccess) => {
         if (rubenSuccess) {
           this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
@@ -588,18 +598,18 @@ class SoundEffects {
             return;
           }
 
-          // Als StreamElements faalt (door bijv. adblockers), vallen we terug op de browser-eigen stem (SpeechSynthesis)
-          this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
-            if (nativeSuccess) {
-              this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
+          // Google Translate TTS direct online audio stream
+          this.playServerTts(text, 'google', (googleSuccess) => {
+            if (googleSuccess) {
+              this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
               if (callback) callback(true);
               return;
             }
 
-            // Google Translate TTS als laatste online strohalm (is soms geblokkeerd op GitHub Pages door referrers)
-            this.playServerTts(text, 'google', (googleSuccess) => {
-              if (googleSuccess) {
-                this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
+            // Browser-eigen stem (SpeechSynthesis)
+            this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+              if (nativeSuccess) {
+                this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
                 if (callback) callback(true);
                 return;
               }
@@ -608,8 +618,8 @@ class SoundEffects {
               this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
               this.bell();
               if (callback) callback(false);
-            }, orderNo, target);
-          });
+            });
+          }, orderNo, target);
         }, orderNo, target);
       }, orderNo, target);
       return;
