@@ -658,6 +658,7 @@ class SoundEffects {
   /**
    * Custom User-Configured TTS URL:
    * Replaces {text}, {orderNo}, {target} in custom URL string.
+   * Proxies through the online server backend to guarantee Linux Opera & CORS compliance!
    */
   public playCustomUrlTts(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4', callback?: (success: boolean) => void) {
     const rawUrl = localStorage.getItem('wd_custom_tts_url') || '';
@@ -678,9 +679,28 @@ class SoundEffects {
         .replace(/{orderNo}/g, encodeURIComponent(String(orderNo)))
         .replace(/{target}/g, encodeURIComponent(target));
 
-      const audio = new Audio(formattedUrl);
+      const isStaticStatic = typeof window !== 'undefined' && (
+        window.location.hostname.endsWith('.github.io') ||
+        window.location.hostname.endsWith('.pages.dev') ||
+        window.location.protocol === 'file:'
+      );
+
+      // On standard server-backed environments, proxy custom TTS same-origin to prevent CORS & Opera adblock blocks
+      const finalUrl = isStaticStatic 
+        ? formattedUrl 
+        : `/api/custom-tts?url=${encodeURIComponent(formattedUrl)}`;
+
+      const audio = new Audio(finalUrl);
       audio.volume = 1.0;
       this.activeAudioElement = audio;
+
+      audio.onplay = () => {
+        this.updateDiag({
+          activeEngine: 'Custom TTS (Online Proxy)',
+          lastStatus: 'playing',
+          lastMessage: 'Custom stem spreekt via online proxy...'
+        });
+      };
 
       audio.onended = () => {
         if (this.activeAudioElement === audio) this.activeAudioElement = null;
@@ -689,8 +709,40 @@ class SoundEffects {
       };
 
       audio.onerror = () => {
-        this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout bij inladen Custom TTS URL' });
-        if (callback) callback(false);
+        console.warn("Custom TTS Proxy failed, trying direct URL as fallback...");
+        
+        if (isStaticStatic) {
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout bij inladen Custom TTS URL' });
+          if (callback) callback(false);
+          return;
+        }
+
+        // Try direct as backup
+        try {
+          if (this.activeAudioElement) this.activeAudioElement.pause();
+          const backupAudio = new Audio(formattedUrl);
+          backupAudio.volume = 1.0;
+          this.activeAudioElement = backupAudio;
+          
+          backupAudio.onended = () => {
+            if (this.activeAudioElement === backupAudio) this.activeAudioElement = null;
+            this.updateDiag({ lastStatus: 'success', lastMessage: 'Custom TTS afgerond (directe fallback)' });
+            if (callback) callback(true);
+          };
+          
+          backupAudio.onerror = () => {
+            this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
+            if (callback) callback(false);
+          };
+          
+          backupAudio.play().catch(() => {
+            this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt (zowel proxy als direct)' });
+            if (callback) callback(false);
+          });
+        } catch {
+          this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout bij inladen Custom TTS' });
+          if (callback) callback(false);
+        }
       };
 
       const p = audio.play();

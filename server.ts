@@ -106,6 +106,40 @@ async function startServer() {
     }
   });
 
+  /**
+   * Server-Side Custom TTS Proxy:
+   * Proxies custom third-party TTS audio requests through the backend.
+   * Completely bypasses CORS restrictions and Opera adblockers on Linux/Windows.
+   */
+  app.get("/api/custom-tts", async (req, res) => {
+    try {
+      const customUrl = typeof req.query.url === 'string' ? req.query.url.trim() : '';
+      if (!customUrl) {
+        return res.status(400).json({ error: "URL parameter is required" });
+      }
+
+      const upstreamResponse = await fetch(customUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+      });
+
+      if (upstreamResponse.ok) {
+        const contentType = upstreamResponse.headers.get("content-type") || "audio/mpeg";
+        res.setHeader("Content-Type", contentType);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        const buffer = await upstreamResponse.arrayBuffer();
+        return res.send(Buffer.from(buffer));
+      }
+
+      console.warn(`Custom TTS upstream returned error code ${upstreamResponse.status} for URL: ${customUrl}`);
+      return res.status(upstreamResponse.status).send(`Upstream server returned error ${upstreamResponse.status}`);
+    } catch (err: any) {
+      console.error("Custom TTS Server Error:", err);
+      return res.status(500).json({ error: err.message || "Internal server error" });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
