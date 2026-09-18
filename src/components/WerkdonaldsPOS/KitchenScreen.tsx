@@ -113,6 +113,26 @@ function isItemMatchingStation(itemName: string, station: StationType): boolean 
   return true;
 }
 
+export function getEstimatedPrepTime(order: Order): number {
+  let totalSecs = 0;
+  order.items.forEach(it => {
+    const name = it.name.toLowerCase();
+    const qty = it.qty || 1;
+    let baseTime = 60; // standaard 60 seconden
+    if (name.includes('burger') || name.includes('mac') || name.includes('whopper') || name.includes('broodje') || name.includes('wrap')) {
+      baseTime = 120; // Burgers take longer (2 min)
+    } else if (name.includes('friet') || name.includes('nugget') || name.includes('kip') || name.includes('crispy') || name.includes('tender') || name.includes('snack') || name.includes('bitterbal')) {
+      baseTime = 90; // Fried snacks take 1.5 min
+    } else if (name.includes('cola') || name.includes('fanta') || name.includes('sprite') || name.includes('drank') || name.includes('shake') || name.includes('koffie') || name.includes('thee') || name.includes('water')) {
+      baseTime = 35; // Drinks/shakes are fast (35 sec)
+    } else if (name.includes('ijs') || name.includes('sundae') || name.includes('flurry') || name.includes('donut') || name.includes('koek') || name.includes('dessert')) {
+      baseTime = 45; // Desserts take 45 sec
+    }
+    totalSecs += baseTime * qty;
+  });
+  return Math.min(Math.max(totalSecs, 45), 600); // Tussen 45 seconden en 10 minuten
+}
+
 export const KitchenScreen: React.FC = () => {
   const { 
     orders, 
@@ -242,6 +262,20 @@ export const KitchenScreen: React.FC = () => {
     return (a.timestamp || 0) - (b.timestamp || 0);
   });
 
+  // Berekening gemiddelde bereidingstijd van afgeronde/gereedgemelde bestellingen in de actieve sessie
+  const readyOrCompletedOrders = orders.filter(
+    o => isOrderReady(o.status) || o.status === 'afgehaald' || o.status === 'done' || o.status === 'ready'
+  );
+  const completedWithTime = readyOrCompletedOrders.filter(
+    o => o.updatedAt && o.timestamp && o.updatedAt > o.timestamp
+  );
+  const avgPrepTimeSecs = completedWithTime.length > 0
+    ? completedWithTime.reduce((sum, o) => sum + ((o.updatedAt! - o.timestamp) / 1000), 0) / completedWithTime.length
+    : 0;
+  const formattedAvgPrepTime = avgPrepTimeSecs > 0
+    ? `${Math.floor(avgPrepTimeSecs / 60)}m ${Math.round(avgPrepTimeSecs % 60)}s`
+    : 'Geen data';
+
   let busyLevel = '🟢 Rustig (~3 min)';
   let busyColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
   if (prepCount >= 7) {
@@ -330,6 +364,11 @@ export const KitchenScreen: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <div className={`text-xs px-3 py-1.5 rounded-xl font-bold border ${busyColor}`}>
             {busyLevel}
+          </div>
+
+          <div className="text-xs px-3 py-1.5 rounded-xl font-bold border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5" />
+            <span>Gem. Bereiding: <span className="font-mono font-black">{formattedAvgPrepTime}</span></span>
           </div>
 
           <button
@@ -864,6 +903,17 @@ export const KitchenScreen: React.FC = () => {
               const isReady = isOrderReady(order.status);
               const currentMeta = getStatusMeta(order.status);
 
+              const targetPrepSecs = getEstimatedPrepTime(order);
+              const elapsedSecs = Math.floor((now - (order.timestamp || now)) / 1000);
+              const isOvertime = !isReady && elapsedSecs > targetPrepSecs;
+              const ratio = elapsedSecs / targetPrepSecs;
+
+              const formatSecs = (secs: number) => {
+                const m = Math.floor(secs / 60);
+                const s = Math.round(secs % 60);
+                return `${m}m ${s}s`;
+              };
+
               const totalItems = order.items.reduce((s, it) => s + it.qty, 0);
               const doneItems = order.items.filter(it => it.done || it.stage === 'klaar').reduce((s, it) => s + it.qty, 0);
               const inPrepItems = order.items.filter(it => it.stage === 'bereiden').reduce((s, it) => s + it.qty, 0);
@@ -873,8 +923,9 @@ export const KitchenScreen: React.FC = () => {
 
               let timerBadge = 'bg-slate-800 text-slate-300 border-slate-700';
               if (!isReady) {
-                if (elapsedMins >= 10) timerBadge = 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse font-bold';
-                else if (elapsedMins >= 5) timerBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold';
+                if (isOvertime) timerBadge = 'bg-rose-500/25 text-rose-300 border-rose-500/50 animate-pulse font-black';
+                else if (ratio > 0.8) timerBadge = 'bg-amber-500/20 text-amber-300 border-amber-500/45 font-bold';
+                else timerBadge = 'bg-slate-800 text-slate-300 border-slate-700';
               } else {
                 timerBadge = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold';
               }
@@ -981,6 +1032,52 @@ export const KitchenScreen: React.FC = () => {
                         </button>
                       </div>
                     </div>
+
+                    {/* Time prioritization and target indicator */}
+                    {!isReady && (
+                      <div className="mb-3 p-2 rounded-xl bg-slate-950/80 border border-slate-850/50 space-y-1.5 text-[11px]">
+                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-500" />
+                            <span>Richttijd: <strong className="text-slate-300">{formatSecs(targetPrepSecs)}</strong></span>
+                          </span>
+                          <span className={`font-mono font-black ${
+                            isOvertime ? 'text-rose-400 animate-pulse' : ratio > 0.8 ? 'text-amber-400' : 'text-emerald-400'
+                          }`}>
+                            {formatSecs(elapsedSecs)} / {formatSecs(targetPrepSecs)}
+                          </span>
+                        </div>
+                        
+                        {/* Preparation gauge/progress bar */}
+                        <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              isOvertime 
+                                ? 'bg-rose-500' 
+                                : ratio > 0.8 
+                                ? 'bg-amber-400' 
+                                : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+                          />
+                        </div>
+
+                        {/* Warning or status text */}
+                        <div className="flex justify-between items-center text-[9px] uppercase tracking-wider font-bold">
+                          <span className="text-slate-500">Prioriteit:</span>
+                          {isOvertime ? (
+                            <span className="text-rose-400 flex items-center gap-1 animate-pulse">
+                              <AlertTriangle className="w-3 h-3 text-rose-400" />
+                              <span>OVERTIJD (+{formatSecs(elapsedSecs - targetPrepSecs)})</span>
+                            </span>
+                          ) : ratio > 0.8 ? (
+                            <span className="text-amber-400">⏳ BIJNA RICHTTIJD</span>
+                          ) : (
+                            <span className="text-emerald-400">🟢 BINNEN RICHTTIJD</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Status Selector Bar (Chefs can pick ANY overall status) */}
                     <div className="mb-3 bg-slate-950/80 p-2 rounded-xl border border-slate-800">
