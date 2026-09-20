@@ -397,12 +397,12 @@ class SoundEffects {
    * Announces: "Bestelling <nummer> voor <tafel of persoon> is gereed om af te halen!"
    * Never announces delivery orders.
    */
-  public speakOrder(orderNo: number | string, identifier?: string, orderType?: string) {
-    // Deduplication check: ignore if called within 5 seconds for the same order number
+  public speakOrder(orderNo: number | string, identifier?: string, orderType?: string, force: boolean = false) {
+    // Deduplication check: ignore if called within 1.5 seconds for the same order number unless forced
     const nowTime = Date.now();
     const lastTime = this.lastAnnouncedOrders.get(orderNo);
-    if (lastTime && nowTime - lastTime < 5000) {
-      console.log(`Deduplicated duplicate speakOrder call for order #${orderNo}`);
+    if (!force && lastTime && nowTime - lastTime < 1500) {
+      console.log(`Deduplicated rapid speakOrder call for order #${orderNo}`);
       return;
     }
     this.lastAnnouncedOrders.set(orderNo, nowTime);
@@ -413,6 +413,7 @@ class SoundEffects {
     }
 
     // 2. Play 2-tone airport/fastfood chime first
+    this.unlock();
     this.bell();
     if (!this.isEnabled) return;
 
@@ -457,12 +458,12 @@ class SoundEffects {
     // 5. Execute natural human voice after chime
     setTimeout(() => {
       this.playSpeech(textToSpeak, orderNo, target);
-    }, 450);
+    }, 400);
   }
 
   public testSpeech(sampleOrderNo: number | string = 1001, sampleIdentifier: string = 'Tafel 4') {
     this.unlock();
-    this.speakOrder(sampleOrderNo, sampleIdentifier, 'dine_in');
+    this.speakOrder(sampleOrderNo, sampleIdentifier, 'dine_in', true);
   }
 
   /**
@@ -495,10 +496,24 @@ class SoundEffects {
     this.isPlayingSpeech = true;
 
     let hasCompleted = false;
-    const onComplete = (success: boolean) => {
+    const onComplete = (success: boolean, isAutoplayBlocked: boolean = false) => {
       if (hasCompleted) return;
       hasCompleted = true;
       clearTimeout(queueWatchdog);
+
+      if (isAutoplayBlocked) {
+        // AUTOPLAY BLOCKED: Do NOT remove the item from queue!
+        // Keep it ready for when the user clicks anywhere on the screen.
+        console.warn("Autoplay blocked. Keeping item in queue until user interaction.");
+        this.isUnlocked = false;
+        this.isPlayingSpeech = false;
+        this.updateDiag({
+          lastStatus: 'error',
+          lastMessage: 'Klik op het scherm om omroepen te activeren!'
+        });
+        return;
+      }
+
       // Remove the processed item
       this.speechQueue.shift();
       this.isPlayingSpeech = false;
@@ -524,39 +539,39 @@ class SoundEffects {
         break;
 
       case 'custom_url':
-        this.playCustomUrlTts(nextItem.text, nextItem.orderNo, nextItem.target, (success) => {
-          onComplete(success);
+        this.playCustomUrlTts(nextItem.text, nextItem.orderNo, nextItem.target, (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         });
         break;
 
       case 'server_lotte':
-        this.playServerTts(nextItem.text, 'Lotte', (success) => {
-          onComplete(success);
+        this.playServerTts(nextItem.text, 'Lotte', (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         }, nextItem.orderNo, nextItem.target);
         break;
 
       case 'server_ruben':
-        this.playServerTts(nextItem.text, 'Ruben', (success) => {
-          onComplete(success);
+        this.playServerTts(nextItem.text, 'Ruben', (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         }, nextItem.orderNo, nextItem.target);
         break;
 
       case 'google_nl':
-        this.playServerTts(nextItem.text, 'google', (success) => {
-          onComplete(success);
+        this.playServerTts(nextItem.text, 'google', (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         }, nextItem.orderNo, nextItem.target);
         break;
 
       case 'native':
-        this.playNativeSpeechSynthesis(nextItem.text, false, (success) => {
-          onComplete(success);
+        this.playNativeSpeechSynthesis(nextItem.text, false, (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         });
         break;
 
       case 'auto':
       default:
-        this.playAutoTtsWithFallbacks(nextItem.text, nextItem.orderNo, nextItem.target, (success) => {
-          onComplete(success);
+        this.playAutoTtsWithFallbacks(nextItem.text, nextItem.orderNo, nextItem.target, (success, isAutoplayBlocked) => {
+          onComplete(success, isAutoplayBlocked);
         });
         break;
     }
@@ -572,7 +587,7 @@ class SoundEffects {
     text: string, 
     orderNo: number | string, 
     target: string, 
-    callback?: (success: boolean) => void
+    callback?: (success: boolean, isAutoplayBlocked?: boolean) => void
   ) {
     const isStaticStatic = typeof window !== 'undefined' && (
       window.location.hostname.endsWith('.github.io') ||
@@ -584,14 +599,22 @@ class SoundEffects {
       this.updateDiag({ activeEngine: 'auto (Ruben NL - Statisch)', lastStatus: 'playing' });
       
       // Op een statische host (zoals GitHub Pages) proberen we eerst Ruben, dan Lotte, dan Google NL, dan Native, dan Chime.
-      this.playServerTts(text, 'Ruben', (rubenSuccess) => {
+      this.playServerTts(text, 'Ruben', (rubenSuccess, isBlocked) => {
+        if (isBlocked) {
+          if (callback) callback(false, true);
+          return;
+        }
         if (rubenSuccess) {
           this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
           if (callback) callback(true);
           return;
         }
 
-        this.playServerTts(text, 'Lotte', (lotteSuccess) => {
+        this.playServerTts(text, 'Lotte', (lotteSuccess, isBlockedLotte) => {
+          if (isBlockedLotte) {
+            if (callback) callback(false, true);
+            return;
+          }
           if (lotteSuccess) {
             this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
             if (callback) callback(true);
@@ -599,7 +622,11 @@ class SoundEffects {
           }
 
           // Google Translate TTS direct online audio stream
-          this.playServerTts(text, 'google', (googleSuccess) => {
+          this.playServerTts(text, 'google', (googleSuccess, isBlockedGoogle) => {
+            if (isBlockedGoogle) {
+              if (callback) callback(false, true);
+              return;
+            }
             if (googleSuccess) {
               this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
               if (callback) callback(true);
@@ -607,7 +634,11 @@ class SoundEffects {
             }
 
             // Browser-eigen stem (SpeechSynthesis)
-            this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+            this.playNativeSpeechSynthesis(text, false, (nativeSuccess, isBlockedNative) => {
+              if (isBlockedNative) {
+                if (callback) callback(false, true);
+                return;
+              }
               if (nativeSuccess) {
                 this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
                 if (callback) callback(true);
@@ -629,7 +660,11 @@ class SoundEffects {
     this.updateDiag({ activeEngine: 'auto (Ruben NL)', lastStatus: 'playing' });
 
     // Step 1: Same-Origin Server TTS Ruben
-    this.playServerTts(text, 'Ruben', (success) => {
+    this.playServerTts(text, 'Ruben', (success, isBlocked) => {
+      if (isBlocked) {
+        if (callback) callback(false, true);
+        return;
+      }
       if (success) {
         this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Ruben' });
         if (callback) callback(true);
@@ -637,7 +672,11 @@ class SoundEffects {
       }
 
       // Step 2: Same-Origin Server TTS Lotte
-      this.playServerTts(text, 'Lotte', (lotteSuccess) => {
+      this.playServerTts(text, 'Lotte', (lotteSuccess, isBlockedLotte) => {
+        if (isBlockedLotte) {
+          if (callback) callback(false, true);
+          return;
+        }
         if (lotteSuccess) {
           this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Lotte' });
           if (callback) callback(true);
@@ -645,7 +684,11 @@ class SoundEffects {
         }
 
         // Step 3: Server TTS Google NL
-        this.playServerTts(text, 'google', (googleSuccess) => {
+        this.playServerTts(text, 'google', (googleSuccess, isBlockedGoogle) => {
+          if (isBlockedGoogle) {
+            if (callback) callback(false, true);
+            return;
+          }
           if (googleSuccess) {
             this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
             if (callback) callback(true);
@@ -653,7 +696,11 @@ class SoundEffects {
           }
 
           // Step 4: Browser Native Speech
-          this.playNativeSpeechSynthesis(text, false, (nativeSuccess) => {
+          this.playNativeSpeechSynthesis(text, false, (nativeSuccess, isBlockedNative) => {
+            if (isBlockedNative) {
+              if (callback) callback(false, true);
+              return;
+            }
             if (nativeSuccess) {
               this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
               if (callback) callback(true);
@@ -675,7 +722,7 @@ class SoundEffects {
   public playServerTts(
     text: string, 
     voiceName: 'Ruben' | 'Lotte' | 'google' | string = 'Ruben', 
-    callback?: (success: boolean) => void,
+    callback?: (success: boolean, isAutoplayBlocked?: boolean) => void,
     orderNo: number | string = 1001,
     target: string = 'Tafel 4'
   ) {
@@ -686,13 +733,14 @@ class SoundEffects {
       }
 
       const encoded = encodeURIComponent(text);
+      const cacheBuster = Date.now();
       
       // Als de browser geen MP3 kan afspelen (Opera op Linux), forceren we WAV codec via VoiceRSS!
       let url = '';
       if (!dynamicMp3Supported) {
-        url = `/api/tts?voice=voicerss_wav&codec=WAV&text=${encoded}`;
+        url = `/api/tts?voice=voicerss_wav&codec=WAV&text=${encoded}&_t=${cacheBuster}`;
       } else {
-        url = `/api/tts?voice=${voiceName}&text=${encoded}`;
+        url = `/api/tts?voice=${voiceName}&text=${encoded}&_t=${cacheBuster}`;
       }
 
       // DYNAMISCHE DETECTIE:
@@ -721,14 +769,14 @@ class SoundEffects {
       this.activeAudioElement = audio;
 
       let finished = false;
-      const done = (status: boolean) => {
+      const done = (status: boolean, isAutoplayBlocked: boolean = false) => {
         if (finished) return;
         finished = true;
         clearTimeout(watchdog);
         if (this.activeAudioElement === audio) {
           this.activeAudioElement = null;
         }
-        if (callback) callback(status);
+        if (callback) callback(status, isAutoplayBlocked);
       };
 
       const watchdog = setTimeout(() => {
@@ -772,11 +820,17 @@ class SoundEffects {
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
-        playPromise.catch((err) => {
+        playPromise.catch((err: any) => {
           console.warn('Audio play rejection:', err);
+          const isNotAllowed = err && (
+            err.name === 'NotAllowedError' || 
+            String(err).includes('interact') || 
+            String(err).includes('allowed')
+          );
+          
           this.isUnlocked = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
-          done(false);
+          done(false, isNotAllowed);
         });
       }
     } catch (err) {
@@ -790,11 +844,16 @@ class SoundEffects {
    * Replaces {text}, {orderNo}, {target} in custom URL string.
    * Proxies through the online server backend to guarantee Linux Opera & CORS compliance!
    */
-  public playCustomUrlTts(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4', callback?: (success: boolean) => void) {
+  public playCustomUrlTts(
+    text: string, 
+    orderNo: number | string = 1001, 
+    target: string = 'Tafel 4', 
+    callback?: (success: boolean, isAutoplayBlocked?: boolean) => void
+  ) {
     const rawUrl = localStorage.getItem('wd_custom_tts_url') || '';
     if (!rawUrl) {
-      this.updateDiag({ lastStatus: 'error', lastMessage: 'Geen Custom TTS URL ingesteld' });
-      if (callback) callback(false);
+      this.updateDiag({ lastStatus: 'error', lastMessage: 'Geen Custom TTS URL ingesteld, schakelt over naar standaard stem...' });
+      this.playAutoTtsWithFallbacks(text, orderNo, target, callback);
       return;
     }
 
@@ -848,12 +907,12 @@ class SoundEffects {
       };
 
       let finished = false;
-      const done = (status: boolean) => {
+      const done = (status: boolean, isAutoplayBlocked: boolean = false) => {
         if (finished) return;
         finished = true;
         clearTimeout(watchdog);
         if (this.activeAudioElement === audio) this.activeAudioElement = null;
-        if (callback) callback(status);
+        if (callback) callback(status, isAutoplayBlocked);
       };
 
       const watchdog = setTimeout(() => {
@@ -886,26 +945,25 @@ class SoundEffects {
           return;
         }
 
-        if (isStaticStatic) {
-          console.warn("Custom TTS failed on Static Host (GitHub Pages). Falling back to native speech synthesis!");
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom URL mislukt op GitHub Pages. Schakelt over naar browserstem...' });
-          clearTimeout(watchdog);
-          this.playNativeSpeechSynthesis(text, false, callback);
-          return;
-        }
-
-        this.updateDiag({ lastStatus: 'error', lastMessage: 'Custom TTS mislukt' });
-        done(false);
+        console.warn("Custom TTS failed, falling back to auto TTS cascade!");
+        clearTimeout(watchdog);
+        this.playAutoTtsWithFallbacks(text, orderNo, target, callback);
       };
 
       const p = audio.play();
       if (p !== undefined) {
-        p.catch((err) => {
+        p.catch((err: any) => {
           console.warn('Custom TTS play rejection:', err);
+          const isNotAllowed = err && (
+            err.name === 'NotAllowedError' || 
+            String(err).includes('interact') || 
+            String(err).includes('allowed')
+          );
+
           this.isUnlocked = false;
           this.isPlayingSpeech = false;
-          this.updateDiag({ lastStatus: 'error', lastMessage: `Autoplay geblokkeerd op Custom URL: ${err.message}` });
-          clearTimeout(watchdog);
+          this.updateDiag({ lastStatus: 'error', lastMessage: `Autoplay geblokkeerd op Custom URL` });
+          done(false, isNotAllowed);
         });
       }
     } catch (err) {
@@ -917,7 +975,11 @@ class SoundEffects {
   /**
    * Native browser SpeechSynthesis
    */
-  public playNativeSpeechSynthesis(text: string, fallbackToAuto: boolean = true, callback?: (success: boolean) => void) {
+  public playNativeSpeechSynthesis(
+    text: string, 
+    fallbackToAuto: boolean = true, 
+    callback?: (success: boolean, isAutoplayBlocked?: boolean) => void
+  ) {
     try {
       if (!('speechSynthesis' in window)) {
         if (callback) callback(false);
@@ -972,12 +1034,12 @@ class SoundEffects {
       this.activeUtterance = utterance;
 
       let hasFinished = false;
-      const done = (status: boolean) => {
+      const done = (status: boolean, isAutoplayBlocked: boolean = false) => {
         if (hasFinished) return;
         hasFinished = true;
         clearTimeout(watchdog);
         this.activeUtterance = null;
-        if (callback) callback(status);
+        if (callback) callback(status, isAutoplayBlocked);
       };
 
       const watchdog = setTimeout(() => {
@@ -1008,7 +1070,7 @@ class SoundEffects {
           this.isUnlocked = false;
           this.isPlayingSpeech = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
-          clearTimeout(watchdog);
+          done(false, true);
         } else {
           done(false);
         }
@@ -1025,7 +1087,7 @@ class SoundEffects {
           this.isUnlocked = false;
           this.isPlayingSpeech = false;
           this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
-          clearTimeout(watchdog);
+          done(false, true);
         }
       }, 60);
     } catch {
