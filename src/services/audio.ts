@@ -629,9 +629,9 @@ class SoundEffects {
       );
 
       // On static hosts (GitHub Pages) without /api backend:
-      // Use HTML5 <audio> tag directly (HTML media tags are exempt from CORS fetch policy!)
+      // Use client=gtx which is open and works in audio elements
       if (isStaticStatic) {
-        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
+        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=gtx&q=${encoded}`;
         const audio = new Audio(googleUrl);
         audio.volume = 1.0;
         (audio as any).referrerPolicy = "no-referrer";
@@ -960,35 +960,31 @@ class SoundEffects {
         this.cachedVoices = window.speechSynthesis.getVoices() || [];
       }
 
-      if (this.cachedVoices.length === 0) {
-        console.warn("Geen native spraakstemmen beschikbaar op dit systeem/browser (Linux/Opera). Schakelt over.");
-        if (callback) callback(false);
-        return;
-      }
-
       const selectedVoiceURI = localStorage.getItem('wd_tts_voice');
       let chosenVoice: SpeechSynthesisVoice | undefined;
 
-      if (selectedVoiceURI) {
-        chosenVoice = this.cachedVoices.find(v => v.voiceURI === selectedVoiceURI);
-      }
+      if (this.cachedVoices.length > 0) {
+        if (selectedVoiceURI) {
+          chosenVoice = this.cachedVoices.find(v => v.voiceURI === selectedVoiceURI);
+        }
 
-      if (!chosenVoice) {
-        chosenVoice = this.cachedVoices.find(v => v.lang.toLowerCase().startsWith('nl'));
-      }
-      if (!chosenVoice) {
-        chosenVoice = this.cachedVoices.find(v => 
-          v.name.toLowerCase().includes('dutch') || 
-          v.name.toLowerCase().includes('nederlands') || 
-          v.name.toLowerCase().includes('flemish')
-        );
-      }
-      if (!chosenVoice && this.cachedVoices.length > 0) {
-        chosenVoice = this.cachedVoices.find(v => v.default) || this.cachedVoices[0];
-      }
+        if (!chosenVoice) {
+          chosenVoice = this.cachedVoices.find(v => v.lang.toLowerCase().startsWith('nl'));
+        }
+        if (!chosenVoice) {
+          chosenVoice = this.cachedVoices.find(v => 
+            v.name.toLowerCase().includes('dutch') || 
+            v.name.toLowerCase().includes('nederlands') || 
+            v.name.toLowerCase().includes('flemish')
+          );
+        }
+        if (!chosenVoice && this.cachedVoices.length > 0) {
+          chosenVoice = this.cachedVoices.find(v => v.default) || this.cachedVoices[0];
+        }
 
-      if (chosenVoice) {
-        utterance.voice = chosenVoice;
+        if (chosenVoice) {
+          utterance.voice = chosenVoice;
+        }
       }
 
       this.activeUtterance = utterance;
