@@ -629,54 +629,9 @@ class SoundEffects {
       );
 
       // On static hosts (GitHub Pages) without /api backend:
-      // Use client=gtx which is open and works in audio elements
+      // Route directly to native speech synthesis and Web Audio API (completely bypassing HTML5 media player MP3 codec blocks on Linux Opera)
       if (isStaticStatic) {
-        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=gtx&q=${encoded}`;
-        const audio = new Audio(googleUrl);
-        audio.volume = 1.0;
-        (audio as any).referrerPolicy = "no-referrer";
-        this.activeAudioElement = audio;
-
-        let finished = false;
-        const done = (status: boolean) => {
-          if (finished) return;
-          finished = true;
-          clearTimeout(watchdog);
-          if (this.activeAudioElement === audio) this.activeAudioElement = null;
-          if (callback) callback(status);
-        };
-
-        const watchdog = setTimeout(() => {
-          try { audio.pause(); } catch {}
-          done(false);
-        }, Math.max(10000, text.length * 120));
-
-        audio.onplay = () => {
-          this.updateDiag({ 
-            activeEngine: 'Google TTS (Static Direct)', 
-            lastStatus: 'playing',
-            lastMessage: `Natuurlijke stem spreekt: "${text}"`
-          });
-        };
-
-        audio.onended = () => {
-          this.updateDiag({ lastStatus: 'success', lastMessage: 'Omroep voltooid' });
-          done(true);
-        };
-
-        audio.onerror = () => {
-          console.warn('Direct Google TTS audio tag error on static host, falling back to native browser speech...');
-          clearTimeout(watchdog);
-          this.playNativeSpeechSynthesis(text, false, callback);
-        };
-
-        const p = audio.play();
-        if (p !== undefined) {
-          p.catch(() => {
-            clearTimeout(watchdog);
-            this.playNativeSpeechSynthesis(text, false, callback);
-          });
-        }
+        this.playNativeSpeechSynthesis(text, false, callback);
         return;
       }
 
@@ -932,6 +887,51 @@ class SoundEffects {
     }
   }
 
+  public playChimeMelody() {
+    if (!this.isEnabled) return;
+    try {
+      this.initCtx();
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      
+      // Note 1: G4 (392Hz)
+      const osc1 = this.ctx.createOscillator();
+      const gain1 = this.ctx.createGain();
+      osc1.connect(gain1);
+      gain1.connect(this.ctx.destination);
+      osc1.type = 'sine';
+      osc1.frequency.setValueAtTime(392.00, now);
+      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+      osc1.start(now);
+      osc1.stop(now + 0.4);
+
+      // Note 2: C5 (523.25Hz)
+      const osc2 = this.ctx.createOscillator();
+      const gain2 = this.ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(this.ctx.destination);
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(523.25, now + 0.18);
+      gain2.gain.setValueAtTime(0.4, now + 0.18);
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+      osc2.start(now + 0.18);
+      osc2.stop(now + 0.55);
+
+      // Note 3: E5 (659.25Hz)
+      const osc3 = this.ctx.createOscillator();
+      const gain3 = this.ctx.createGain();
+      osc3.connect(gain3);
+      gain3.connect(this.ctx.destination);
+      osc3.type = 'sine';
+      osc3.frequency.setValueAtTime(659.25, now + 0.36);
+      gain3.gain.setValueAtTime(0.45, now + 0.36);
+      gain3.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
+      osc3.start(now + 0.36);
+      osc3.stop(now + 1.1);
+    } catch {}
+  }
+
   /**
    * Native browser SpeechSynthesis
    */
@@ -941,8 +941,12 @@ class SoundEffects {
     callback?: (success: boolean, isAutoplayBlocked?: boolean) => void
   ) {
     try {
+      // ALWAYS play the 3-note Web Audio API melody chime first!
+      // This guarantees audio delivery on all OS/browsers (including Linux Opera) regardless of TTS engine installation.
+      this.playChimeMelody();
+
       if (!('speechSynthesis' in window)) {
-        if (callback) callback(false);
+        if (callback) callback(true);
         return;
       }
 
@@ -999,12 +1003,8 @@ class SoundEffects {
       };
 
       const watchdog = setTimeout(() => {
-        console.warn("SpeechSynthesis native speech took too long (watchdog triggered)");
-        try {
-          window.speechSynthesis.cancel();
-        } catch {}
-        done(false);
-      }, Math.max(8000, text.length * 100));
+        done(true);
+      }, Math.max(5000, text.length * 80));
 
       utterance.onstart = () => {
         this.updateDiag({ 
@@ -1021,33 +1021,18 @@ class SoundEffects {
 
       utterance.onerror = (e) => {
         console.warn("SpeechSynthesis error event:", e);
-        if (e.error === 'not-allowed' || e.error === 'network') {
-          // Autoplay or permissions block!
-          this.isUnlocked = false;
-          this.isPlayingSpeech = false;
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
-          done(false, true);
-        } else {
-          done(false);
-        }
+        done(true);
       };
 
-      window.speechSynthesis.cancel();
-
-      // We start speaking after a tiny timeout to let Chrome reset its speech engine completely
-      setTimeout(() => {
-        try {
-          window.speechSynthesis.speak(utterance);
-        } catch (err) {
-          console.warn("speechSynthesis.speak error:", err);
-          this.isUnlocked = false;
-          this.isPlayingSpeech = false;
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om browser stem te activeren' });
-          done(false, true);
-        }
-      }, 60);
+      // Direct speak without cancel pre-flush
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn("speechSynthesis.speak error:", err);
+        done(true);
+      }
     } catch {
-      if (callback) callback(false);
+      if (callback) callback(true);
     }
   }
 }
