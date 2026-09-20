@@ -628,9 +628,55 @@ class SoundEffects {
         window.location.protocol === 'file:'
       );
 
-      // On static hosts (GitHub Pages) without /api backend, use native browser speech synthesis directly
+      // On static hosts (GitHub Pages) without /api backend:
+      // Use HTML5 <audio> tag directly (HTML media tags are exempt from CORS fetch policy!)
       if (isStaticStatic) {
-        this.playNativeSpeechSynthesis(text, false, callback);
+        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
+        const audio = new Audio(googleUrl);
+        audio.volume = 1.0;
+        (audio as any).referrerPolicy = "no-referrer";
+        this.activeAudioElement = audio;
+
+        let finished = false;
+        const done = (status: boolean) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(watchdog);
+          if (this.activeAudioElement === audio) this.activeAudioElement = null;
+          if (callback) callback(status);
+        };
+
+        const watchdog = setTimeout(() => {
+          try { audio.pause(); } catch {}
+          done(false);
+        }, Math.max(10000, text.length * 120));
+
+        audio.onplay = () => {
+          this.updateDiag({ 
+            activeEngine: 'Google TTS (Static Direct)', 
+            lastStatus: 'playing',
+            lastMessage: `Natuurlijke stem spreekt: "${text}"`
+          });
+        };
+
+        audio.onended = () => {
+          this.updateDiag({ lastStatus: 'success', lastMessage: 'Omroep voltooid' });
+          done(true);
+        };
+
+        audio.onerror = () => {
+          console.warn('Direct Google TTS audio tag error on static host, falling back to native browser speech...');
+          clearTimeout(watchdog);
+          this.playNativeSpeechSynthesis(text, false, callback);
+        };
+
+        const p = audio.play();
+        if (p !== undefined) {
+          p.catch(() => {
+            clearTimeout(watchdog);
+            this.playNativeSpeechSynthesis(text, false, callback);
+          });
+        }
         return;
       }
 
