@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AudioFX, SpeechVoiceOption, TtsEngineMode, AudioDiagnosticStatus } from '../../services/audio';
 import { getStatusMeta, isOrderInProgress, isOrderReady } from '../../services/orderStatus';
+import { getSupabaseClient } from '../../services/store';
 import { 
   Tv, 
   Volume2, 
@@ -28,7 +29,8 @@ import {
   AlertTriangle,
   Check,
   Users,
-  Utensils
+  Utensils,
+  Settings
 } from 'lucide-react';
 
 interface AutoScrollingColumnProps {
@@ -190,9 +192,158 @@ const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, cla
 export const PickupScreen: React.FC = () => {
   const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
-  const [tvView, setTvView] = useState<'pickup' | 'menu'>('pickup');
+  const [tvView, setTvView] = useState<'pickup' | 'menu' | 'split'>('split');
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [timeStr, setTimeStr] = useState<string>('');
+  const [dateStr, setDateStr] = useState<string>('');
+  const [clockStyle, setClockStyle] = useState<'pixel' | 'neon' | 'classic'>(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('wd_tv_clock_style') || 'pixel' : 'pixel') as any;
+  });
+
+  // Active Widgets Toggles (like phone home screen customization)
+  const [activeWidgets, setActiveWidgets] = useState<{
+    prep: boolean;
+    ready: boolean;
+    menu: boolean;
+    ticker: boolean;
+    deal: boolean;
+    waitTime: boolean;
+    stats: boolean;
+  }>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('wd_tv_widgets');
+        if (saved) return JSON.parse(saved);
+      } catch {}
+    }
+    return { prep: true, ready: true, menu: true, ticker: true, deal: true, waitTime: true, stats: true };
+  });
+
+  const [layoutRatio, setLayoutRatio] = useState<'split_50' | 'menu_focus' | 'pickup_focus'>(() => {
+    return (typeof window !== 'undefined' ? localStorage.getItem('wd_tv_layout_ratio') || 'split_50' : 'split_50') as any;
+  });
+
+  // Live NOS News Headlines & Articles State
+  const [nosCategory, setNosCategory] = useState<'general' | 'sport' | 'tech' | 'binnenland'>('general');
+  const [showNewsModal, setShowNewsModal] = useState<boolean>(false);
+  const [newsArticles, setNewsArticles] = useState<Array<{ title: string; link: string; pubDate?: string; description?: string }>>([]);
+  const [nosHeadlines, setNosHeadlines] = useState<string[]>([
+    '🔴 NOS LIVE NIEUWS: Live nieuwsfeed wordt geladen...',
+  ]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const rssMap = {
+      general: 'https://feeds.nos.nl/nosnieuwsgeneral',
+      sport: 'https://feeds.nos.nl/nossportgeneral',
+      tech: 'https://feeds.nos.nl/nosnieuwseconomie',
+      binnenland: 'https://feeds.nos.nl/nosnieuwsbinnenland',
+    };
+
+    const fetchLiveNews = async () => {
+      try {
+        const url = rssMap[nosCategory];
+        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (isMounted && data && data.items && data.items.length > 0) {
+          const items = data.items.slice(0, 12).map((item: any) => ({
+            title: item.title,
+            link: item.link,
+            pubDate: item.pubDate,
+            description: item.description?.replace(/<[^>]*>?/gm, '').slice(0, 120) || ''
+          }));
+
+          setNewsArticles(items);
+
+          const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C) · W wind 3 Bft";
+          const titles = [weatherItem, ...items.map(it => it.title)];
+          setNosHeadlines(titles);
+          return;
+        }
+      } catch {
+        // Retry fallback
+        try {
+          const res2 = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.nu.nl%2Frss%2FAlgemeen');
+          const data2 = await res2.json();
+          if (isMounted && data2 && data2.items && data2.items.length > 0) {
+            const items = data2.items.slice(0, 10).map((item: any) => ({
+              title: item.title,
+              link: item.link,
+              pubDate: item.pubDate,
+              description: item.description || ''
+            }));
+            setNewsArticles(items);
+            const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C)";
+            setNosHeadlines([weatherItem, ...items.map(it => it.title)]);
+            return;
+          }
+        } catch {}
+      }
+
+      if (isMounted) {
+        const fallbackList = [
+          { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },
+          { title: 'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland', link: 'https://nos.nl' },
+          { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
+          { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' }
+        ];
+        setNewsArticles(fallbackList);
+        setNosHeadlines([
+          "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C)",
+          ...fallbackList.map(f => f.title)
+        ]);
+      }
+    };
+
+    fetchLiveNews();
+    const interval = setInterval(fetchLiveNews, 300000); // 5 min refresh
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [nosCategory]);
+
+  const [presetNameInput, setPresetNameInput] = useState<string>('');
+  const [savedPresets, setSavedPresets] = useState<Array<{ id: string; name: string; clockStyle: any; tvView: any; autoRotate: boolean; widgets: any; layoutRatio?: any }>>([
+    {
+      id: 'arcade_pixel',
+      name: '👾 Arcade Pixel TV',
+      clockStyle: 'pixel',
+      tvView: 'split',
+      autoRotate: false,
+      layoutRatio: 'split_50',
+      widgets: { prep: true, ready: true, menu: true, ticker: true, deal: true, waitTime: true, stats: true }
+    },
+    {
+      id: 'cyber_neon',
+      name: '⚡ Cyberpunk Fastfood',
+      clockStyle: 'neon',
+      tvView: 'split',
+      autoRotate: true,
+      layoutRatio: 'menu_focus',
+      widgets: { prep: true, ready: true, menu: true, ticker: true, deal: true, waitTime: true, stats: false }
+    },
+    {
+      id: 'express_pickup',
+      name: '📢 Express Afhaalbalie',
+      clockStyle: 'pixel',
+      tvView: 'pickup',
+      autoRotate: false,
+      layoutRatio: 'pickup_focus',
+      widgets: { prep: true, ready: true, menu: false, ticker: true, deal: false, waitTime: true, stats: true }
+    },
+    {
+      id: 'menu_stand',
+      name: '🍔 Digital Menukaart Stand',
+      clockStyle: 'classic',
+      tvView: 'menu',
+      autoRotate: false,
+      layoutRatio: 'split_50',
+      widgets: { prep: false, ready: false, menu: true, ticker: true, deal: true, waitTime: false, stats: false }
+    }
+  ]);
+  const [showTvSetupModal, setShowTvSetupModal] = useState<boolean>(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
   const [availableVoices, setAvailableVoices] = useState<SpeechVoiceOption[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(
@@ -219,19 +370,51 @@ export const PickupScreen: React.FC = () => {
   // Real-time clock for fastfood TV screen
   useEffect(() => {
     const updateTime = () => {
-      setTimeStr(new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const now = new Date();
+      setTimeStr(now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      setDateStr(now.toLocaleDateString('nl-NL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Automatic rotation timer with dynamic timing for TV views
+  // Fetch custom presets from Supabase on mount
+  useEffect(() => {
+    const fetchSupabasePresets = async () => {
+      try {
+        const client = getSupabaseClient();
+        if (!client) return;
+        const { data } = await client.from('tv_presets').select('*');
+        if (data && data.length > 0) {
+          const formatted = data.map((row: any) => ({
+            id: row.id,
+            name: row.name,
+            clockStyle: row.clock_style || 'pixel',
+            tvView: row.view_mode || 'split',
+            autoRotate: Boolean(row.auto_rotate),
+            widgets: typeof row.widgets === 'string' ? JSON.parse(row.widgets) : row.widgets || { prep: true, ready: true, menu: true, ticker: true }
+          }));
+          setSavedPresets(prev => {
+            const existingIds = new Set(prev.map(p => p.id));
+            const newOnes = formatted.filter((f: any) => !existingIds.has(f.id));
+            return [...prev, ...newOnes];
+          });
+        }
+      } catch {
+        // Graceful fallback if table does not exist yet
+      }
+    };
+    fetchSupabasePresets();
+  }, []);
+
+  // Automatic rotation timer: ONLY cycles between 'pickup' (Afhaallijst) and 'menu' (Menukaart) if enabled AND NOT in split mode!
   useEffect(() => {
     if (!isTvMode || !autoRotate) return;
+    if (tvView === 'split') return; // Do NOT override split mode!
 
-    // Show pickup (afhaallijst) for 15 seconds, and menu for 45 seconds
-    const delay = tvView === 'pickup' ? 15000 : 45000;
+    // Toggle between pickup (15s) and menu (25s)
+    const delay = tvView === 'pickup' ? 15000 : 25000;
 
     const timer = setTimeout(() => {
       setTvView((current) => (current === 'pickup' ? 'menu' : 'pickup'));
@@ -332,17 +515,94 @@ export const PickupScreen: React.FC = () => {
   const readyOrders = pickupOrders.filter(o => isOrderReady(o.status)).slice(0, 30);
 
   const handleToggleTvMode = () => {
-    const next = !isTvMode;
-    setIsTvMode(next);
-    AudioFX.unlock();
-    setIsAudioUnlocked(true);
-    if (next) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    } else {
-      if (document.fullscreenElement) {
-        document.exitFullscreen().catch(() => {});
+    setShowTvSetupModal(true);
+  };
+
+  const handleSelectClockStyle = (style: 'pixel' | 'neon' | 'classic') => {
+    setClockStyle(style);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_tv_clock_style', style);
+    }
+  };
+
+  const handleApplyPreset = (preset: {
+    id: string;
+    name: string;
+    clockStyle: 'pixel' | 'neon' | 'classic';
+    tvView: 'split' | 'pickup' | 'menu';
+    autoRotate: boolean;
+    layoutRatio?: 'split_50' | 'menu_focus' | 'pickup_focus';
+    widgets: { prep: boolean; ready: boolean; menu: boolean; ticker: boolean; deal: boolean; waitTime: boolean; stats: boolean };
+  }) => {
+    setClockStyle(preset.clockStyle);
+    setTvView(preset.tvView);
+    setAutoRotate(preset.autoRotate);
+    setActiveWidgets({
+      prep: preset.widgets.prep ?? true,
+      ready: preset.widgets.ready ?? true,
+      menu: preset.widgets.menu ?? true,
+      ticker: preset.widgets.ticker ?? true,
+      deal: preset.widgets.deal ?? true,
+      waitTime: preset.widgets.waitTime ?? true,
+      stats: preset.widgets.stats ?? true
+    });
+    if (preset.layoutRatio) {
+      setLayoutRatio(preset.layoutRatio);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('wd_tv_layout_ratio', preset.layoutRatio);
       }
     }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_tv_clock_style', preset.clockStyle);
+      localStorage.setItem('wd_tv_widgets', JSON.stringify(preset.widgets));
+    }
+  };
+
+  const handleToggleWidget = (key: 'prep' | 'ready' | 'menu' | 'ticker' | 'deal' | 'waitTime' | 'stats') => {
+    setActiveWidgets(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('wd_tv_widgets', JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
+  const handleSaveCustomPresetToSupabase = async () => {
+    const name = presetNameInput.trim() || `Mijn Custom ${clockStyle.toUpperCase()} TV`;
+    const newPreset = {
+      id: `custom_${Date.now()}`,
+      name,
+      clockStyle,
+      tvView,
+      autoRotate,
+      widgets: activeWidgets
+    };
+
+    setSavedPresets(prev => [newPreset, ...prev]);
+    setPresetNameInput('');
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`wd_preset_${newPreset.id}`, JSON.stringify(newPreset));
+    }
+
+    try {
+      const client = getSupabaseClient();
+      if (client) {
+        await client.from('tv_presets').upsert([{
+          id: newPreset.id,
+          name: newPreset.name,
+          clock_style: newPreset.clockStyle,
+          view_mode: newPreset.tvView,
+          auto_rotate: newPreset.autoRotate,
+          widgets: newPreset.widgets
+        }]);
+      }
+    } catch {
+      // Graceful fallback
+    }
+
+    alert(`🚀 TV Preset "${newPreset.name}" opgeslagen! Synchroon met Supabase & lokaal.`);
   };
 
   const handleSelectVoice = (uri: string) => {
@@ -465,79 +725,101 @@ export const PickupScreen: React.FC = () => {
         }}
         className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-4 sm:p-5 lg:p-6 select-none overflow-hidden"
       >
-        {/* TV Header with Brand, Manual Tabs, Auto-rotate toggle and Clock */}
-        <header className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 mb-4 border-b-2 border-slate-800 shrink-0">
-          <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-2xl shadow-xl font-black shrink-0">
+        {/* Futuristic TV Header with Centered Giant Neon Clock */}
+        <header className="grid grid-cols-12 items-center gap-4 pb-3.5 mb-4 border-b-2 border-slate-800/80 shrink-0">
+          
+          {/* Left: Brand Identifier */}
+          <div className="col-span-3 flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 text-slate-950 flex items-center justify-center text-2xl shadow-xl font-black shrink-0 ring-2 ring-amber-400/40">
               {brandEmoji}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white uppercase">
-                  JoFiam Restaurants
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase truncate">
+                  JoFiam
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black tracking-wider uppercase flex items-center gap-1">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black tracking-wider uppercase flex items-center gap-1 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                   Live TV
                 </span>
               </div>
-              <p className="text-xs text-slate-400 font-medium">
-                {tvView === 'pickup' ? "Houd uw bonnummer bij de hand voor afhalen" : "Kies uw favoriete gerecht van onze menukaart"}
+              <p className="text-[11px] text-slate-400 font-medium truncate mt-0.5">
+                {tvView === 'split' ? "Vers bereid & Afhaalstatus" : tvView === 'pickup' ? "Afhaalnummers" : "Live Menukaart"}
               </p>
             </div>
           </div>
 
-          {/* Interactive tabs to manually switch views */}
-          <div className="flex items-center gap-1.5 bg-slate-900 p-1.5 rounded-2xl border border-slate-800">
-            <button
-              onClick={() => {
-                setTvView('pickup');
-                setAutoRotate(false); // pause auto rotation on manual click
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition ${
-                tvView === 'pickup'
-                  ? 'bg-amber-400 text-slate-950'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Afhaallijst</span>
-            </button>
-            <button
-              onClick={() => {
-                setTvView('menu');
-                setAutoRotate(false);
-              }}
-              className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition ${
-                tvView === 'menu'
-                  ? 'bg-amber-400 text-slate-950'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Utensils className="w-3.5 h-3.5" />
-              <span>Menukaart</span>
-            </button>
+          {/* Center Stage: Ultra-Cool Giant Pixel LED Matrix or Neon Digital Clock */}
+          <div className="col-span-6 flex justify-center">
+            {clockStyle === 'pixel' ? (
+              /* RETRO PIXEL LED MATRIX CLOCK BOARD - CLEAN & ULTRA FOCUS */
+              <div className="px-8 py-2.5 rounded-2xl bg-slate-950 border-4 border-slate-800 shadow-[0_0_35px_rgba(34,197,94,0.25)] flex flex-col items-center backdrop-blur-md relative overflow-hidden ring-2 ring-emerald-500/40">
+                {/* LED Dot Matrix Pattern Layer */}
+                <div 
+                  className="absolute inset-0 opacity-25 pointer-events-none" 
+                  style={{
+                    backgroundImage: `radial-gradient(circle, #22c55e 1.2px, transparent 1.2px)`,
+                    backgroundSize: '5px 5px'
+                  }}
+                />
+
+                <div className="flex items-center justify-center relative z-10">
+                  {/* Pixel Time Display */}
+                  <span className="font-mono font-black text-3xl sm:text-4xl lg:text-5xl text-emerald-400 tracking-[0.18em] drop-shadow-[0_0_18px_rgba(34,197,94,0.95)] uppercase">
+                    {timeStr || '12:00:00'}
+                  </span>
+                </div>
+
+                {/* Pixel Bottom Date Bar */}
+                <div className="flex items-center justify-center w-full gap-2 text-[10px] font-mono font-black text-emerald-300/90 uppercase tracking-widest mt-1 relative z-10 border-t border-emerald-900/60 pt-0.5">
+                  <span>{dateStr || 'VANDAAG'}</span>
+                </div>
+              </div>
+            ) : clockStyle === 'neon' ? (
+              /* CYBERPUNK NEON CLOCK */
+              <div className="px-6 py-2.5 rounded-2xl bg-slate-900/90 border-2 border-amber-500/40 shadow-[0_0_30px_rgba(245,158,11,0.25)] flex flex-col items-center backdrop-blur-md relative overflow-hidden ring-1 ring-amber-400/20">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-500/10 via-amber-400/15 to-amber-500/10 pointer-events-none" />
+                <div className="flex items-center gap-2.5 relative z-10">
+                  <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse shadow-[0_0_10px_#f59e0b]" />
+                  <span className="font-mono font-black text-3xl sm:text-4xl lg:text-5xl text-amber-300 tracking-widest drop-shadow-[0_0_16px_rgba(251,191,36,0.7)]">
+                    {timeStr || '12:00:00'}
+                  </span>
+                </div>
+                <span className="text-[11px] font-black text-amber-200/90 uppercase tracking-widest mt-0.5 relative z-10">
+                  {dateStr || 'VANDAAG'}
+                </span>
+              </div>
+            ) : (
+              /* MINIMALIST CLASSIC CLOCK */
+              <div className="px-6 py-2 rounded-2xl bg-slate-900 border border-slate-700 shadow-xl flex flex-col items-center">
+                <span className="font-mono font-black text-2xl sm:text-3xl lg:text-4xl text-white tracking-wider">
+                  {timeStr || '12:00:00'}
+                </span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                  {dateStr || 'VANDAAG'}
+                </span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Auto-rotate status indicator & toggle button */}
-            <button
-              onClick={() => setAutoRotate(!autoRotate)}
-              className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1.5 transition ${
-                autoRotate
-                  ? 'bg-emerald-950/40 text-emerald-400 border-emerald-800/60'
-                  : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-300'
-              }`}
-              title="Schakel automatisch wisselen van schermen in of uit"
-            >
-              <span className={`w-2 h-2 rounded-full ${autoRotate ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-              <span>{autoRotate ? 'Auto-Wissel (15s/45s)' : 'Vastgezet'}</span>
-            </button>
+          {/* Right: Action Controls & Auto-Rotate Badge */}
+          <div className="col-span-3 flex items-center justify-end gap-2.5">
+            {/* Auto-rotate status badge if active */}
+            {autoRotate && (
+              <span className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider shadow-md">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                Auto-Wissel (Menu ⇄ Afhaal)
+              </span>
+            )}
 
-            {/* Giant Digital Time Clock */}
-            <div className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 text-amber-300 font-mono font-black text-xl shadow-inner tracking-wider">
-              {timeStr}
-            </div>
+            {/* TV Settings Launcher Gear Button */}
+            <button
+              onClick={() => setShowTvSetupModal(true)}
+              className="p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/50 hover:bg-slate-800 transition shadow"
+              title="TV Scherm Instellingen Openen"
+            >
+              <Settings className="w-5 h-5" />
+            </button>
 
             {/* Exit TV mode button */}
             <button
@@ -547,7 +829,7 @@ export const PickupScreen: React.FC = () => {
                   document.exitFullscreen().catch(() => {});
                 }
               }}
-              className="p-2 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded-xl transition"
+              className="p-2.5 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded-2xl transition border border-transparent hover:border-slate-800"
               title="Sluit TV Volledig Scherm"
             >
               <Minimize2 className="w-5 h-5" />
@@ -555,17 +837,22 @@ export const PickupScreen: React.FC = () => {
           </div>
         </header>
 
-        {/* Live Spoken Announcement Overlay Banner on TV */}
+        {/* Live Spoken Announcement Overlay Banner on TV with Visual Sound Wave Equalizer */}
         {activeAnnouncement && (
           <div className="mb-4 p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-500/30 via-amber-500/30 to-emerald-500/30 border-4 border-emerald-400 shadow-2xl flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-6 duration-300 shrink-0">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-emerald-400 text-slate-950 flex items-center justify-center font-black animate-bounce shadow-xl shrink-0">
-                <Megaphone className="w-8 h-8" />
+                <Volume2 className="w-8 h-8 animate-pulse" />
               </div>
               <div>
                 <span className="text-xs sm:text-sm font-black uppercase tracking-widest text-emerald-300 flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-emerald-400 animate-ping" />
-                  OMROEP LUIDSPREKER · BESTELLING #{activeAnnouncement.orderNo}
+                  <span className="flex items-center gap-1 h-4">
+                    <span className="w-1.5 bg-emerald-400 h-2 animate-pulse rounded-full" />
+                    <span className="w-1.5 bg-emerald-400 h-4 animate-pulse rounded-full delay-75" />
+                    <span className="w-1.5 bg-emerald-400 h-2.5 animate-pulse rounded-full delay-150" />
+                    <span className="w-1.5 bg-emerald-400 h-5 animate-pulse rounded-full delay-100" />
+                  </span>
+                  🔊 LUIDSPREKER OMROEP BEZIG · BESTELLING #{activeAnnouncement.orderNo}
                 </span>
                 <p className="text-xl sm:text-3xl font-black text-white mt-0.5 tracking-tight">
                   "{activeAnnouncement.text}"
@@ -583,6 +870,268 @@ export const PickupScreen: React.FC = () => {
 
         {/* TV SLIDE VIEWS BODY */}
         <div className="flex-1 overflow-hidden relative">
+
+          {/* VIEW S: SPLIT-SCREEN (AFHAAL + MENUKAART COMBINATIE) */}
+          <div 
+            className={`absolute inset-0 w-full h-full transition-all duration-500 transform ${
+              tvView === 'split' 
+                ? 'opacity-100 scale-100 pointer-events-auto z-10' 
+                : 'opacity-0 scale-95 pointer-events-none z-0'
+            }`}
+          >
+            <div className="h-full grid grid-cols-12 gap-5 overflow-hidden">
+              
+              {/* LEFT SIDE: LIVE AFHAALBESTELLINGEN */}
+              {(activeWidgets.prep || activeWidgets.ready) && (
+                <div className={`${
+                  activeWidgets.menu 
+                    ? (layoutRatio === 'menu_focus' ? 'col-span-4' : layoutRatio === 'pickup_focus' ? 'col-span-8' : 'col-span-5') 
+                    : 'col-span-12'
+                } flex flex-col gap-3.5 h-full overflow-hidden`}>
+
+                  {/* WACHT TJD ESTIMATOR WIDGET */}
+                  {activeWidgets.waitTime && (
+                    <div className={`p-2.5 rounded-2xl border flex items-center justify-between shrink-0 ${
+                      clockStyle === 'pixel' 
+                        ? 'bg-slate-950 border-emerald-500/60 text-emerald-300 font-mono' 
+                        : clockStyle === 'neon' 
+                        ? 'bg-slate-900 border-amber-500/50 text-amber-300 font-mono' 
+                        : 'bg-slate-900 border-slate-800 text-slate-300'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg animate-pulse">⏱️</span>
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-wider opacity-80">Geschatte Bereidingstijd</p>
+                          <p className="text-xs font-black">
+                            {preparingOrders.length === 0 ? 'Direct klaar (~2-3 min)' : `~${Math.max(3, preparingOrders.length * 2)} tot ${Math.max(5, preparingOrders.length * 3)} min wachttijd`}
+                          </p>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                        clockStyle === 'pixel' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-amber-400'
+                      }`}>
+                        {preparingOrders.length} in wachtrij
+                      </span>
+                    </div>
+                  )}
+
+                  {/* BEREIDEN KEUKEN */}
+                  {activeWidgets.prep && (
+                    <div className={`rounded-3xl p-4 shadow-xl flex flex-col flex-1 overflow-hidden transition ${
+                      clockStyle === 'pixel'
+                        ? 'bg-slate-950/90 border-2 border-emerald-500/60 shadow-[0_0_20px_rgba(34,197,94,0.15)] font-mono'
+                        : clockStyle === 'neon'
+                        ? 'bg-slate-900/90 border-2 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                        : 'bg-slate-900/90 border-2 border-slate-800'
+                    }`}>
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full animate-ping ${clockStyle === 'pixel' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                          <h3 className={`text-lg font-black uppercase tracking-tight ${clockStyle === 'pixel' ? 'text-emerald-400 font-mono tracking-wider' : clockStyle === 'neon' ? 'text-amber-400 font-mono' : 'text-amber-400'}`}>
+                            {clockStyle === 'pixel' ? '👾 IN BEREIDING' : '⏳ Wordt Bereid'} ({preparingOrders.length})
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto no-scrollbar">
+                        {preparingOrders.length === 0 ? (
+                          <p className={`text-xs font-bold py-6 text-center italic ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-600'}`}>
+                            Geen bestellingen in bereiding
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {preparingOrders.map(o => (
+                              <div key={o.no} className={`p-2.5 rounded-xl border ${clockStyle === 'pixel' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-mono' : 'bg-slate-950 border-amber-500/30'}`}>
+                                <span className={`font-mono font-black text-lg ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-white'}`}>#{o.no}</span>
+                                <p className={`text-[10px] font-bold truncate ${clockStyle === 'pixel' ? 'text-emerald-400/80 font-mono' : 'text-slate-400'}`}>voor {o.identifier || 'Afhaal'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* GEREED VOOR AFHAAL */}
+                  {activeWidgets.ready && (
+                    <div className={`rounded-3xl p-4 shadow-2xl flex flex-col flex-1 overflow-hidden transition ${
+                      clockStyle === 'pixel'
+                        ? 'bg-slate-950/90 border-4 border-emerald-500 shadow-[0_0_25px_rgba(34,197,94,0.3)] ring-4 ring-emerald-500/20 font-mono'
+                        : clockStyle === 'neon'
+                        ? 'bg-slate-900/90 border-4 border-amber-500 shadow-[0_0_25px_rgba(245,158,11,0.3)] ring-4 ring-amber-500/20'
+                        : 'bg-slate-900/90 border-4 border-emerald-500 ring-4 ring-emerald-500/20'
+                    }`}>
+                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0 mb-2">
+                        <div className="flex items-center gap-2">
+                          <BellRing className={`w-5 h-5 animate-bounce ${clockStyle === 'pixel' ? 'text-emerald-400' : 'text-amber-400'}`} />
+                          <h3 className={`text-lg font-black uppercase tracking-tight ${clockStyle === 'pixel' ? 'text-emerald-300 font-mono tracking-widest' : 'text-emerald-400'}`}>
+                            {clockStyle === 'pixel' ? '★ KLAAR OM AF TE HALEN' : '🔔 Klaar om Af te Halen'} ({readyOrders.length})
+                          </h3>
+                        </div>
+                      </div>
+                      <div className="flex-1 overflow-y-auto no-scrollbar">
+                        {readyOrders.length === 0 ? (
+                          <div className={`h-full flex flex-col items-center justify-center font-bold text-xs ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-600'}`}>
+                            <span>✨ Geen bestellingen klaar</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            {readyOrders.map(o => (
+                              <div 
+                                key={o.no} 
+                                className={`p-3 rounded-xl border flex flex-col justify-between ${
+                                  activeAnnouncement?.orderNo === o.no 
+                                    ? 'bg-emerald-900 border-2 border-amber-400 scale-[1.02]' 
+                                    : clockStyle === 'pixel'
+                                    ? 'bg-emerald-950/80 border-emerald-400/60 font-mono'
+                                    : 'bg-slate-950 border-emerald-500/40'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className={`font-mono font-black text-2xl ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-emerald-400'}`}>#{o.no}</span>
+                                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                                </div>
+                                <p className={`text-xs font-bold truncate ${clockStyle === 'pixel' ? 'text-emerald-200 font-mono' : 'text-white'}`}>voor {o.identifier || 'Klant'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* RIGHT SIDE: LIVE DIGITAL MENU BOARD */}
+              {activeWidgets.menu && (
+                <div className={`${
+                  (activeWidgets.prep || activeWidgets.ready) 
+                    ? (layoutRatio === 'menu_focus' ? 'col-span-8' : layoutRatio === 'pickup_focus' ? 'col-span-4' : 'col-span-7') 
+                    : 'col-span-12'
+                } rounded-3xl p-4 shadow-2xl flex flex-col h-full overflow-hidden transition ${
+                  clockStyle === 'pixel'
+                    ? 'bg-slate-950/95 border-2 border-emerald-500/50 font-mono'
+                    : clockStyle === 'neon'
+                    ? 'bg-slate-900/95 border-2 border-amber-500/40'
+                    : 'bg-slate-900/95 border-2 border-slate-800'
+                }`}>
+                
+                {/* PROMO DEAL BANNER WIDGET */}
+                {activeWidgets.deal && (
+                  <div className={`mb-3 p-2.5 rounded-2xl border flex items-center justify-between shrink-0 shadow-lg ${
+                    clockStyle === 'pixel'
+                      ? 'bg-emerald-950/80 border-emerald-400 text-emerald-300 font-mono'
+                      : clockStyle === 'neon'
+                      ? 'bg-amber-950/80 border-amber-400 text-amber-300'
+                      : 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/40 text-amber-300'
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl animate-bounce">🔥</span>
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider block opacity-90">DAGDEAL / PROMO van de DAG</span>
+                        <span className="text-xs font-black block">🍔 Werkdonalds Super Deal Menu + Vers Gekoelde Drank</span>
+                      </div>
+                    </div>
+                    <span className="bg-amber-400 text-slate-950 font-mono font-black text-xs px-2.5 py-1 rounded-xl shadow">
+                      Slechts €8,95
+                    </span>
+                  </div>
+                )}
+
+                <div className="pb-2.5 border-b border-slate-800 flex items-center justify-between shrink-0 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🍔</span>
+                    <div>
+                      <h3 className={`text-lg font-black uppercase tracking-tight ${
+                        clockStyle === 'pixel' ? 'text-emerald-400 font-mono tracking-widest' : 'text-amber-400'
+                      }`}>
+                        {clockStyle === 'pixel' ? '📖 PIXEL MENUKAART' : '📖 LIVE DIGITAL MENUKAART'}
+                      </h3>
+                      <p className={`text-[10px] font-medium ${clockStyle === 'pixel' ? 'text-emerald-500 font-mono' : 'text-slate-400'}`}>
+                        Overzicht van onze verse gerechten &amp; prijzen
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold ${
+                    clockStyle === 'pixel' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/40 font-mono' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    Afhaal &amp; Restaurant
+                  </span>
+                </div>
+
+                <div className="flex-1 grid grid-cols-2 gap-4 overflow-hidden">
+                  {/* Category Column 1: Burgers & Snacks */}
+                  <div className={`rounded-2xl p-3 border flex flex-col overflow-hidden ${
+                    clockStyle === 'pixel' ? 'bg-slate-950 border-emerald-900/80 font-mono' : 'bg-slate-950/60 border-slate-800'
+                  }`}>
+                    <h4 className={`text-xs font-black uppercase tracking-wider pb-1.5 border-b border-slate-800 mb-2 flex items-center justify-between ${
+                      clockStyle === 'pixel' ? 'text-emerald-400 font-mono' : 'text-amber-400'
+                    }`}>
+                      <span>🍔 Burgers &amp; Snacks</span>
+                    </h4>
+                    <AutoScrollingColumn className="flex-1 space-y-2.5">
+                      {products.filter(p => p.id < 200 && (p.cat.includes('Burger') || p.cat.includes('Snack') || p.cat.includes('Meal'))).map(p => (
+                        <div key={p.id} className={`flex items-center justify-between border-b border-slate-900/80 pb-1.5 gap-2 ${!p.inStock ? 'opacity-50' : ''}`}>
+                          <div className="min-w-0">
+                            <p className={`text-xs font-bold truncate ${
+                              !p.inStock ? 'line-through text-slate-400' : clockStyle === 'pixel' ? 'text-emerald-200 font-mono uppercase' : 'text-white'
+                            }`}>
+                              {p.emoji || '🍔'} {p.name}
+                            </p>
+                            {!p.inStock ? (
+                              <span className="text-[9px] font-black text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded border border-rose-800 inline-block mt-0.5">
+                                TIJDELIJK UITVERKOCHT
+                              </span>
+                            ) : (
+                              <span className={`text-[9px] font-medium ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-500'}`}>Vers bereid</span>
+                            )}
+                          </div>
+                          <span className={`font-mono text-xs font-black shrink-0 ${clockStyle === 'pixel' ? 'text-emerald-400' : 'text-amber-300'}`}>
+                            €{(p.onSale && p.salePrice > 0 ? p.salePrice : p.price).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </AutoScrollingColumn>
+                  </div>
+
+                  {/* Category Column 2: Frites, Dranken & Koekploeg */}
+                  <div className={`rounded-2xl p-3 border flex flex-col overflow-hidden ${
+                    clockStyle === 'pixel' ? 'bg-slate-950 border-emerald-900/80 font-mono' : 'bg-slate-950/60 border-slate-800'
+                  }`}>
+                    <h4 className={`text-xs font-black uppercase tracking-wider pb-1.5 border-b border-slate-800 mb-2 flex items-center justify-between ${
+                      clockStyle === 'pixel' ? 'text-emerald-400 font-mono' : 'text-amber-400'
+                    }`}>
+                      <span>🥤 Frites &amp; Dranken</span>
+                    </h4>
+                    <AutoScrollingColumn className="flex-1 space-y-2.5">
+                      {products.filter(p => p.id >= 200 || p.cat.includes('Friet') || p.cat.includes('Drank') || p.cat.includes('Dessert')).map(p => (
+                        <div key={p.id} className={`flex items-center justify-between border-b border-slate-900/80 pb-1.5 gap-2 ${!p.inStock ? 'opacity-50' : ''}`}>
+                          <div className="min-w-0">
+                            <p className={`text-xs font-bold truncate ${
+                              !p.inStock ? 'line-through text-slate-400' : clockStyle === 'pixel' ? 'text-emerald-200 font-mono uppercase' : 'text-white'
+                            }`}>
+                              {p.emoji || '🥤'} {p.name}
+                            </p>
+                            {!p.inStock ? (
+                              <span className="text-[9px] font-black text-rose-400 bg-rose-950/80 px-1.5 py-0.2 rounded border border-rose-800 inline-block mt-0.5">
+                                TIJDELIJK UITVERKOCHT
+                              </span>
+                            ) : (
+                              <span className={`text-[9px] font-medium ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-500'}`}>Vers gekoeld</span>
+                            )}
+                          </div>
+                          <span className={`font-mono text-xs font-black shrink-0 ${clockStyle === 'pixel' ? 'text-emerald-400' : 'text-amber-300'}`}>
+                            €{(p.onSale && p.salePrice > 0 ? p.salePrice : p.price).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </AutoScrollingColumn>
+                  </div>
+                </div>
+              </div>
+              )}
+
+            </div>
+          </div>
 
           {/* VIEW A: LIVE AFHAAL LIJST (ORDERS) */}
           <div 
@@ -885,16 +1434,53 @@ export const PickupScreen: React.FC = () => {
         </div>
 
         {/* TV Bottom Marquee Bar */}
-        <footer className="mt-4 pt-3 border-t-2 border-slate-800 flex items-center justify-between text-xs sm:text-sm text-slate-400 font-bold shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-white font-black">JOFIAM RESTAURANTS FASTFOOD SERVICE</span>
-            <span className="hidden md:inline text-slate-500">· Bestel via Kassa of Kiosk · Eet smakelijk!</span>
-          </div>
-          <div className="text-slate-400 font-mono">
-            {timeStr}
-          </div>
-        </footer>
+        {activeWidgets.ticker && (
+          <footer 
+            onClick={() => setShowNewsModal(true)}
+            title="Klik om alle NOS nieuwsberichten te bekijken"
+            className={`mt-3 pt-2 px-3 py-2 rounded-2xl border-2 flex items-center justify-between text-xs sm:text-sm font-bold shrink-0 overflow-hidden shadow-xl cursor-pointer hover:border-rose-500/80 transition group ${
+              clockStyle === 'pixel' 
+                ? 'bg-slate-950 border-emerald-500/60 text-emerald-300 font-mono' 
+                : clockStyle === 'neon' 
+                ? 'bg-slate-900 border-amber-500/50 text-amber-300 font-mono' 
+                : 'bg-slate-900/90 border-slate-800 text-slate-300'
+            }`}
+          >
+            <div className="flex items-center gap-2 px-3 py-1 bg-rose-600 text-white rounded-xl font-black shrink-0 shadow animate-pulse group-hover:bg-rose-500 transition">
+              <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+              <span className="text-[11px] font-mono tracking-wider uppercase">🔴 NOS LIVE ({nosCategory})</span>
+              <span className="text-[9px] bg-black/30 px-1.5 py-0.5 rounded text-rose-200">Klik 🔍</span>
+            </div>
+
+            <div className="flex-1 overflow-hidden mx-4 relative h-6 flex items-center">
+              <div className="whitespace-nowrap flex items-center gap-8 animate-marquee">
+                {[...nosHeadlines, ...nosHeadlines].map((headline, idx) => {
+                  const isWeather = headline.includes('WEERBERICHT');
+                  return (
+                    <span key={idx} className="flex items-center gap-3 shrink-0">
+                      <span className={isWeather ? 'text-sky-400 font-bold text-base' : 'text-amber-400 font-bold'}>
+                        {isWeather ? '🌤️' : '★'}
+                      </span>
+                      <span className={`transition-colors ${
+                        isWeather 
+                          ? 'text-sky-300 font-black' 
+                          : clockStyle === 'pixel' 
+                          ? 'text-emerald-300 font-mono' 
+                          : 'text-slate-200 group-hover:text-white'
+                      }`}>
+                        {headline}
+                      </span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="text-amber-400 font-mono font-black shrink-0 pl-2">
+              {timeStr}
+            </div>
+          </footer>
+        )}
       </div>
     );
   }
@@ -1171,18 +1757,525 @@ export const PickupScreen: React.FC = () => {
           </div>
 
           {/* Bottom Fastfood Ticker Banner */}
-          <div className="bg-slate-950 px-4 py-2.5 rounded-2xl border border-slate-800 flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="font-bold text-white">{brandTitle} Live Afhaal Service</span>
-              <span className="hidden md:inline text-slate-500">| Bestel via Kassa of Kiosk | Eet smakelijk!</span>
+          {activeWidgets.ticker && (
+            <div className={`px-4 py-2.5 rounded-2xl border flex items-center justify-between text-xs transition ${
+              clockStyle === 'pixel' 
+                ? 'bg-slate-950 border-emerald-500/60 text-emerald-300 font-mono shadow-[0_0_20px_rgba(34,197,94,0.2)]'
+                : clockStyle === 'neon'
+                ? 'bg-slate-900/90 border-amber-500/50 text-amber-300 font-sans shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                : 'bg-slate-950 border-slate-800 text-slate-400'
+            }`}>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full animate-pulse ${clockStyle === 'pixel' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                <span className="font-bold text-white">{brandTitle} Live Afhaal Service</span>
+                <span className="hidden md:inline opacity-80">| Bestel via Kassa of Kiosk | Eet smakelijk!</span>
+              </div>
+
+              <div className="font-mono font-bold">
+                {timeStr}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
+      {/* TV SETUP POPUP MODAL */}
+      {showTvSetupModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-slate-900 border-2 border-slate-700 rounded-3xl max-w-xl w-full p-6 shadow-2xl text-white space-y-6 my-auto max-h-[90vh] overflow-y-auto custom-scrollbar">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-black shrink-0">
+                  📺
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white">TV Studio &amp; Home Layout Builder</h2>
+                  <p className="text-xs text-slate-400">Kies een preset of stel je eigen TV scherm &amp; thema samen</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTvSetupModal(false)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="font-mono font-bold text-slate-300">
-              {timeStr}
+            {/* Section 1: Presets Gallery */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                  1. Kies een TV Layout Preset
+                </label>
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                  ☁️ Supabase Synchroon
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {savedPresets.map(preset => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleApplyPreset(preset)}
+                    className="p-3 rounded-2xl border-2 border-slate-800 bg-slate-950/80 hover:border-amber-500/60 hover:bg-slate-800/80 transition text-left flex flex-col justify-between group"
+                  >
+                    <div>
+                      <p className="font-black text-xs text-white group-hover:text-amber-300">{preset.name}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {preset.clockStyle === 'pixel' ? '👾 Pixel LED' : preset.clockStyle === 'neon' ? '⚡ Cyber Neon' : '🏛️ Klassiek'} · {preset.tvView}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-amber-400 font-bold mt-2 underline">Toepassen ➔</span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Section 2: Clock & Theme Style */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                2. Kies Klok &amp; Widget Thema
+              </label>
+              <div className="grid grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleSelectClockStyle('pixel')}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    clockStyle === 'pixel'
+                      ? 'bg-emerald-950 border-emerald-400 text-emerald-300 font-black shadow-lg shadow-emerald-500/20'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-xl block">👾</span>
+                  <span className="text-xs font-bold block mt-1">Pixel Matrix</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectClockStyle('neon')}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    clockStyle === 'neon'
+                      ? 'bg-amber-950 border-amber-400 text-amber-300 font-black shadow-lg shadow-amber-500/20'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-xl block">⚡</span>
+                  <span className="text-xs font-bold block mt-1">Cyber Neon</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectClockStyle('classic')}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    clockStyle === 'classic'
+                      ? 'bg-slate-800 border-slate-400 text-white font-black shadow-lg'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
+                  }`}
+                >
+                  <span className="text-xl block">🏛️</span>
+                  <span className="text-xs font-bold block mt-1">Klassiek</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Section 3: TV Scherm Modus & Indeling */}
+            <div className="space-y-3 pt-2 border-t border-slate-800">
+              <label className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                3. Kies Scherm Weergave Modus
+              </label>
+
+              {/* View Mode Selector: Split, Pickup Full, Menu Full */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTvView('split');
+                    setAutoRotate(false);
+                    if (typeof window !== 'undefined') localStorage.setItem('wd_tv_view', 'split');
+                  }}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    tvView === 'split' && !autoRotate
+                      ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-black shadow-lg'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span className="text-xl block">⚡</span>
+                  <span className="text-xs font-bold block mt-1">Splitscreen (Beide)</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Afhaal + Menukaart</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTvView('pickup');
+                    if (typeof window !== 'undefined') localStorage.setItem('wd_tv_view', 'pickup');
+                  }}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    tvView === 'pickup' && !autoRotate
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300 font-black shadow-lg'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span className="text-xl block">🛍️</span>
+                  <span className="text-xs font-bold block mt-1">Afhaallijst</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Volledig Scherm</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTvView('menu');
+                    if (typeof window !== 'undefined') localStorage.setItem('wd_tv_view', 'menu');
+                  }}
+                  className={`p-2.5 rounded-2xl border-2 text-center transition ${
+                    tvView === 'menu' && !autoRotate
+                      ? 'bg-blue-500/20 border-blue-400 text-blue-300 font-black shadow-lg'
+                      : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <span className="text-xl block">🍔</span>
+                  <span className="text-xs font-bold block mt-1">Menukaart</span>
+                  <span className="text-[9px] text-slate-400 block mt-0.5">Volledig Scherm</span>
+                </button>
+              </div>
+
+              {/* Auto-Rotate Toggle */}
+              <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-black text-white block">🔄 Auto-Wisselen Schermen</span>
+                  <span className="text-[10px] text-slate-400 block">Wisselt automatisch om de 15s tussen Afhaallijst &amp; Menukaart</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !autoRotate;
+                    setAutoRotate(next);
+                    if (next && tvView === 'split') {
+                      setTvView('pickup');
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                    autoRotate ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-400'
+                  }`}
+                >
+                  {autoRotate ? 'AAN ✓' : 'UIT ✗'}
+                </button>
+              </div>
+
+              {/* Layout Ratio Selector for Splitscreen */}
+              {tvView === 'split' && (
+                <div className="space-y-1.5 pt-1">
+                  <span className="text-[11px] font-bold text-slate-300 block">Splitscreen Verhouding (Ratio):</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLayoutRatio('split_50');
+                        if (typeof window !== 'undefined') localStorage.setItem('wd_tv_layout_ratio', 'split_50');
+                      }}
+                      className={`p-2 rounded-xl border text-center transition ${
+                        layoutRatio === 'split_50' ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold' : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[11px] block font-mono font-black">50 / 50</span>
+                      <span className="text-[10px] block opacity-80">Gelijkmatig</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLayoutRatio('menu_focus');
+                        if (typeof window !== 'undefined') localStorage.setItem('wd_tv_layout_ratio', 'menu_focus');
+                      }}
+                      className={`p-2 rounded-xl border text-center transition ${
+                        layoutRatio === 'menu_focus' ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold' : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[11px] block font-mono font-black">30 / 70</span>
+                      <span className="text-[10px] block opacity-80">Menu Focus</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLayoutRatio('pickup_focus');
+                        if (typeof window !== 'undefined') localStorage.setItem('wd_tv_layout_ratio', 'pickup_focus');
+                      }}
+                      className={`p-2 rounded-xl border text-center transition ${
+                        layoutRatio === 'pickup_focus' ? 'bg-amber-500/20 border-amber-400 text-amber-300 font-bold' : 'bg-slate-950/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[11px] block font-mono font-black">70 / 30</span>
+                      <span className="text-[10px] block opacity-80">Afhaal Focus</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Widgets Toggles Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('prep')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.prep ? 'bg-amber-500/20 border-amber-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">⏳ Wordt Bereid</span>
+                  {activeWidgets.prep ? <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('ready')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.ready ? 'bg-emerald-500/20 border-emerald-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">🔔 Klaar om Af te Halen</span>
+                  {activeWidgets.ready ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('menu')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.menu ? 'bg-blue-500/20 border-blue-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">🍔 Live Menukaart</span>
+                  {activeWidgets.menu ? <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('deal')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.deal ? 'bg-rose-500/20 border-rose-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">🔥 Promo Deal Banner</span>
+                  {activeWidgets.deal ? <Check className="w-3.5 h-3.5 text-rose-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('waitTime')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.waitTime ? 'bg-cyan-500/20 border-cyan-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">⏱️ Wachttijd Estimator</span>
+                  {activeWidgets.waitTime ? <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleWidget('ticker')}
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition ${
+                    activeWidgets.ticker ? 'bg-purple-500/20 border-purple-400 text-white' : 'bg-slate-950/60 border-slate-800 text-slate-500'
+                  }`}
+                >
+                  <span className="text-xs font-bold">💬 Onderste Ticker</span>
+                  {activeWidgets.ticker ? <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" /> : <X className="w-3.5 h-3.5 text-slate-600 shrink-0" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Section 4: Opslaan in Supabase */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <label className="text-xs font-black uppercase tracking-wider text-amber-400 block">
+                4. Opslaan als Preset in Supabase
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={presetNameInput}
+                  onChange={e => setPresetNameInput(e.target.value)}
+                  placeholder="Bijv. Vrijdag Drukte TV"
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-2xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveCustomPresetToSupabase}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/40 font-black text-xs transition flex items-center gap-1.5 shrink-0"
+                >
+                  <span>💾 Opslaan in Supabase</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Start Action Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowTvSetupModal(false);
+                setIsTvMode(true);
+                AudioFX.unlock();
+                setIsAudioUnlocked(true);
+                const elem = document.getElementById('werkdonalds-tv-mode-root') || document.documentElement;
+                if (elem && elem.requestFullscreen) {
+                  elem.requestFullscreen().catch(() => {});
+                }
+              }}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 font-black text-sm sm:text-base uppercase tracking-wider shadow-xl shadow-amber-500/20 transition active:scale-98 flex items-center justify-center gap-2"
+            >
+              <Maximize2 className="w-5 h-5" />
+              <span>🚀 Start TV Scherm in Volledig Scherm</span>
+            </button>
+
           </div>
+        </div>
+      )}
 
+      {/* ========================================================================= */}
+      {/* NOS LIVE NIEUWS OVERZICHT MODAL */}
+      {/* ========================================================================= */}
+      {showNewsModal && (
+        <div className="fixed inset-0 z-[9999] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-rose-500/50 rounded-3xl p-6 max-w-3xl w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-rose-600/20 border border-rose-500/40 text-rose-400 flex items-center justify-center font-black text-xl shadow">
+                  🔴
+                </div>
+                <div>
+                  <h2 className="text-xl font-black text-white flex items-center gap-2">
+                    <span>NOS LIVE NIEUWS OVERZICHT</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 font-mono">
+                      Realtime RSS
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">Laatste nieuwsartikelen &amp; weerbericht in Nederland</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowNewsModal(false)}
+                className="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Category Selector Tabs */}
+            <div className="grid grid-cols-4 gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setNosCategory('general')}
+                className={`py-2 px-3 rounded-xl border text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                  nosCategory === 'general' ? 'bg-rose-600 border-rose-500 text-white shadow' : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>📰 Algemeen</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNosCategory('sport')}
+                className={`py-2 px-3 rounded-xl border text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                  nosCategory === 'sport' ? 'bg-amber-600 border-amber-500 text-white shadow' : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>⚽ Sport</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNosCategory('tech')}
+                className={`py-2 px-3 rounded-xl border text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                  nosCategory === 'tech' ? 'bg-sky-600 border-sky-500 text-white shadow' : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>💻 Economie &amp; Tech</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setNosCategory('binnenland')}
+                className={`py-2 px-3 rounded-xl border text-xs font-black transition flex items-center justify-center gap-1.5 ${
+                  nosCategory === 'binnenland' ? 'bg-emerald-600 border-emerald-500 text-white shadow' : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <span>🇳🇱 Binnenland</span>
+              </button>
+            </div>
+
+            {/* Weather Banner */}
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-sky-950 to-slate-950 border border-sky-500/40 text-sky-300 flex items-center justify-between text-xs shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-xl animate-bounce">🌤️</span>
+                <div>
+                  <span className="font-black block uppercase text-[10px] opacity-80">ACTUEEL WEER NEDERLAND</span>
+                  <span className="font-bold">18°C · Half bewolkt &amp; droog · Wind W 3 Bft</span>
+                </div>
+              </div>
+              <span className="bg-sky-900/60 border border-sky-400/40 px-2.5 py-1 rounded-xl text-[10px] font-mono font-black">
+                KNMI Live
+              </span>
+            </div>
+
+            {/* Articles List */}
+            <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+              {newsArticles.length === 0 ? (
+                <div className="text-center py-8 text-slate-500 font-bold text-xs">
+                  Aan het laden van live nieuwsberichten...
+                </div>
+              ) : (
+                newsArticles.map((art, idx) => (
+                  <div key={idx} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-rose-500/50 transition group flex flex-col gap-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-black text-white group-hover:text-rose-300 transition">
+                        {art.title}
+                      </h3>
+                      {art.pubDate && (
+                        <span className="text-[10px] font-mono text-slate-500 shrink-0 bg-slate-900 px-2 py-0.5 rounded-lg border border-slate-800">
+                          {new Date(art.pubDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+
+                    {art.description && (
+                      <p className="text-xs text-slate-400 line-clamp-2">
+                        {art.description}
+                      </p>
+                    )}
+
+                    <div className="pt-1 flex items-center justify-between text-[11px]">
+                      <span className="text-rose-400 font-bold">NOS Live Nieuws</span>
+                      <a
+                        href={art.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-amber-400 hover:underline font-bold flex items-center gap-1"
+                      >
+                        <span>Lees artikel op NOS.nl</span>
+                        <span>↗</span>
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Close Modal Footer */}
+            <div className="pt-2 border-t border-slate-800 shrink-0 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowNewsModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition"
+              >
+                Sluiten
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 

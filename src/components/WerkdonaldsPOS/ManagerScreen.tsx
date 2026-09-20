@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { euro } from '../../services/store';
 import { Product, Coupon, GiftCard, PosUser } from '../../types';
+import { DiyTerminalModal } from './DiyTerminalModal';
 import { 
   BarChart3, 
   FileText, 
@@ -23,7 +24,8 @@ import {
   Radio,
   Sliders,
   AlertCircle,
-  Database
+  Database,
+  Cpu
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -60,6 +62,9 @@ export const ManagerScreen: React.FC = () => {
 
   // Z-Report Modal
   const [showZReport, setShowZReport] = useState<boolean>(false);
+
+  // DIY Pinapparaat Modal State
+  const [showDiyTerminalModal, setShowDiyTerminalModal] = useState<boolean>(false);
 
   // New Product State
   const [newProdName, setNewProdName] = useState<string>('');
@@ -396,6 +401,35 @@ export const ManagerScreen: React.FC = () => {
                 <AlertCircle className="w-3.5 h-3.5 text-blue-400" />
                 <span>Huidige status: {pickupClosed ? 'TV toont gesloten mededeling.' : 'TV toont nummers "In Bereiding" en "Gereed".'}</span>
               </div>
+            </div>
+          </div>
+
+          {/* Hardware & Pinapparaat Terminal Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <span>DIY Pinapparaat &amp; Betaalterminal Hardware</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 font-mono">
+                      Arduino / NFC / LCD
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Virtueel of fysiek pinapparaat testen, NFC-kaarten scannen en pinterminal instellingen beheren.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDiyTerminalModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition shadow-lg shadow-cyan-500/20 flex items-center gap-2"
+              >
+                <Cpu className="w-4 h-4" />
+                <span>Open Pinapparaat Terminal</span>
+              </button>
             </div>
           </div>
 
@@ -1373,6 +1407,10 @@ export const ManagerScreen: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showDiyTerminalModal && (
+        <DiyTerminalModal onClose={() => setShowDiyTerminalModal(false)} />
       )}
 
     </div>

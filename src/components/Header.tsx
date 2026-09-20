@@ -257,17 +257,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             </button>
           </div>
 
-          {/* DIY Pinapparaat Button */}
-          <button
-            type="button"
-            onClick={() => setShowDiyTerminalModal(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-950/50 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:border-cyan-400 hover:bg-cyan-900/40 transition"
-            title="Open DIY Pinapparaat terminal (Arduino, NFC, 4x4 matrix toetsenbord & LCD)"
-          >
-            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden md:inline">DIY Pinapparaat</span>
-          </button>
-
           {/* Active Order Live Tracking Shortcut */}
           {activeUserOrders.length > 0 && (
             <button

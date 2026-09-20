@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS public.pos_audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 1.11 TV Display Presets & Custom Layouts
+CREATE TABLE IF NOT EXISTS public.tv_presets (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  clock_style TEXT NOT NULL DEFAULT 'pixel',
+  view_mode TEXT NOT NULL DEFAULT 'split',
+  auto_rotate BOOLEAN NOT NULL DEFAULT FALSE,
+  widgets JSONB NOT NULL DEFAULT '{"prep": true, "ready": true, "menu": true, "ticker": true}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 1.11 Digitale Telefoon SMS Berichten (Voor WerkMobile Telefoon Chat & Tikkies)
 CREATE TABLE IF NOT EXISTS public.phone_messages (
   id BIGSERIAL PRIMARY KEY,

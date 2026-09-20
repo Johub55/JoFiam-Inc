@@ -101,3 +101,15 @@ export function formatCardUid(uid?: string): string {
   if (!raw) return '•••• •••• •••• ••••';
   return raw.replace(/(.{4})/g, '$1 ').trim();
 }
+
+let _supabaseClient: SupabaseClient | null = null;
+export function getSupabaseClient(): SupabaseClient | null {
+  if (!_supabaseClient && DEFAULT_SUPABASE_POS_URL && DEFAULT_SUPABASE_POS_KEY) {
+    try {
+      _supabaseClient = createClient(DEFAULT_SUPABASE_POS_URL, DEFAULT_SUPABASE_POS_KEY);
+    } catch {
+      _supabaseClient = null;
+    }
+  }
+  return _supabaseClient;
+}
