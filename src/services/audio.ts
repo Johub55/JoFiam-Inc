@@ -124,9 +124,10 @@ class SoundEffects {
   }
 
   /**
-   * Explicitly unlock audio context & speech (bypasses Linux & Opera autoplay restrictions)
+   * Explicitly unlock audio context & speech
    */
   public unlock() {
+    if (this.isUnlocked) return;
     this.isUnlocked = true;
     this.initCtx();
     
@@ -134,29 +135,12 @@ class SoundEffects {
       const { text, orderNo, target } = this.pendingSpeech;
       this.pendingSpeech = null;
       this.playSpeech(text, orderNo, target);
+      return;
     }
 
-    // Robust queue processor trigger
-    this.processQueue();
-
     if (typeof window !== 'undefined') {
-      if (this.ctx) {
-        if (this.ctx.state === 'suspended') {
-          this.ctx.resume().then(() => {
-            this.updateDiag({ ctxState: 'running', lastMessage: 'Audio ontgrendeld' });
-          }).catch(() => {});
-        }
-        
-        // Speel een uiterst zacht, onhoorbaar toontje om de AudioContext te ontgrendelen
-        try {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          gain.gain.setValueAtTime(0.0001, this.ctx.currentTime);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.01);
-        } catch {}
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().catch(() => {});
       }
 
       // Speel een kort stil WAV-bestand om HTML5 <audio> elementen te ontgrendelen
@@ -501,27 +485,25 @@ class SoundEffects {
       hasCompleted = true;
       clearTimeout(queueWatchdog);
 
+      // ALWAYS remove the processed item from the queue to prevent infinite retry loops
+      this.speechQueue.shift();
+      this.isPlayingSpeech = false;
+
       if (isAutoplayBlocked) {
-        // AUTOPLAY BLOCKED: Do NOT remove the item from queue!
-        // Keep it ready for when the user clicks anywhere on the screen.
-        console.warn("Autoplay blocked. Keeping item in queue until user interaction.");
+        console.warn("Autoplay blocked for speech item.");
         this.isUnlocked = false;
-        this.isPlayingSpeech = false;
         this.updateDiag({
           lastStatus: 'error',
           lastMessage: 'Klik op het scherm om omroepen te activeren!'
         });
-        return;
       }
-
-      // Remove the processed item
-      this.speechQueue.shift();
-      this.isPlayingSpeech = false;
       
-      // Schedule the next item with a tiny natural gap
-      setTimeout(() => {
-        this.processQueue();
-      }, 150);
+      // Schedule the next item with a tiny natural gap if any
+      if (this.speechQueue.length > 0) {
+        setTimeout(() => {
+          this.processQueue();
+        }, 150);
+      }
     };
 
     // Safety watchdog to prevent queue lockup if an engine hangs indefinitely
