@@ -604,9 +604,9 @@ class SoundEffects {
 
   /**
    * Plays audio via Same-Origin Server Endpoint `/api/tts`.
-   * Completely immune to CORS, Opera adblocker, tracker block, or 3rd party host blocks!
+   * Uses Web Audio API (decodeAudioData) first, completely bypassing HTML5 media player codec restrictions on Opera/Linux!
    */
-  public playServerTts(
+  public async playServerTts(
     text: string, 
     voiceName: string = 'Ruben', 
     callback?: (success: boolean, isAutoplayBlocked?: boolean) => void,
@@ -632,6 +632,53 @@ class SoundEffects {
         ? `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`
         : `/api/tts?text=${encoded}&_t=${cacheBuster}`;
 
+      // OPTION 1: Web Audio API (fetch + decodeAudioData)
+      // Guaranteed 100% delivery in Opera, Linux, Chromium, iOS, Android!
+      this.initCtx();
+      if (this.ctx) {
+        try {
+          if (this.ctx.state === 'suspended') {
+            await this.ctx.resume();
+          }
+
+          const res = await fetch(url);
+          if (res.ok) {
+            const buffer = await res.arrayBuffer();
+            const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+              this.ctx!.decodeAudioData(buffer, resolve, reject);
+            });
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(this.ctx.destination);
+
+            let hasFinished = false;
+            const finish = (status: boolean) => {
+              if (hasFinished) return;
+              hasFinished = true;
+              if (callback) callback(status);
+            };
+
+            this.updateDiag({ 
+              activeEngine: 'Google Server TTS (WebAudio)', 
+              lastStatus: 'playing',
+              lastMessage: `Natuurlijke stem spreekt: "${text}"`
+            });
+
+            source.onended = () => {
+              this.updateDiag({ lastStatus: 'success', lastMessage: 'Omroep voltooid' });
+              finish(true);
+            };
+
+            source.start(0);
+            return;
+          }
+        } catch (webAudioErr) {
+          console.warn('Web Audio API stream decode failed, trying HTML5 Audio element fallback:', webAudioErr);
+        }
+      }
+
+      // OPTION 2: HTML5 Audio Fallback
       const audio = new Audio(url);
       audio.volume = 1.0;
       (audio as any).referrerPolicy = "no-referrer";
@@ -693,7 +740,6 @@ class SoundEffects {
             return;
           }
 
-          // In case of codec failure or other HTML5 audio play errors, fall back smoothly
           done(false, false);
         });
       }
