@@ -192,6 +192,21 @@ const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, cla
 export const PickupScreen: React.FC = () => {
   const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      if (isTvMode) {
+        document.body.classList.add('tv-mode-active');
+      } else {
+        document.body.classList.remove('tv-mode-active');
+      }
+    }
+    return () => {
+      if (typeof document !== 'undefined') {
+        document.body.classList.remove('tv-mode-active');
+      }
+    };
+  }, [isTvMode]);
   const [tvView, setTvView] = useState<'pickup' | 'menu' | 'split'>('split');
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [timeStr, setTimeStr] = useState<string>('');
@@ -226,9 +241,18 @@ export const PickupScreen: React.FC = () => {
   // Live NOS News Headlines & Articles State
   const [nosCategory, setNosCategory] = useState<'general' | 'sport' | 'tech' | 'binnenland'>('general');
   const [showNewsModal, setShowNewsModal] = useState<boolean>(false);
-  const [newsArticles, setNewsArticles] = useState<Array<{ title: string; link: string; pubDate?: string; description?: string }>>([]);
+  const [newsArticles, setNewsArticles] = useState<Array<{ title: string; link: string; pubDate?: string; description?: string }>>([
+    { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },
+    { title: 'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland', link: 'https://nos.nl' },
+    { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
+    { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' }
+  ]);
   const [nosHeadlines, setNosHeadlines] = useState<string[]>([
-    '🔴 NOS LIVE NIEUWS: Live nieuwsfeed wordt geladen...',
+    "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C) · W wind 3 Bft",
+    'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca',
+    'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland',
+    'Nederlandse atleten behalen goud op de Europese kampioenschappen',
+    'Nieuwe technologische doorbraak in AI en automatisering aangekondigd'
   ]);
 
   useEffect(() => {
@@ -241,11 +265,13 @@ export const PickupScreen: React.FC = () => {
       binnenland: 'https://feeds.nos.nl/nosnieuwsbinnenland',
     };
 
+    // Silent background fetch: only updates state once 100% downloaded & parsed
     const fetchLiveNews = async () => {
       try {
         const url = rssMap[nosCategory];
         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
         const data = await res.json();
+        
         if (isMounted && data && data.items && data.items.length > 0) {
           const items = data.items.slice(0, 12).map((item: any) => ({
             title: item.title,
@@ -254,15 +280,16 @@ export const PickupScreen: React.FC = () => {
             description: item.description?.replace(/<[^>]*>?/gm, '').slice(0, 120) || ''
           }));
 
-          setNewsArticles(items);
-
           const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C) · W wind 3 Bft";
-          const titles = [weatherItem, ...items.map(it => it.title)];
-          setNosHeadlines(titles);
+          const newTitles = [weatherItem, ...items.map(it => it.title)];
+
+          // Seamlessly swap out old news only when new news is ready
+          setNewsArticles(items);
+          setNosHeadlines(newTitles);
           return;
         }
       } catch {
-        // Retry fallback
+        // Fallback retry
         try {
           const res2 = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.nu.nl%2Frss%2FAlgemeen');
           const data2 = await res2.json();
@@ -273,31 +300,17 @@ export const PickupScreen: React.FC = () => {
               pubDate: item.pubDate,
               description: item.description || ''
             }));
-            setNewsArticles(items);
             const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C)";
+            setNewsArticles(items);
             setNosHeadlines([weatherItem, ...items.map(it => it.title)]);
             return;
           }
         } catch {}
       }
-
-      if (isMounted) {
-        const fallbackList = [
-          { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },
-          { title: 'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland', link: 'https://nos.nl' },
-          { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
-          { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' }
-        ];
-        setNewsArticles(fallbackList);
-        setNosHeadlines([
-          "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C)",
-          ...fallbackList.map(f => f.title)
-        ]);
-      }
     };
 
     fetchLiveNews();
-    const interval = setInterval(fetchLiveNews, 300000); // 5 min refresh
+    const interval = setInterval(fetchLiveNews, 300000); // 5 min silent refresh
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -812,15 +825,6 @@ export const PickupScreen: React.FC = () => {
               </span>
             )}
 
-            {/* TV Settings Launcher Gear Button */}
-            <button
-              onClick={() => setShowTvSetupModal(true)}
-              className="p-2.5 rounded-2xl bg-slate-900/90 border border-slate-800 text-slate-400 hover:text-amber-400 hover:border-amber-500/50 hover:bg-slate-800 transition shadow"
-              title="TV Scherm Instellingen Openen"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-
             {/* Exit TV mode button */}
             <button
               onClick={() => {
@@ -829,7 +833,7 @@ export const PickupScreen: React.FC = () => {
                   document.exitFullscreen().catch(() => {});
                 }
               }}
-              className="p-2.5 text-slate-500 hover:text-rose-400 hover:bg-slate-900 rounded-2xl transition border border-transparent hover:border-slate-800"
+              className="p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-900 rounded-2xl transition border border-slate-800"
               title="Sluit TV Volledig Scherm"
             >
               <Minimize2 className="w-5 h-5" />
@@ -940,7 +944,7 @@ export const PickupScreen: React.FC = () => {
                         ) : (
                           <div className="grid grid-cols-2 gap-2 pt-1">
                             {preparingOrders.map(o => (
-                              <div key={o.no} className={`p-2.5 rounded-xl border ${clockStyle === 'pixel' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-mono' : 'bg-slate-950 border-amber-500/30'}`}>
+                              <div key={o.no} className={`p-2.5 rounded-xl border animate-order-pop ${clockStyle === 'pixel' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-mono' : 'bg-slate-950 border-amber-500/30'}`}>
                                 <span className={`font-mono font-black text-lg ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-white'}`}>#{o.no}</span>
                                 <p className={`text-[10px] font-bold truncate ${clockStyle === 'pixel' ? 'text-emerald-400/80 font-mono' : 'text-slate-400'}`}>voor {o.identifier || 'Afhaal'}</p>
                               </div>
@@ -978,13 +982,13 @@ export const PickupScreen: React.FC = () => {
                             {readyOrders.map(o => (
                               <div 
                                 key={o.no} 
-                                className={`p-3 rounded-xl border flex flex-col justify-between ${
+                                className={`p-3 rounded-xl border flex flex-col justify-between animate-ready-glow ${
                                   activeAnnouncement?.orderNo === o.no 
                                     ? 'bg-emerald-900 border-2 border-amber-400 scale-[1.02]' 
                                     : clockStyle === 'pixel'
                                     ? 'bg-emerald-950/80 border-emerald-400/60 font-mono'
                                     : 'bg-slate-950 border-emerald-500/40'
-                                }`}
+                                  }`}
                               >
                                 <div className="flex items-center justify-between">
                                   <span className={`font-mono font-black text-2xl ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-emerald-400'}`}>#{o.no}</span>
@@ -1205,7 +1209,7 @@ export const PickupScreen: React.FC = () => {
                         return (
                            <div
                             key={o.no}
-                            className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between"
+                            className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between animate-order-pop"
                           >
                             <div>
                               <div className="flex items-center justify-between">
@@ -1266,7 +1270,7 @@ export const PickupScreen: React.FC = () => {
                         return (
                           <div
                             key={o.no}
-                            className={`p-4 rounded-2xl text-left shadow-2xl flex flex-col justify-between transition-all ${
+                            className={`p-4 rounded-2xl text-left shadow-2xl flex flex-col justify-between transition-all animate-ready-glow ${
                               isCurrentAnnounced 
                                 ? 'bg-gradient-to-br from-emerald-900 to-amber-950 border-4 border-amber-400 scale-[1.03] ring-4 ring-amber-400/50' 
                                 : 'bg-gradient-to-br from-emerald-950 to-slate-950 border-2 border-emerald-400'

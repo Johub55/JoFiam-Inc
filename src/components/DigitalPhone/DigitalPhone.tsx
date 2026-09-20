@@ -79,6 +79,21 @@ export const DigitalPhone: React.FC = () => {
   } = useApp();
 
   const [isOpen, setIsOpen] = useState<boolean>(false);
+  const [isTvModeActive, setIsTvModeActive] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkTvMode = () => {
+      if (typeof document !== 'undefined') {
+        const active = document.body.classList.contains('tv-mode-active') || !!document.getElementById('werkdonalds-tv-mode-root');
+        setIsTvModeActive(active);
+      }
+    };
+
+    checkTvMode();
+    const interval = setInterval(checkTvMode, 300);
+    return () => clearInterval(interval);
+  }, []);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   // Apps: 'home', 'werkpay', 'phone', 'messages', 'settings', 'werkdonalds'
   const [activeApp, setActiveApp] = useState<'home' | 'werkpay' | 'phone' | 'messages' | 'settings' | 'werkdonalds'>('home');
@@ -1186,6 +1201,10 @@ export const DigitalPhone: React.FC = () => {
     const remainder = sec % 60;
     return `${mins.toString().padStart(2, '0')}:${remainder.toString().padStart(2, '0')}`;
   };
+
+  if (isTvModeActive) {
+    return null;
+  }
 
   return (
     <>
