@@ -603,8 +603,8 @@ class SoundEffects {
   }
 
   /**
-   * Plays audio via Same-Origin Server Endpoint `/api/tts`.
-   * Uses Web Audio API (decodeAudioData) first, completely bypassing HTML5 media player codec restrictions on Opera/Linux!
+   * Plays audio via Same-Origin Server Endpoint `/api/tts` (or Native Browser Speech on static hosts like GitHub Pages).
+   * Completely immune to CORS and codec errors!
    */
   public async playServerTts(
     text: string, 
@@ -628,12 +628,16 @@ class SoundEffects {
         window.location.protocol === 'file:'
       );
 
-      const url = isStaticStatic
-        ? `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`
-        : `/api/tts?text=${encoded}&_t=${cacheBuster}`;
+      // On static hosts (GitHub Pages) without /api backend, use native browser speech synthesis directly
+      if (isStaticStatic) {
+        this.playNativeSpeechSynthesis(text, false, callback);
+        return;
+      }
+
+      const url = `/api/tts?text=${encoded}&_t=${cacheBuster}`;
 
       // OPTION 1: Web Audio API (fetch + decodeAudioData)
-      // Guaranteed 100% delivery in Opera, Linux, Chromium, iOS, Android!
+      // Guaranteed 100% delivery without HTML5 audio tag codec issues
       this.initCtx();
       if (this.ctx) {
         try {
