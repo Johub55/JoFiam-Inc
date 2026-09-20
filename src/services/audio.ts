@@ -578,10 +578,8 @@ class SoundEffects {
   }
 
   /**
-   * Automatic High-Quality Human Voice Cascade:
-   * 1. Same-Origin Server TTS Proxy (/api/tts?voice=Ruben) -> 100% works on Opera/Linux/Windows
-   * 2. Same-Origin Server TTS Proxy (/api/tts?voice=Lotte)
-   * 3. Browser Native SpeechSynthesis
+   * Fast, Direct Human Voice Announcer:
+   * Uses same-origin /api/tts endpoint (which already handles server-side voice fallbacks seamlessly).
    */
   private playAutoTtsWithFallbacks(
     text: string, 
@@ -589,77 +587,9 @@ class SoundEffects {
     target: string, 
     callback?: (success: boolean, isAutoplayBlocked?: boolean) => void
   ) {
-    const isStaticStatic = typeof window !== 'undefined' && (
-      window.location.hostname.endsWith('.github.io') ||
-      window.location.hostname.endsWith('.pages.dev') ||
-      window.location.protocol === 'file:'
-    );
-
-    if (isStaticStatic) {
-      this.updateDiag({ activeEngine: 'auto (Ruben NL - Statisch)', lastStatus: 'playing' });
-      
-      // Op een statische host (zoals GitHub Pages) proberen we eerst Ruben, dan Lotte, dan Google NL, dan Native, dan Chime.
-      this.playServerTts(text, 'Ruben', (rubenSuccess, isBlocked) => {
-        if (isBlocked) {
-          if (callback) callback(false, true);
-          return;
-        }
-        if (rubenSuccess) {
-          this.updateDiag({ activeEngine: 'Server Stem (Ruben)', lastStatus: 'success', lastMessage: 'Gesproken via Ruben' });
-          if (callback) callback(true);
-          return;
-        }
-
-        this.playServerTts(text, 'Lotte', (lotteSuccess, isBlockedLotte) => {
-          if (isBlockedLotte) {
-            if (callback) callback(false, true);
-            return;
-          }
-          if (lotteSuccess) {
-            this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Gesproken via Lotte' });
-            if (callback) callback(true);
-            return;
-          }
-
-          // Google Translate TTS direct online audio stream
-          this.playServerTts(text, 'google', (googleSuccess, isBlockedGoogle) => {
-            if (isBlockedGoogle) {
-              if (callback) callback(false, true);
-              return;
-            }
-            if (googleSuccess) {
-              this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
-              if (callback) callback(true);
-              return;
-            }
-
-            // Browser-eigen stem (SpeechSynthesis)
-            this.playNativeSpeechSynthesis(text, false, (nativeSuccess, isBlockedNative) => {
-              if (isBlockedNative) {
-                if (callback) callback(false, true);
-                return;
-              }
-              if (nativeSuccess) {
-                this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
-                if (callback) callback(true);
-                return;
-              }
-
-              // Absolute fallback: Chime belsignaal
-              this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
-              this.bell();
-              if (callback) callback(false);
-            });
-          }, orderNo, target);
-        }, orderNo, target);
-      }, orderNo, target);
-      return;
-    }
-
-    // NORMAL SERVER-SIDE PREVIEW CASCADE:
     this.updateDiag({ activeEngine: 'auto (Ruben NL)', lastStatus: 'playing' });
 
-    // Step 1: Same-Origin Server TTS Ruben
+    // Step 1: Direct, clean Server TTS request (server handles Ruben -> Google -> VoiceRSS internally)
     this.playServerTts(text, 'Ruben', (success, isBlocked) => {
       if (isBlocked) {
         if (callback) callback(false, true);
@@ -671,47 +601,22 @@ class SoundEffects {
         return;
       }
 
-      // Step 2: Same-Origin Server TTS Lotte
-      this.playServerTts(text, 'Lotte', (lotteSuccess, isBlockedLotte) => {
-        if (isBlockedLotte) {
+      // Step 2: Immediate Fallback to Browser Native Speech or Chime
+      this.playNativeSpeechSynthesis(text, false, (nativeSuccess, isNativeBlocked) => {
+        if (isNativeBlocked) {
           if (callback) callback(false, true);
           return;
         }
-        if (lotteSuccess) {
-          this.updateDiag({ activeEngine: 'Server Stem (Lotte)', lastStatus: 'success', lastMessage: 'Duidelijk gesproken via Lotte' });
+        if (nativeSuccess) {
+          this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
           if (callback) callback(true);
-          return;
+        } else {
+          // Instant local Web Audio chime backup
+          this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
+          this.bell();
+          if (callback) callback(false);
         }
-
-        // Step 3: Server TTS Google NL
-        this.playServerTts(text, 'google', (googleSuccess, isBlockedGoogle) => {
-          if (isBlockedGoogle) {
-            if (callback) callback(false, true);
-            return;
-          }
-          if (googleSuccess) {
-            this.updateDiag({ activeEngine: 'Server Stem (Google)', lastStatus: 'success', lastMessage: 'Gesproken via Google NL' });
-            if (callback) callback(true);
-            return;
-          }
-
-          // Step 4: Browser Native Speech
-          this.playNativeSpeechSynthesis(text, false, (nativeSuccess, isBlockedNative) => {
-            if (isBlockedNative) {
-              if (callback) callback(false, true);
-              return;
-            }
-            if (nativeSuccess) {
-              this.updateDiag({ activeEngine: 'Native Browser Stem', lastStatus: 'success', lastMessage: 'Gesproken via browser stem' });
-              if (callback) callback(true);
-            } else {
-              this.updateDiag({ activeEngine: 'Beltoon Backup', lastStatus: 'success', lastMessage: 'Beltoon afgespeeld' });
-              this.bell();
-              if (callback) callback(false);
-            }
-          });
-        }, orderNo, target);
-      }, orderNo, target);
+      });
     }, orderNo, target);
   }
 
