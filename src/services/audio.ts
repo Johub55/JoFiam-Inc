@@ -710,7 +710,7 @@ class SoundEffects {
       audio.onerror = (e) => {
         console.warn(`Server TTS (${voiceName}) error:`, e);
 
-        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een serveromgeving, schakelen we onmiddellijk permanent over op WAV en herstarten we de stream!
+        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een Linux/Opera-omgeving, schakelen we onmiddellijk permanent over op WAV!
         if (!isStaticStatic && dynamicMp3Supported && voiceName !== 'voicerss_wav') {
           console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
           dynamicMp3Supported = false;
@@ -719,7 +719,7 @@ class SoundEffects {
           return;
         }
 
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op TTS stream voor ${voiceName} (MP3-support: ${dynamicMp3Supported})` });
+        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op TTS stream voor ${voiceName}` });
         done(false);
       };
 
@@ -727,6 +727,16 @@ class SoundEffects {
       if (playPromise !== undefined) {
         playPromise.catch((err: any) => {
           console.warn('Audio play rejection:', err);
+
+          // Als de browser geen MP3 kan afspelen (NotSupportedError in Opera op Linux), direct overstappen naar WAV!
+          if (err && (err.name === 'NotSupportedError' || String(err).includes('supported'))) {
+            console.warn("Browser ondersteunt geen MP3! Omschakelen naar universele WAV stream...");
+            dynamicMp3Supported = false;
+            clearTimeout(watchdog);
+            this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
+            return;
+          }
+
           const isNotAllowed = err && (
             err.name === 'NotAllowedError' || 
             String(err).includes('interact') || 

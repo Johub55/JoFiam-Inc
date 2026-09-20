@@ -16,20 +16,21 @@ async function startServer() {
   /**
    * Server-Side Robust TTS Proxy:
    * Solves all browser CORS, iframe sandboxing, Opera adblocker & 403 hotlinking issues.
-   * Delivers pure audio/mpeg stream directly from the same origin (/api/tts).
+   * Delivers pure audio stream directly from the same origin (/api/tts).
+   * Supports WAV codec for Opera/Linux browsers lacking proprietary MP3 codecs.
    */
   app.get("/api/tts", async (req, res) => {
     try {
       const text = typeof req.query.text === 'string' ? req.query.text.trim() : '';
       const voice = (typeof req.query.voice === 'string' ? req.query.voice : 'Ruben') || 'Ruben';
-      const codec = typeof req.query.codec === 'string' ? req.query.codec : 'MP3';
+      const codec = typeof req.query.codec === 'string' ? (req.query.codec as string).toUpperCase() : 'MP3';
 
       if (!text) {
         return res.status(400).json({ error: "Text parameter is required" });
       }
 
-      // Als codec=WAV is gevraagd of als we expliciet VoiceRSS in WAV-formaat willen
-      if (codec.toUpperCase() === 'WAV' || voice === 'voicerss_wav') {
+      // 1. If WAV codec requested or voice is voicerss_wav, return 100% Linux/Opera compatible WAV stream
+      if (codec === 'WAV' || voice === 'voicerss_wav' || voice === 'wav') {
         try {
           const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
           const rssResponse = await fetch(voiceRssUrl);
@@ -44,8 +45,8 @@ async function startServer() {
         }
       }
 
-      // 1. If voice is google or default, route appropriately
-      if (voice !== 'google' && voice !== 'voicerss_wav') {
+      // 2. StreamElements MP3 (Ruben / Lotte)
+      if (voice !== 'google' && voice !== 'voicerss_wav' && voice !== 'wav') {
         try {
           const streamUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`;
           const upstreamResponse = await fetch(streamUrl, {
@@ -62,11 +63,25 @@ async function startServer() {
             return res.send(Buffer.from(buffer));
           }
         } catch (e) {
-          console.warn("StreamElements TTS fetch failed on server, trying Google TTS fallback:", e);
+          console.warn("StreamElements TTS fetch failed on server:", e);
         }
       }
 
-      // 2. Fallback to Google Natural Dutch Audio Stream
+      // 3. Fallback to VoiceRSS WAV (Guaranteed Linux/Opera WAV audio)
+      try {
+        const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
+        const rssResponse = await fetch(voiceRssUrl);
+        if (rssResponse.ok) {
+          res.setHeader("Content-Type", "audio/wav");
+          res.setHeader("Cache-Control", "public, max-age=86400");
+          const buffer = await rssResponse.arrayBuffer();
+          return res.send(Buffer.from(buffer));
+        }
+      } catch (e) {
+        console.warn("VoiceRSS WAV fallback failed:", e);
+      }
+
+      // 4. Fallback to Google TTS
       try {
         const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encodeURIComponent(text)}`;
         const googleResponse = await fetch(googleUrl, {
@@ -84,19 +99,6 @@ async function startServer() {
         }
       } catch (e) {
         console.warn("Google TTS fallback failed:", e);
-      }
-
-      // 3. Fallback to VoiceRSS
-      try {
-        const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}`;
-        const rssResponse = await fetch(voiceRssUrl);
-        if (rssResponse.ok) {
-          res.setHeader("Content-Type", "audio/mpeg");
-          const buffer = await rssResponse.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn("VoiceRSS fallback failed:", e);
       }
 
       return res.status(502).json({ error: "All TTS upstream services were unreachable" });
