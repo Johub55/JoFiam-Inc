@@ -628,11 +628,71 @@ class SoundEffects {
         window.location.protocol === 'file:'
       );
 
-      // On static hosts (GitHub Pages) without /api backend:
-      // Route directly to native speech synthesis and Web Audio API (completely bypassing HTML5 media player MP3 codec blocks on Linux Opera)
+      // On static hosts (GitHub Pages) without /api backend, use SoundOfText API which generates real Google TTS mp3 files
       if (isStaticStatic) {
-        this.playNativeSpeechSynthesis(text, false, callback);
-        return;
+        try {
+          this.updateDiag({ 
+            activeEngine: 'Google TTS (SoundOfText API)', 
+            lastStatus: 'playing',
+            lastMessage: `Google Stem (HQ) ophalen voor: "${text}"`
+          });
+          
+          const res = await fetch('https://soundoftext.com/api/v1/sounds', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              engine: 'Google',
+              data: { text: text, voice: 'nl-NL' }
+            })
+          });
+          const data = await res.json();
+          if (data && data.success && data.id) {
+            const mp3Url = `https://soundoftext.nyc3.digitaloceanspaces.com/${data.id}.mp3`;
+            
+            // Try Web Audio API first for instant playback on Linux/Opera without codec issues
+            this.initCtx();
+            if (this.ctx) {
+              if (this.ctx.state === 'suspended') {
+                await this.ctx.resume();
+              }
+              const audioRes = await fetch(mp3Url);
+              const buffer = await audioRes.arrayBuffer();
+              const audioBuffer = await new Promise<AudioBuffer>((resolve, reject) => {
+                this.ctx!.decodeAudioData(buffer, resolve, reject);
+              });
+              const source = this.ctx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(this.ctx.destination);
+              source.onended = () => {
+                this.updateDiag({ lastStatus: 'success', lastMessage: 'Google TTS omroep voltooid' });
+                if (callback) callback(true);
+              };
+              source.start(0);
+              return;
+            } else {
+              const audio = new Audio(mp3Url);
+              audio.volume = 1.0;
+              this.activeAudioElement = audio;
+
+              audio.onended = () => {
+                this.updateDiag({ lastStatus: 'success', lastMessage: 'Google TTS omroep voltooid' });
+                if (this.activeAudioElement === audio) this.activeAudioElement = null;
+                if (callback) callback(true);
+              };
+              audio.onerror = () => {
+                this.playNativeSpeechSynthesis(text, false, callback);
+              };
+              await audio.play();
+              return;
+            }
+          } else {
+            throw new Error("SoundOfText API failed");
+          }
+        } catch (e) {
+          console.warn("SoundOfText Google TTS failed on static host, fallback to native:", e);
+          this.playNativeSpeechSynthesis(text, false, callback);
+          return;
+        }
       }
 
       const url = `/api/tts?text=${encoded}&_t=${cacheBuster}`;
