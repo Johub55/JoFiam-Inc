@@ -710,9 +710,9 @@ class SoundEffects {
       audio.onerror = (e) => {
         console.warn(`Server TTS (${voiceName}) error:`, e);
 
-        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een Linux/Opera-omgeving, schakelen we onmiddellijk permanent over op WAV!
-        if (!isStaticStatic && dynamicMp3Supported && voiceName !== 'voicerss_wav') {
-          console.warn("MP3 decoderen mislukt in deze browser! Permanent omschakelen naar storingsvrij WAV...");
+        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een Linux/Opera-omgeving, schakelen we EÉN keer over naar WAV!
+        if (!isStaticStatic && voiceName !== 'voicerss_wav') {
+          console.warn("MP3 decoderen mislukt in deze browser! Omschakelen naar WAV...");
           dynamicMp3Supported = false;
           clearTimeout(watchdog);
           this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
@@ -728,9 +728,9 @@ class SoundEffects {
         playPromise.catch((err: any) => {
           console.warn('Audio play rejection:', err);
 
-          // Als de browser geen MP3 kan afspelen (NotSupportedError in Opera op Linux), direct overstappen naar WAV!
-          if (err && (err.name === 'NotSupportedError' || String(err).includes('supported'))) {
-            console.warn("Browser ondersteunt geen MP3! Omschakelen naar universele WAV stream...");
+          // Als de browser geen MP3 kan afspelen (NotSupportedError in Opera op Linux), EÉN keer overstappen naar WAV!
+          if (voiceName !== 'voicerss_wav' && err && (err.name === 'NotSupportedError' || String(err).includes('supported'))) {
+            console.warn("Browser ondersteunt geen MP3! Omschakelen naar WAV stream...");
             dynamicMp3Supported = false;
             clearTimeout(watchdog);
             this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);

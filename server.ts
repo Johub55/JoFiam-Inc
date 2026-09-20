@@ -35,10 +35,14 @@ async function startServer() {
           const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
           const rssResponse = await fetch(voiceRssUrl);
           if (rssResponse.ok) {
-            res.setHeader("Content-Type", "audio/wav");
-            res.setHeader("Cache-Control", "public, max-age=86400");
             const buffer = await rssResponse.arrayBuffer();
-            return res.send(Buffer.from(buffer));
+            const textHeader = new TextDecoder().decode(buffer.slice(0, 10));
+            if (!textHeader.startsWith("ERROR")) {
+              res.setHeader("Content-Type", "audio/wav");
+              res.setHeader("Cache-Control", "public, max-age=86400");
+              return res.send(Buffer.from(buffer));
+            }
+            console.warn("VoiceRSS returned error string instead of audio:", new TextDecoder().decode(buffer));
           }
         } catch (e) {
           console.warn("VoiceRSS WAV fetch failed on server:", e);
