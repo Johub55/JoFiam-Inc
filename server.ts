@@ -8,14 +8,6 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Ensure correct JavaScript/TypeScript MIME types on Linux systems
-  app.use((req, res, next) => {
-    if (/\.(js|mjs|ts|tsx)(\?.*)?$/i.test(req.url)) {
-      res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-    }
-    next();
-  });
-
   // API Health Check
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
