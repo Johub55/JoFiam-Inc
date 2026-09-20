@@ -608,7 +608,7 @@ class SoundEffects {
    */
   public playServerTts(
     text: string, 
-    voiceName: 'Ruben' | 'Lotte' | 'google' | string = 'Ruben', 
+    voiceName: string = 'Ruben', 
     callback?: (success: boolean, isAutoplayBlocked?: boolean) => void,
     orderNo: number | string = 1001,
     target: string = 'Tafel 4'
@@ -622,37 +622,19 @@ class SoundEffects {
       const encoded = encodeURIComponent(text);
       const cacheBuster = Date.now();
       
-      // Als de browser geen MP3 kan afspelen (Opera op Linux), forceren we WAV codec via VoiceRSS!
-      let url = '';
-      if (!dynamicMp3Supported) {
-        url = `/api/tts?voice=voicerss_wav&codec=WAV&text=${encoded}&_t=${cacheBuster}`;
-      } else {
-        url = `/api/tts?voice=${voiceName}&text=${encoded}&_t=${cacheBuster}`;
-      }
-
-      // DYNAMISCHE DETECTIE:
-      // Als we op GitHub Pages draaien (of een andere statische host zonder /api backend),
-      // praten we DIRECT met de upstream API's via het Audio element. Dit omzeilt de ontbrekende server volledig!
       const isStaticStatic = typeof window !== 'undefined' && (
         window.location.hostname.endsWith('.github.io') ||
         window.location.hostname.endsWith('.pages.dev') ||
         window.location.protocol === 'file:'
       );
 
-      if (isStaticStatic) {
-        if (!dynamicMp3Supported) {
-          // Forceer direct de VoiceRSS API met WAV-codec op statische hosts (CORS-veilig via audio-element)
-          url = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encoded}&c=WAV&f=44khz_16bit_stereo`;
-        } else if (voiceName === 'google') {
-          url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
-        } else {
-          url = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voiceName)}&text=${encoded}`;
-        }
-      }
+      const url = isStaticStatic
+        ? `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`
+        : `/api/tts?text=${encoded}&_t=${cacheBuster}`;
 
       const audio = new Audio(url);
       audio.volume = 1.0;
-      (audio as any).referrerPolicy = "no-referrer"; // Bypass browser/referrer restrictions on GitHub Pages
+      (audio as any).referrerPolicy = "no-referrer";
       this.activeAudioElement = audio;
 
       let finished = false;
@@ -667,7 +649,7 @@ class SoundEffects {
       };
 
       const watchdog = setTimeout(() => {
-        console.warn(`Server TTS (${voiceName}) playback timed out (watchdog triggered)`);
+        console.warn(`Server TTS playback timed out (watchdog triggered)`);
         try {
           audio.pause();
         } catch {}
@@ -676,32 +658,20 @@ class SoundEffects {
 
       audio.onplay = () => {
         this.updateDiag({ 
-          activeEngine: !dynamicMp3Supported ? 'Server TTS (WAV VoiceRSS)' : `Server TTS (${voiceName})`, 
+          activeEngine: 'Google Server TTS (NL)', 
           lastStatus: 'playing',
-          lastMessage: !dynamicMp3Supported 
-            ? 'Geen MP3 support: Omroepen via WAV audio/wav stream...' 
-            : `Natuurlijke stem ${voiceName} spreekt...`
+          lastMessage: `Natuurlijke stem spreekt: "${text}"`
         });
       };
 
       audio.onended = () => {
-        this.updateDiag({ lastStatus: 'success', lastMessage: !dynamicMp3Supported ? 'Omroep WAV voltooid' : `Omroep ${voiceName} voltooid` });
+        this.updateDiag({ lastStatus: 'success', lastMessage: 'Omroep voltooid' });
         done(true);
       };
 
       audio.onerror = (e) => {
-        console.warn(`Server TTS (${voiceName}) error:`, e);
-
-        // ZELFHERSTELLEND NOODPLAN: Als MP3 faalt op een Linux/Opera-omgeving, schakelen we EÉN keer over naar WAV!
-        if (!isStaticStatic && voiceName !== 'voicerss_wav') {
-          console.warn("MP3 decoderen mislukt in deze browser! Omschakelen naar WAV...");
-          dynamicMp3Supported = false;
-          clearTimeout(watchdog);
-          this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
-          return;
-        }
-
-        this.updateDiag({ lastStatus: 'error', lastMessage: `Fout op TTS stream voor ${voiceName}` });
+        console.warn(`Server TTS error:`, e);
+        this.updateDiag({ lastStatus: 'error', lastMessage: 'Fout op Server TTS stream' });
         done(false);
       };
 
@@ -710,24 +680,21 @@ class SoundEffects {
         playPromise.catch((err: any) => {
           console.warn('Audio play rejection:', err);
 
-          // Als de browser geen MP3 kan afspelen (NotSupportedError in Opera op Linux), EÉN keer overstappen naar WAV!
-          if (voiceName !== 'voicerss_wav' && err && (err.name === 'NotSupportedError' || String(err).includes('supported'))) {
-            console.warn("Browser ondersteunt geen MP3! Omschakelen naar WAV stream...");
-            dynamicMp3Supported = false;
-            clearTimeout(watchdog);
-            this.playServerTts(text, 'voicerss_wav', callback, orderNo, target);
-            return;
-          }
-
           const isNotAllowed = err && (
             err.name === 'NotAllowedError' || 
             String(err).includes('interact') || 
             String(err).includes('allowed')
           );
-          
-          this.isUnlocked = false;
-          this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
-          done(false, isNotAllowed);
+
+          if (isNotAllowed) {
+            this.isUnlocked = false;
+            this.updateDiag({ lastStatus: 'error', lastMessage: 'Klik op het scherm om audio te activeren' });
+            done(false, true);
+            return;
+          }
+
+          // In case of codec failure or other HTML5 audio play errors, fall back smoothly
+          done(false, false);
         });
       }
     } catch (err) {

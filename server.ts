@@ -16,96 +16,34 @@ async function startServer() {
   /**
    * Server-Side Robust TTS Proxy:
    * Solves all browser CORS, iframe sandboxing, Opera adblocker & 403 hotlinking issues.
-   * Delivers pure audio stream directly from the same origin (/api/tts).
-   * Supports WAV codec for Opera/Linux browsers lacking proprietary MP3 codecs.
+   * Delivers pure, reliable Google Translate Dutch TTS audio stream directly from the same origin (/api/tts).
    */
   app.get("/api/tts", async (req, res) => {
     try {
       const text = typeof req.query.text === 'string' ? req.query.text.trim() : '';
-      const voice = (typeof req.query.voice === 'string' ? req.query.voice : 'Ruben') || 'Ruben';
-      const codec = typeof req.query.codec === 'string' ? (req.query.codec as string).toUpperCase() : 'MP3';
 
       if (!text) {
         return res.status(400).json({ error: "Text parameter is required" });
       }
 
-      // 1. If WAV codec requested or voice is voicerss_wav, return 100% Linux/Opera compatible WAV stream
-      if (codec === 'WAV' || voice === 'voicerss_wav' || voice === 'wav') {
-        try {
-          const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
-          const rssResponse = await fetch(voiceRssUrl);
-          if (rssResponse.ok) {
-            const buffer = await rssResponse.arrayBuffer();
-            const textHeader = new TextDecoder().decode(buffer.slice(0, 10));
-            if (!textHeader.startsWith("ERROR")) {
-              res.setHeader("Content-Type", "audio/wav");
-              res.setHeader("Cache-Control", "public, max-age=86400");
-              return res.send(Buffer.from(buffer));
-            }
-            console.warn("VoiceRSS returned error string instead of audio:", new TextDecoder().decode(buffer));
-          }
-        } catch (e) {
-          console.warn("VoiceRSS WAV fetch failed on server:", e);
+      // Google Translate Natural Dutch Audio Stream - 100% Free, Reliable, No API Key Required
+      const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encodeURIComponent(text)}`;
+      const googleResponse = await fetch(googleUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": "https://translate.google.com/"
         }
+      });
+
+      if (googleResponse.ok) {
+        const buffer = await googleResponse.arrayBuffer();
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", buffer.byteLength);
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        return res.send(Buffer.from(buffer));
       }
 
-      // 2. StreamElements MP3 (Ruben / Lotte)
-      if (voice !== 'google' && voice !== 'voicerss_wav' && voice !== 'wav') {
-        try {
-          const streamUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(text)}`;
-          const upstreamResponse = await fetch(streamUrl, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-          });
-
-          if (upstreamResponse.ok) {
-            const contentType = upstreamResponse.headers.get("content-type") || "audio/mpeg";
-            res.setHeader("Content-Type", contentType);
-            res.setHeader("Cache-Control", "public, max-age=86400");
-            const buffer = await upstreamResponse.arrayBuffer();
-            return res.send(Buffer.from(buffer));
-          }
-        } catch (e) {
-          console.warn("StreamElements TTS fetch failed on server:", e);
-        }
-      }
-
-      // 3. Fallback to VoiceRSS WAV (Guaranteed Linux/Opera WAV audio)
-      try {
-        const voiceRssUrl = `https://api.voicerss.org/?key=e7a79e49129e46a7be71e21b777a3d3c&hl=nl-nl&src=${encodeURIComponent(text)}&c=WAV&f=44khz_16bit_stereo`;
-        const rssResponse = await fetch(voiceRssUrl);
-        if (rssResponse.ok) {
-          res.setHeader("Content-Type", "audio/wav");
-          res.setHeader("Cache-Control", "public, max-age=86400");
-          const buffer = await rssResponse.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn("VoiceRSS WAV fallback failed:", e);
-      }
-
-      // 4. Fallback to Google TTS
-      try {
-        const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encodeURIComponent(text)}`;
-        const googleResponse = await fetch(googleUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "https://translate.google.com/"
-          }
-        });
-
-        if (googleResponse.ok) {
-          res.setHeader("Content-Type", "audio/mpeg");
-          res.setHeader("Cache-Control", "public, max-age=86400");
-          const buffer = await googleResponse.arrayBuffer();
-          return res.send(Buffer.from(buffer));
-        }
-      } catch (e) {
-        console.warn("Google TTS fallback failed:", e);
-      }
-
-      return res.status(502).json({ error: "All TTS upstream services were unreachable" });
+      return res.status(502).json({ error: "Google TTS upstream service unreachable" });
     } catch (err: any) {
       console.error("TTS Server Error:", err);
       return res.status(500).json({ error: err.message || "Internal server error" });
