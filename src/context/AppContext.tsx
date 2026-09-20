@@ -512,28 +512,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       const pUrl = supabaseConfig.unifiedUrl || supabaseConfig.supabaseUrl;
       const pKey = supabaseConfig.unifiedKey || supabaseConfig.supabaseAnonKey;
-      if (pUrl && pKey) {
-        const pc = createClient(pUrl, pKey, {
-          realtime: {
-            params: {
-              eventsPerSecond: 10
-            }
-          }
-        });
-        setPosClient(pc);
-      }
-
       const bUrl = supabaseConfig.useSeparatePay ? (supabaseConfig.payUrl || pUrl) : pUrl;
       const bKey = supabaseConfig.useSeparatePay ? (supabaseConfig.payKey || pKey) : pKey;
-      if (bUrl && bKey) {
-        const bc = createClient(bUrl, bKey, {
-          realtime: {
-            params: {
-              eventsPerSecond: 10
-            }
-          }
-        });
-        setPayClient(bc);
+
+      if (bUrl === pUrl && bKey === pKey) {
+        if (pUrl && pKey) {
+          const pc = createClient(pUrl, pKey, {
+            realtime: { params: { eventsPerSecond: 10 } }
+          });
+          setPosClient(pc);
+          setPayClient(pc);
+        }
+      } else {
+        if (pUrl && pKey) {
+          const pc = createClient(pUrl, pKey, {
+            realtime: { params: { eventsPerSecond: 10 } }
+          });
+          setPosClient(pc);
+        }
+        if (bUrl && bKey) {
+          const bc = createClient(bUrl, bKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+            realtime: { params: { eventsPerSecond: 10 } }
+          });
+          setPayClient(bc);
+        }
       }
 
       setConnectionText('Verbonden (Live Supabase & Lokale Cache)');
