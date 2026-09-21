@@ -820,14 +820,16 @@ export const PickupScreen: React.FC = () => {
                 <div className="flex-1 overflow-hidden relative h-7 flex items-center mx-2 min-w-0">
                   {newsConfigState.customAlertText.length > 32 ? (
                     <div 
-                      className="whitespace-nowrap flex items-center gap-12 animate-marquee"
-                      style={{ animationDuration: `${Math.max(10, newsConfigState.customAlertText.length * 0.35)}s` }}
+                      className="whitespace-nowrap flex items-center animate-marquee"
+                      style={{ animationDuration: `${Math.max(14, Math.round(newsConfigState.customAlertText.length * 0.28))}s` }}
                     >
-                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase">
-                        {newsConfigState.customAlertText}
+                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase pr-16 flex items-center gap-4 shrink-0">
+                        <span>{newsConfigState.customAlertText}</span>
+                        <span className="text-amber-300 bg-slate-950/80 px-2 py-0.5 rounded text-xs font-mono">🚨 SPOED</span>
                       </span>
-                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase">
-                        {newsConfigState.customAlertText}
+                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase pr-16 flex items-center gap-4 shrink-0">
+                        <span>{newsConfigState.customAlertText}</span>
+                        <span className="text-amber-300 bg-slate-950/80 px-2 py-0.5 rounded text-xs font-mono">🚨 SPOED</span>
                       </span>
                     </div>
                   ) : (
@@ -1612,37 +1614,53 @@ export const PickupScreen: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-hidden mx-4 relative h-6 flex items-center">
-              <div 
-                className={`whitespace-nowrap flex items-center gap-8 ${newsConfigState.paused ? '' : 'animate-marquee'}`}
-                style={{ animationDuration: `${newsConfigState.speedSeconds || 22}s` }}
-              >
-                {[...nosHeadlines, ...nosHeadlines].map((headline, idx) => {
-                  const isWeather = headline.includes('WEERBERICHT');
-                  const isAlert = headline.startsWith('🚨');
-                  return (
-                    <span key={idx} className="flex items-center gap-2.5 shrink-0">
-                      {isAlert ? (
-                        <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-black rounded text-[10px] uppercase">
-                          SPOED
+              {(() => {
+                const totalChars = nosHeadlines.join(' ').length;
+                const baseSpeed = newsConfigState.speedSeconds || 22;
+                // Compute duration based on length to guarantee a comfortable constant reading speed (~10-12 chars/sec)
+                const headlineDuration = Math.max(18, Math.round((totalChars / 9) * (baseSpeed / 22)));
+
+                const renderHeadlineSet = (suffix: string) => (
+                  <div className="flex items-center gap-8 pr-8 shrink-0">
+                    {nosHeadlines.map((headline, idx) => {
+                      const isWeather = headline.includes('WEERBERICHT');
+                      const isAlert = headline.startsWith('🚨');
+                      return (
+                        <span key={`${suffix}_${idx}`} className="flex items-center gap-2.5 shrink-0">
+                          {isAlert ? (
+                            <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-black rounded text-[10px] uppercase">
+                              SPOED
+                            </span>
+                          ) : (
+                            <span className="text-rose-500 font-black text-xs">●</span>
+                          )}
+                          <span className={`transition-colors font-bold ${
+                            isAlert
+                              ? 'text-amber-300 font-black'
+                              : isWeather 
+                              ? 'text-sky-300 font-black' 
+                              : clockStyle === 'pixel' 
+                              ? 'text-emerald-300 font-mono' 
+                              : 'text-slate-100 group-hover:text-white'
+                          }`}>
+                            {headline}
+                          </span>
                         </span>
-                      ) : (
-                        <span className="text-rose-500 font-black text-xs">●</span>
-                      )}
-                      <span className={`transition-colors font-bold ${
-                        isAlert
-                          ? 'text-amber-300 font-black'
-                          : isWeather 
-                          ? 'text-sky-300 font-black' 
-                          : clockStyle === 'pixel' 
-                          ? 'text-emerald-300 font-mono' 
-                          : 'text-slate-100 group-hover:text-white'
-                      }`}>
-                        {headline}
-                      </span>
-                    </span>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                );
+
+                return (
+                  <div 
+                    className={`whitespace-nowrap flex items-center ${newsConfigState.paused ? '' : 'animate-marquee'}`}
+                    style={{ animationDuration: `${headlineDuration}s` }}
+                  >
+                    {renderHeadlineSet('setA')}
+                    {renderHeadlineSet('setB')}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="text-amber-400 font-mono font-black shrink-0 px-2 text-xs">
