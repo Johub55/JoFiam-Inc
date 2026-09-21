@@ -15,6 +15,7 @@ import { StaffCashRequestNotifier } from './components/WerkdonaldsPOS/StaffCashR
 import { SupabaseModal } from './components/SupabaseModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
 import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
+import { AutoUpdateBanner } from './components/AutoUpdateBanner';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -29,6 +30,9 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">
+      {/* GitHub Deployment Auto-Update Listener & Banner */}
+      <AutoUpdateBanner />
+
       {/* Universal Top Header */}
       <Header onOpenGithub={() => setShowGithubModal(true)} />
 

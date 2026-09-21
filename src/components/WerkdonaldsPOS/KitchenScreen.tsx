@@ -249,6 +249,15 @@ export const KitchenScreen: React.FC = () => {
   const [selectedRecipeItem, setSelectedRecipeItem] = useState<{ name: string; note?: string } | null>(null);
 
   const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
+  const [showPackingGuideModal, setShowPackingGuideModal] = useState<boolean>(false);
+  const [activeOrderPacking, setActiveOrderPacking] = useState<Order | null>(null);
+  const [activeOrderPackingChecklist, setActiveOrderPackingChecklist] = useState<Record<number, boolean>>({});
+  const [packingChecklist, setPackingChecklist] = useState<Record<string, boolean>>({
+    warm_bottom: false,
+    cold_separated: false,
+    sauces_napkins: false,
+    receipt_sticker: false
+  });
   const [availableVoices, setAvailableVoices] = useState<any[]>([]);
   const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>(
     typeof window !== 'undefined' ? localStorage.getItem('wd_tts_voice') || '' : ''
@@ -332,11 +341,13 @@ export const KitchenScreen: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Orders that are currently on the kitchen screen: in progress or ready
-  const activeOrders = orders.filter(o => isOrderInProgress(o.status) || isOrderReady(o.status));
-  const prepOrders = orders.filter(o => isOrderInProgress(o.status) && o.status !== 'inpakken');
-  const packingOrders = orders.filter(o => o.status === 'inpakken' || o.items.some(it => it.stage === 'inpakken'));
-  const readyOrders = orders.filter(o => isOrderReady(o.status));
+  // Orders that are currently on the kitchen screen: exclude finished/afgehaald/cancelled orders!
+  const isFinished = (s: string) => s === 'afgehaald' || s === 'archived' || s === 'cancelled' || s === 'geannuleerd';
+
+  const activeOrders = orders.filter(o => !isFinished(o.status) && (isOrderInProgress(o.status) || isOrderReady(o.status)));
+  const prepOrders = orders.filter(o => !isFinished(o.status) && isOrderInProgress(o.status) && o.status !== 'inpakken');
+  const packingOrders = orders.filter(o => !isFinished(o.status) && (o.status === 'inpakken' || (o.status !== 'klaar' && o.status !== 'done' && o.items.some(it => it.stage === 'inpakken'))));
+  const readyOrders = orders.filter(o => !isFinished(o.status) && isOrderReady(o.status));
 
   const prepCount = prepOrders.length;
   const packingCount = packingOrders.length;
@@ -496,6 +507,16 @@ export const KitchenScreen: React.FC = () => {
           >
             <BellRing className="w-4 h-4 text-amber-400" />
             <span>Test Omroep</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowPackingGuideModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 transition active:scale-95 shadow"
+            title="Open visuele inpak-handleiding & kwaliteits-checklist"
+          >
+            <Package className="w-4 h-4 text-cyan-400" />
+            <span>📦 Visuele Inpakgids</span>
           </button>
 
           <button
@@ -1429,9 +1450,32 @@ export const KitchenScreen: React.FC = () => {
                   </div>
 
                   {/* Actions Area */}
-                  <div className="pt-2.5 mt-2.5 border-t border-slate-800">
+                  <div className="pt-2.5 mt-2.5 border-t border-slate-800 space-y-2">
                     {!isReady ? (
                       <div className="space-y-2">
+                        {/* Per-Order Packing Process Launcher Button */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveOrderPacking(order);
+                            const initialChecks: Record<number, boolean> = {};
+                            order.items.forEach((it, idx) => {
+                              if (it.done || it.stage === 'klaar') {
+                                initialChecks[idx] = true;
+                              }
+                            });
+                            setActiveOrderPackingChecklist(initialChecks);
+                          }}
+                          className={`w-full py-2 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition active:scale-95 border ${
+                            order.status === 'inpakken' || inPackItems > 0
+                              ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 border-cyan-300 shadow-lg shadow-cyan-950/40 animate-pulse'
+                              : 'bg-slate-800 hover:bg-slate-750 text-cyan-300 border-cyan-500/30'
+                          }`}
+                        >
+                          <Package className="w-4 h-4 text-cyan-400" />
+                          <span>📦 Start Inpakproces #{order.no}</span>
+                        </button>
+
                         {allDone && (
                           <div className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 p-1.5 rounded-lg text-center font-bold flex items-center justify-center gap-1 animate-pulse">
                             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -1597,6 +1641,444 @@ export const KitchenScreen: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Visual Packing Guide & Quality Checklist Modal */}
+      {showPackingGuideModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-cyan-500/40 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-bold text-xl">
+                  📦
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <span>Visuele Inpak-Handleiding &amp; Tray Gids</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                      Standard Operating Procedure
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Instructies voor keukenteam &amp; inpakmedewerkers om bestellingen snel en foutloos in te pakken.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPackingGuideModal(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Section 1: Bag Size & Tray Selector */}
+            <div>
+              <h3 className="text-xs uppercase font-mono font-bold text-cyan-400 mb-2.5 flex items-center gap-1.5">
+                <span>🛍️</span>
+                <span>1. Keuze Zakformaat &amp; Presentatie:</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-xs text-white">🛍️ Zak S (Small)</span>
+                    <span className="text-[9px] bg-slate-800 text-slate-300 font-mono px-1.5 py-0.5 rounded">1-2 items</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Voor losse burgers, snacks of 1 middel friet. Altijd <strong>2 servetten</strong> toevoegen.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-xs text-white">🛍️ Zak M (Medium)</span>
+                    <span className="text-[9px] bg-cyan-500/20 text-cyan-300 font-mono px-1.5 py-0.5 rounded">3-4 items</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Standaard zak voor 1 compleet menu + snack. Sauzen en frituursnoepgoed onderin leggen.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-2xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-xs text-white">🛍️ Zak L (Large)</span>
+                    <span className="text-[9px] bg-amber-500/20 text-amber-300 font-mono px-1.5 py-0.5 rounded">5+ items</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-snug">
+                    Familiebestellingen &amp; groepsdeals. Max 6 items per zak om pletten van burgers te voorkomen.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Temperature Separation & Stacking Diagram */}
+            <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-slate-800 rounded-2xl space-y-3">
+              <h3 className="text-xs uppercase font-mono font-bold text-amber-400 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>🔥</span>
+                  <span>2. Temperatuur Scheiding (Warm vs Koud)</span>
+                </span>
+                <span className="text-[10px] text-amber-300 font-normal">Belangrijk voor kwaliteit</span>
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-rose-950/20 border border-rose-500/30 rounded-xl space-y-1">
+                  <div className="font-bold text-rose-300 flex items-center gap-1">
+                    <span>🔥 ONDERIN ZAK (WARM)</span>
+                  </div>
+                  <ul className="text-[11px] text-slate-300 list-disc list-inside space-y-0.5">
+                    <li>Friet rechtop zetten (voorkomt muf worden)</li>
+                    <li>Burgers en warme wraps plat onderop</li>
+                    <li>Warm frituursnoepgoed direct naast de friet</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-cyan-950/20 border border-cyan-500/30 rounded-xl space-y-1">
+                  <div className="font-bold text-cyan-300 flex items-center gap-1">
+                    <span>❄️ BEKERHOUDER (KOUD)</span>
+                  </div>
+                  <ul className="text-[11px] text-slate-300 list-disc list-inside space-y-0.5">
+                    <li>Milkshakes, McFlurry's &amp; frisdrank in draagkarton</li>
+                    <li><strong>NOOIT</strong> koud ijs in dezelfde zak als warme burgers!</li>
+                    <li>Altijd deksel controleren op stevige sluiting</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Interactive Packing Quality Checklist */}
+            <div>
+              <h3 className="text-xs uppercase font-mono font-bold text-emerald-400 mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <span>✅</span>
+                  <span>3. Snelle Inpak Kwaliteitscheck:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPackingChecklist({
+                    warm_bottom: false,
+                    cold_separated: false,
+                    sauces_napkins: false,
+                    receipt_sticker: false
+                  })}
+                  className="text-[10px] text-slate-400 hover:text-white underline font-normal"
+                >
+                  Reset vinkjes
+                </button>
+              </h3>
+
+              <div className="space-y-2 bg-slate-950 border border-slate-800 rounded-2xl p-3.5">
+                {[
+                  { key: 'warm_bottom', label: '🔥 Warm eten onderin (Friet rechtop, burgers plat)', icon: '🍟' },
+                  { key: 'cold_separated', label: '🥤 Koude dranken & ijs in aparte bekerhouder', icon: '❄️' },
+                  { key: 'sauces_napkins', label: '🧂 Sauzen, rietjes & 2 servetten per menu bijgesloten', icon: '🧻' },
+                  { key: 'receipt_sticker', label: '🏷️ Zak 2x dichtgevouwen & bestelbon-sticker op de zak', icon: '📌' }
+                ].map(item => (
+                  <label
+                    key={item.key}
+                    className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition ${
+                      packingChecklist[item.key]
+                        ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-bold'
+                        : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-850'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!packingChecklist[item.key]}
+                      onChange={e => setPackingChecklist(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                      className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-700 focus:ring-0"
+                    />
+                    <span className="text-sm">{item.icon}</span>
+                    <span className="text-xs">{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 flex justify-between items-center border-t border-slate-800">
+              <span className="text-[11px] text-slate-400 italic">
+                Werkdonalds Kwaliteitstandaard v2.4
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowPackingGuideModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs transition shadow-lg"
+              >
+                Begrepen &amp; Sluiten ✓
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-Order Packing Process Interactive Modal */}
+      {activeOrderPacking && (() => {
+        const ord = activeOrderPacking;
+        const totalItemsCount = ord.items.reduce((sum, it) => sum + it.qty, 0);
+        const checkedCount = ord.items.filter((_, idx) => !!activeOrderPackingChecklist[idx]).reduce((sum, it) => sum + it.qty, 0);
+        const isAllChecked = checkedCount === totalItemsCount;
+
+        // Categorize order items
+        const warmItems: Array<{ item: any; index: number }> = [];
+        const coldItems: Array<{ item: any; index: number }> = [];
+        const sauceItems: Array<{ item: any; index: number }> = [];
+
+        ord.items.forEach((it, idx) => {
+          const lower = it.name.toLowerCase();
+          if (
+            lower.includes('cola') || lower.includes('fanta') || lower.includes('cassis') || 
+            lower.includes('sprite') || lower.includes('7up') || lower.includes('water') || 
+            lower.includes('shake') || lower.includes('flurry') || lower.includes('sundae') || 
+            lower.includes('ijs') || lower.includes('drank') || lower.includes('sap') || lower.includes('bier')
+          ) {
+            coldItems.push({ item: it, index: idx });
+          } else if (
+            lower.includes('saus') || lower.includes('mayo') || lower.includes('ketchup') || 
+            lower.includes('chili') || lower.includes('frites') || lower.includes('mustard') || lower.includes('dip')
+          ) {
+            sauceItems.push({ item: it, index: idx });
+          } else {
+            warmItems.push({ item: it, index: idx });
+          }
+        });
+
+        // Recommended bag size
+        let recommendedBag = '🛍️ Zak Small (1-2 items)';
+        if (totalItemsCount >= 5) recommendedBag = '🛍️ Zak Large (5+ items) + Max 6 items per zak';
+        else if (totalItemsCount >= 3) recommendedBag = '🛍️ Zak Medium (3-4 items)';
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-cyan-500/50 rounded-3xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scroll">
+              
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-slate-800 pb-3.5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl font-black text-cyan-400 font-mono">#{ord.no}</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30 uppercase">
+                      📦 INPAKPROCES &amp; TRAY CHECK
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-slate-300 mt-1">
+                    <span>{ord.orderType === 'dine_in' ? '🍽️ Eetzaal' : ord.orderType === 'delivery' ? '🛵 Bezorging' : '🛍️ Meenemen'}</span>
+                    <span>·</span>
+                    <span className="text-amber-300">{ord.identifier || 'Klant'}</span>
+                    <span>·</span>
+                    <span className="text-slate-400 font-mono">{ord.time}</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveOrderPacking(null)}
+                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Automatic Packaging Recommendation */}
+              <div className="p-3.5 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-cyan-500/30 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between text-xs font-black">
+                  <span className="text-cyan-300 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-cyan-400" />
+                    <span>Aanbevolen Verpakking voor Bestelling #{ord.no}:</span>
+                  </span>
+                  <span className="text-slate-400 font-mono font-bold">{totalItemsCount} items totaal</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
+                    <span className="text-[10px] uppercase text-slate-400 block font-bold">Zak Advies:</span>
+                    <span className="font-bold text-white text-xs">{recommendedBag}</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl">
+                    <span className="text-[10px] uppercase text-slate-400 block font-bold">Koude Dranken:</span>
+                    <span className="font-bold text-sky-300 text-xs">
+                      {coldItems.length > 0 
+                        ? `🥤 ${coldItems.reduce((s, c) => s + c.item.qty, 0)} koud(e) item(s) in draagkarton` 
+                        : 'Geen koude dranken in deze order'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Item Checklist Split by Category */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-xs font-black text-slate-300">
+                  <span>Vink producten af tijdens het inpakken:</span>
+                  <span className={`font-mono px-2 py-0.5 rounded-full ${
+                    isAllChecked ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-amber-300'
+                  }`}>
+                    {checkedCount} / {totalItemsCount} In gepakt ({Math.round((checkedCount / totalItemsCount) * 100)}%)
+                  </span>
+                </div>
+
+                {/* Live Progress Bar */}
+                <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                  <div 
+                    className="h-full bg-gradient-to-r from-amber-500 via-cyan-400 to-emerald-400 transition-all duration-300"
+                    style={{ width: `${Math.round((checkedCount / totalItemsCount) * 100)}%` }}
+                  />
+                </div>
+
+                {/* 🔥 Warme items */}
+                {warmItems.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-400 flex items-center gap-1">
+                      <span>🔥 Warme Producten (Onderin Zak)</span>
+                    </span>
+                    {warmItems.map(({ item, index }) => (
+                      <label
+                        key={index}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                          activeOrderPackingChecklist[index]
+                            ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-bold'
+                            : 'bg-slate-950 border-slate-800 text-white hover:bg-slate-850'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={!!activeOrderPackingChecklist[index]}
+                            onChange={e => {
+                              setActiveOrderPackingChecklist(prev => ({ ...prev, [index]: e.target.checked }));
+                            }}
+                            className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-0"
+                          />
+                          <div>
+                            <span className="font-mono font-black text-amber-400 mr-1.5">{item.qty}x</span>
+                            <span className="text-xs font-bold">{item.name}</span>
+                            {item.itemNote && (
+                              <div className="text-[10px] text-amber-300/90 italic pl-1">📝 {item.itemNote}</div>
+                            )}
+                          </div>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                          Warm
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {/* ❄️ Koude items */}
+                {coldItems.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-cyan-400 flex items-center gap-1">
+                      <span>❄️ Koude Dranken &amp; Desserts (In Bekerhouder)</span>
+                    </span>
+                    {coldItems.map(({ item, index }) => (
+                      <label
+                        key={index}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                          activeOrderPackingChecklist[index]
+                            ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-bold'
+                            : 'bg-slate-950 border-slate-800 text-white hover:bg-slate-850'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={!!activeOrderPackingChecklist[index]}
+                            onChange={e => {
+                              setActiveOrderPackingChecklist(prev => ({ ...prev, [index]: e.target.checked }));
+                            }}
+                            className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-0"
+                          />
+                          <div>
+                            <span className="font-mono font-black text-cyan-400 mr-1.5">{item.qty}x</span>
+                            <span className="text-xs font-bold">{item.name}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+                          Koud / Bekerhouder
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {/* 🧂 Sauzen & Extra's */}
+                {sauceItems.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1">
+                      <span>🧂 Sauzen &amp; Extra's</span>
+                    </span>
+                    {sauceItems.map(({ item, index }) => (
+                      <label
+                        key={index}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition ${
+                          activeOrderPackingChecklist[index]
+                            ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-bold'
+                            : 'bg-slate-950 border-slate-800 text-white hover:bg-slate-850'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <input
+                            type="checkbox"
+                            checked={!!activeOrderPackingChecklist[index]}
+                            onChange={e => {
+                              setActiveOrderPackingChecklist(prev => ({ ...prev, [index]: e.target.checked }));
+                            }}
+                            className="w-4 h-4 rounded text-emerald-500 bg-slate-900 border-slate-700 focus:ring-0"
+                          />
+                          <div>
+                            <span className="font-mono font-black text-amber-400 mr-1.5">{item.qty}x</span>
+                            <span className="text-xs font-bold">{item.name}</span>
+                          </div>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                          Saus
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Final Complete Action Button */}
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Mark all items checked
+                    const allCheckedMap: Record<number, boolean> = {};
+                    ord.items.forEach((_, idx) => { allCheckedMap[idx] = true; });
+                    setActiveOrderPackingChecklist(allCheckedMap);
+                  }}
+                  className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+                >
+                  Vink Alles Aan
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateOrderStatus(ord.no, 'klaar');
+                    setActiveOrderPacking(null);
+                  }}
+                  className={`flex-1 py-3 rounded-2xl text-xs font-black flex items-center justify-center gap-2 shadow-xl transition active:scale-95 ${
+                    isAllChecked
+                      ? 'bg-emerald-400 hover:bg-emerald-300 text-slate-950 ring-2 ring-emerald-400/50 animate-pulse'
+                      : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
+                  }`}
+                >
+                  <Check className="w-4 h-4" />
+                  <span>
+                    ✓ Inpakken Voltooid — Markeer #{ord.no} als Klaar &amp; Omroepen
+                  </span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

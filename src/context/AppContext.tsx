@@ -1553,13 +1553,41 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const updateOrderStatus = async (orderNum: number, newStatus: OrderStatus) => {
     const now = Date.now();
-    recordLocalOrderMutation(orderNum, { status: newStatus });
-    
+    let updatedItemsList: any[] | undefined = undefined;
     let currentOrder: Order | undefined;
+
     setOrders(prev => {
       currentOrder = prev.find(o => o.no === orderNum);
-      return prev.map(o => o.no === orderNum ? { ...o, status: newStatus, updatedAt: now } : o);
+      return prev.map(o => {
+        if (o.no !== orderNum) return o;
+
+        // User directive: "als het is ingepakt moeten de statussen van de producten ook naar klaar"
+        let items = o.items;
+        if (newStatus === 'klaar' || newStatus === 'done') {
+          items = o.items.map(it => ({
+            ...it,
+            stage: 'klaar' as OrderItemStage,
+            done: true
+          }));
+          updatedItemsList = items;
+        } else if (newStatus === 'inpakken') {
+          items = o.items.map(it => ({
+            ...it,
+            stage: (it.stage === 'wachten' || it.stage === 'bereiden') ? ('inpakken' as OrderItemStage) : it.stage
+          }));
+          updatedItemsList = items;
+        }
+
+        return {
+          ...o,
+          status: newStatus,
+          items,
+          updatedAt: now
+        };
+      });
     });
+
+    recordLocalOrderMutation(orderNum, { status: newStatus, items: updatedItemsList });
 
     if (newStatus === 'done' || newStatus === 'klaar') {
       const orderToAnnounce = currentOrder || orders.find(o => o.no === orderNum);
@@ -1567,10 +1595,16 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         AudioFX.speakOrder(orderNum, orderToAnnounce.identifier, orderToAnnounce.orderType);
       }
     }
-    broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: newStatus, updatedAt: now });
+
+    broadcastSync('SYNC_ORDER_STATUS', { orderNo: orderNum, status: newStatus, items: updatedItemsList, updatedAt: now });
+
     if (posClient) {
       try {
-        const { error } = await posClient.from('orders').update({ status: newStatus }).eq('order_no', orderNum);
+        const updatePayload: any = { status: newStatus };
+        if (updatedItemsList) {
+          updatePayload.items = updatedItemsList;
+        }
+        const { error } = await posClient.from('orders').update(updatePayload).eq('order_no', orderNum);
         if (error) {
           console.warn('⚠️ Supabase order status update niet opgeslagen in cloud:', error.message);
         }

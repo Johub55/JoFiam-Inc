@@ -6,6 +6,14 @@ import { DiyTerminalModal } from './DiyTerminalModal';
 import { terminalManager, TerminalCallbacks } from '../../services/terminalService';
 import { CashPaymentRequest } from '../../types';
 import { 
+  LoyaltyCustomer, 
+  LOYALTY_REWARDS, 
+  findLoyaltyCustomerByPhoneOrName, 
+  registerLoyaltyCustomer, 
+  addCoinsToCustomer, 
+  deductCoinsFromCustomer 
+} from '../../services/loyalty';
+import { 
   CreditCard, 
   Coins, 
   Gift, 
@@ -23,7 +31,12 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  Tag
+  Tag,
+  Users,
+  Star,
+  Award,
+  Search,
+  UserPlus
 } from 'lucide-react';
 
 interface PaymentModalProps {
@@ -93,6 +106,23 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
+  // Split Bill State
+  const [isSplitMode, setIsSplitMode] = useState<boolean>(false);
+  const [splitPersonsCount, setSplitPersonsCount] = useState<number>(2);
+  const [splitPayments, setSplitPayments] = useState<Array<{ id: number; amount: number; method: 'cash' | 'card' | 'workpay'; paid: boolean }>>([
+    { id: 1, amount: 0, method: 'card', paid: false },
+    { id: 2, amount: 0, method: 'card', paid: false }
+  ]);
+
+  // Loyalty Program State
+  const [loyaltyQuery, setLoyaltyQuery] = useState<string>('');
+  const [activeLoyaltyCustomer, setActiveLoyaltyCustomer] = useState<LoyaltyCustomer | null>(null);
+  const [showLoyaltyRewardsModal, setShowLoyaltyRewardsModal] = useState<boolean>(false);
+  const [loyaltyFeedback, setLoyaltyFeedback] = useState<string>('');
+  const [showCreateLoyaltyModal, setShowCreateLoyaltyModal] = useState<boolean>(false);
+  const [newCustNameInput, setNewCustNameInput] = useState<string>('');
+  const [newCustPhoneInput, setNewCustPhoneInput] = useState<string>('');
+
   // Totals
   const rawSubtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   let discountAmount = 0;
@@ -102,6 +132,22 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
     discountAmount = Math.min(rawSubtotal, appliedDiscount.val);
   }
   const finalTotal = Math.max(0, rawSubtotal - discountAmount);
+
+  // Split calculations
+  useEffect(() => {
+    if (isSplitMode && finalTotal > 0) {
+      const perPerson = Math.round((finalTotal / splitPersonsCount) * 100) / 100;
+      const newSplits = Array.from({ length: splitPersonsCount }, (_, i) => ({
+        id: i + 1,
+        amount: i === splitPersonsCount - 1
+          ? Math.max(0, Math.round((finalTotal - (perPerson * (splitPersonsCount - 1))) * 100) / 100)
+          : perPerson,
+        method: 'card' as const,
+        paid: false
+      }));
+      setSplitPayments(newSplits);
+    }
+  }, [isSplitMode, splitPersonsCount, finalTotal]);
 
   // Cash change
   const receivedNum = parseFloat(cashReceived) || (cashApprovalData ? cashApprovalData.received : 0);
@@ -444,6 +490,248 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
               <p className="text-[11px] text-amber-400/90 font-medium mt-1">
                 ℹ️ Bezorgbestellingen worden niet omgeroepen via de speakers en niet op het afhaalscherm getoond.
               </p>
+            )}
+          </div>
+
+          {/* WerkLoyalty Spaarprogramma Card */}
+          <div className="p-3.5 bg-gradient-to-br from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/30 rounded-2xl space-y-3 shadow-inner">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span>WerkLoyalty Spaarprogramma</span>
+              </span>
+              <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-500/30">
+                10 WerkCoins per €1,-
+              </span>
+            </div>
+
+            {!activeLoyaltyCustomer ? (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={loyaltyQuery}
+                      onChange={e => {
+                        setLoyaltyQuery(e.target.value);
+                        setLoyaltyFeedback('');
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const found = findLoyaltyCustomerByPhoneOrName(loyaltyQuery);
+                          if (found) {
+                            setActiveLoyaltyCustomer(found);
+                            setLoyaltyFeedback('');
+                          } else {
+                            setLoyaltyFeedback('Klant niet gevonden. Maak een nieuw account aan.');
+                          }
+                        }
+                      }}
+                      placeholder="Zoek mobiel (bijv. 0612345678) of naam..."
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const found = findLoyaltyCustomerByPhoneOrName(loyaltyQuery);
+                      if (found) {
+                        setActiveLoyaltyCustomer(found);
+                        setLoyaltyFeedback('');
+                      } else {
+                        setShowCreateLoyaltyModal(true);
+                        setNewCustPhoneInput(loyaltyQuery);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-black transition flex items-center gap-1"
+                  >
+                    <span>Zoek / Nieuw</span>
+                  </button>
+                </div>
+
+                {loyaltyFeedback && (
+                  <p className="text-[11px] text-amber-300 font-medium">{loyaltyFeedback}</p>
+                )}
+
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                  <span>💡 Tip: Koppel vaste klanten voor automatisch spaarpunten &amp; beloningen.</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateLoyaltyModal(true)}
+                    className="text-amber-400 hover:underline font-bold flex items-center gap-1"
+                  >
+                    <UserPlus className="w-3 h-3" /> Nieuwe Klant
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-slate-900/90 border border-amber-500/40 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-xs text-white">{activeLoyaltyCustomer.name}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                        👑 {activeLoyaltyCustomer.tier}
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-400">📱 {activeLoyaltyCustomer.phone}</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveLoyaltyCustomer(null)}
+                    className="text-[10px] text-rose-400 hover:underline font-bold"
+                  >
+                    Ontkoppelen
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-slate-800 text-xs">
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Huidig Saldo:</span>
+                    <span className="font-mono font-black text-amber-400 text-sm">
+                      🪙 {activeLoyaltyCustomer.coins} WerkCoins
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-400 text-[10px] block">Verdiend op deze order:</span>
+                    <span className="font-mono font-black text-emerald-400 text-xs">
+                      +{Math.floor(finalTotal * 10)} Coins
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLoyaltyRewardsModal(true)}
+                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 text-slate-950 font-black text-xs shadow-md hover:scale-105 transition flex items-center gap-1"
+                  >
+                    <Gift className="w-3.5 h-3.5" />
+                    <span>Inwisselen</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Split Bill / Groepsbestelling Toggle & Mode */}
+          <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-cyan-400" />
+                <span>Rekening Splitsen &amp; Groepsbestellingen</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSplitMode(!isSplitMode)}
+                className={`px-3 py-1 rounded-xl text-xs font-black transition ${
+                  isSplitMode
+                    ? 'bg-cyan-500 text-slate-950 shadow-lg'
+                    : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {isSplitMode ? 'SPLITSEN AAN ✓' : 'Splitsen Inschakelen'}
+              </button>
+            </div>
+
+            {isSplitMode && (
+              <div className="space-y-3 pt-2 border-t border-slate-900 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-400 font-bold">Aantal personen in groep:</span>
+                  <div className="flex gap-1.5">
+                    {[2, 3, 4, 5, 6].map(num => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setSplitPersonsCount(num)}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold transition ${
+                          splitPersonsCount === num
+                            ? 'bg-cyan-500 text-slate-950 font-black'
+                            : 'bg-slate-900 text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        {num}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 font-bold px-1">
+                    <span>Verdeling per persoon ({euro(finalTotal)} totaal):</span>
+                    <span className="text-cyan-400 font-mono">
+                      €{(finalTotal / splitPersonsCount).toFixed(2)} p.p.
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    {splitPayments.map((p) => (
+                      <div
+                        key={p.id}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between text-xs transition ${
+                          p.paid
+                            ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-[10px] font-mono font-black flex items-center justify-center">
+                            #{p.id}
+                          </span>
+                          <span className="font-bold">Persoon {p.id}</span>
+                          <span className="font-mono font-black text-cyan-300">
+                            {euro(p.amount)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {p.paid ? (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                              <Check className="w-3 h-3" /> Betaald
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSplitPayments(prev =>
+                                  prev.map(item => (item.id === p.id ? { ...item, paid: true } : item))
+                                );
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-[10px] transition"
+                            >
+                              Markeer als Betaald
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Split summary progress */}
+                  {(() => {
+                    const paidTotal = splitPayments.filter(sp => sp.paid).reduce((s, sp) => s + sp.amount, 0);
+                    const remaining = Math.max(0, finalTotal - paidTotal);
+
+                    return (
+                      <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between text-xs font-bold">
+                        <span className="text-slate-400">Status voldaan:</span>
+                        <div className="text-right font-mono">
+                          <span className={remaining <= 0.01 ? 'text-emerald-400 font-black' : 'text-amber-400'}>
+                            {euro(paidTotal)} / {euro(finalTotal)}
+                          </span>
+                          {remaining > 0.01 && (
+                            <span className="block text-[10px] text-rose-400">
+                              (Nog {euro(remaining)} te voldoen)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
             )}
           </div>
 
@@ -1127,6 +1415,172 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
             await executeTerminalCheckout(uid, pin);
           }}
         />
+      )}
+
+      {/* Loyalty Rewards Modal */}
+      {showLoyaltyRewardsModal && activeLoyaltyCustomer && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-amber-500/40 w-full max-w-md rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Gift className="w-5 h-5 text-amber-400" />
+                <h3 className="font-black text-sm text-white">WerkLoyalty Beloningen</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowLoyaltyRewardsModal(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-xs">
+              <div>
+                <span className="font-bold text-white block">{activeLoyaltyCustomer.name}</span>
+                <span className="text-amber-300 font-mono text-[11px]">📱 {activeLoyaltyCustomer.phone}</span>
+              </div>
+              <span className="font-mono font-black text-amber-400 text-sm">
+                🪙 {activeLoyaltyCustomer.coins} Coins
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+              {LOYALTY_REWARDS.map(reward => {
+                const canAfford = activeLoyaltyCustomer.coins >= reward.coinsCost;
+                return (
+                  <div
+                    key={reward.id}
+                    className={`p-3 rounded-2xl border flex items-center justify-between transition ${
+                      canAfford
+                        ? 'bg-slate-950 border-amber-500/30 hover:border-amber-400'
+                        : 'bg-slate-950/50 border-slate-800 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">{reward.emoji}</span>
+                      <div>
+                        <div className="font-bold text-xs text-white">{reward.title}</div>
+                        <div className="text-[10px] text-slate-400">{reward.description}</div>
+                        <div className="text-[10px] font-mono font-bold text-amber-400 mt-0.5">
+                          🪙 {reward.coinsCost} WerkCoins
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!canAfford}
+                      onClick={() => {
+                        const updated = deductCoinsFromCustomer(activeLoyaltyCustomer.phone, reward.coinsCost);
+                        if (updated) {
+                          setActiveLoyaltyCustomer(updated);
+                          if (reward.discountVal > 0) {
+                            applyCouponCode(`LOYALTY_${reward.id.toUpperCase()}`);
+                          }
+                          setShowLoyaltyRewardsModal(false);
+                        }
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                        canAfford
+                          ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow'
+                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      }`}
+                    >
+                      {canAfford ? 'Inwisselen' : 'Te weinig Coins'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowLoyaltyRewardsModal(false)}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition"
+            >
+              Sluiten
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create Loyalty Customer Modal */}
+      {showCreateLoyaltyModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-amber-400" />
+                <h3 className="font-black text-sm text-white">Nieuwe WerkLoyalty Klant</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateLoyaltyModal(false)}
+                className="p-1 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 font-semibold block mb-1">
+                  Volledige Naam
+                </label>
+                <input
+                  type="text"
+                  value={newCustNameInput}
+                  onChange={e => setNewCustNameInput(e.target.value)}
+                  placeholder="bijv. Jan Jansen"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-400 font-semibold block mb-1">
+                  Mobiel Telefoonnummer
+                </label>
+                <input
+                  type="text"
+                  value={newCustPhoneInput}
+                  onChange={e => setNewCustPhoneInput(e.target.value)}
+                  placeholder="bijv. 0612345678"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-[11px] text-amber-300 font-bold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Inclusief +50 Gratis Welkomst-WerkCoins bij aanmelding!</span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCreateLoyaltyModal(false)}
+                className="flex-1 py-2.5 bg-slate-800 text-slate-300 font-bold rounded-xl text-xs hover:bg-slate-700 transition"
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!newCustNameInput.trim() || !newCustPhoneInput.trim()) return;
+                  const newCust = registerLoyaltyCustomer(newCustNameInput.trim(), newCustPhoneInput.trim());
+                  setActiveLoyaltyCustomer(newCust);
+                  setShowCreateLoyaltyModal(false);
+                  setNewCustNameInput('');
+                  setNewCustPhoneInput('');
+                }}
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition"
+              >
+                Opslaan &amp; Koppelen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

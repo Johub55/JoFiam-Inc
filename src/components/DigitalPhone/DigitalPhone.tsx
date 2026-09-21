@@ -36,6 +36,14 @@ import {
   Users
 } from 'lucide-react';
 import { BankAccount, PosUser } from '../../types';
+import { 
+  LoyaltyCustomer, 
+  LOYALTY_REWARDS, 
+  getLoyaltyCustomers, 
+  findLoyaltyCustomerByPhoneOrName, 
+  registerLoyaltyCustomer, 
+  deductCoinsFromCustomer 
+} from '../../services/loyalty';
 
 interface SMSMessage {
   id: string;
@@ -95,10 +103,19 @@ export const DigitalPhone: React.FC = () => {
   }, []);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Apps: 'home', 'werkpay', 'phone', 'messages', 'settings', 'werkdonalds'
-  const [activeApp, setActiveApp] = useState<'home' | 'werkpay' | 'phone' | 'messages' | 'settings' | 'werkdonalds'>('home');
+  // Apps: 'home', 'werkpay', 'phone', 'messages', 'settings', 'werkdonalds', 'loyalty'
+  const [activeApp, setActiveApp] = useState<'home' | 'werkpay' | 'phone' | 'messages' | 'settings' | 'werkdonalds' | 'loyalty'>('home');
   const [time, setTime] = useState<string>('12:00');
   const [notification, setNotification] = useState<{ title: string; body: string } | null>(null);
+
+  // WERKLOYALTY CUSTOMER MOBILE APP STATE (SECURE AUTH)
+  const [loyaltyUser, setLoyaltyUser] = useState<LoyaltyCustomer | null>(null);
+  const [loyaltyPhoneInput, setLoyaltyPhoneInput] = useState<string>('');
+  const [loyaltyPassInput, setLoyaltyPassInput] = useState<string>('');
+  const [loyaltyAuthError, setLoyaltyAuthError] = useState<string | null>(null);
+  const [loyaltyIsRegister, setLoyaltyIsRegister] = useState<boolean>(false);
+  const [loyaltyRegName, setLoyaltyRegName] = useState<string>('');
+  const [redeemedVoucher, setRedeemedVoucher] = useState<{ title: string; code: string; emoji: string } | null>(null);
 
   // Phone Customization & Settings State
   const [wallpaper, setWallpaper] = useState<string>(() => {
@@ -1362,6 +1379,21 @@ export const DigitalPhone: React.FC = () => {
                       )}
                     </div>
                     <span className="text-[10px] font-black text-slate-300 text-center tracking-tight leading-none">Sms</span>
+                  </button>
+
+                  {/* APP: WERKLOYALTY CUSTOMER APP */}
+                  <button
+                    onClick={() => {
+                      setActiveApp('loyalty');
+                      playClick();
+                    }}
+                    className="flex flex-col items-center gap-1.5 group"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 via-amber-600 to-yellow-500 flex items-center justify-center shadow-lg group-active:scale-90 transition border border-amber-400/40 relative">
+                      <Star className="w-6 h-6 text-slate-950 fill-slate-950" />
+                      <span className="absolute -bottom-1 -right-1 text-[8px] bg-slate-950 text-amber-400 px-1 rounded-full border border-amber-500/50 font-black">🪙</span>
+                    </div>
+                    <span className="text-[10px] font-black text-amber-300 text-center tracking-tight leading-none">WerkLoyalty</span>
                   </button>
 
                   {/* APP: INSTELLINGEN */}
@@ -2662,6 +2694,333 @@ export const DigitalPhone: React.FC = () => {
                       <span className="text-emerald-400 font-bold truncate max-w-[120px]">{myName}</span>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* 6. APP: WERKLOYALTY CUSTOMER MOBILE APP */}
+            {activeApp === 'loyalty' && (
+              <div className="flex-1 flex flex-col bg-slate-950 min-h-0">
+                {/* App Header */}
+                <div className="p-3 bg-gradient-to-r from-amber-950/80 to-slate-900 border-b border-amber-500/30 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => { setActiveApp('home'); playClick(); }} className="text-slate-400 hover:text-white p-1 rounded-lg">
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                    <div>
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1">
+                        <span>⭐ WerkLoyalty</span>
+                      </span>
+                      <p className="text-[8px] text-slate-400">Jouw Digitale Klantenkaart &amp; Punten</p>
+                    </div>
+                  </div>
+
+                  {loyaltyUser && (
+                    <button
+                      onClick={() => {
+                        setLoyaltyUser(null);
+                        setRedeemedVoucher(null);
+                        playClick();
+                      }}
+                      className="px-2 py-0.5 rounded bg-slate-800 hover:bg-rose-600 text-rose-300 hover:text-white text-[9px] font-bold border border-slate-700 transition"
+                    >
+                      Uitloggen
+                    </button>
+                  )}
+                </div>
+
+                {/* App Main Content Area */}
+                <div className="flex-1 overflow-y-auto custom-scroll p-3 space-y-3 min-h-0">
+                  {!loyaltyUser ? (
+                    /* SECURE CUSTOMER LOGIN / REGISTER FORM (NO PASSWORDS REVEALED) */
+                    <div className="p-4 bg-slate-900 border border-amber-500/30 rounded-2xl space-y-3 shadow-xl">
+                      <div className="text-center space-y-1">
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center text-2xl font-black mx-auto shadow-lg">
+                          🪙
+                        </div>
+                        <h3 className="font-black text-sm text-white">WerkLoyalty Mobiel</h3>
+                        <p className="text-[10px] text-slate-400">
+                          {loyaltyIsRegister ? 'Registreer voor je digitale klantenkaart (+50 Coins)' : 'Log in met je mobiele nummer en wachtwoord'}
+                        </p>
+                      </div>
+
+                      {/* Mode Switcher */}
+                      <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-[10px] font-bold">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoyaltyIsRegister(false);
+                            setLoyaltyAuthError(null);
+                            playClick();
+                          }}
+                          className={`flex-1 py-1 rounded-lg transition ${!loyaltyIsRegister ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400'}`}
+                        >
+                          Inloggen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLoyaltyIsRegister(true);
+                            setLoyaltyAuthError(null);
+                            playClick();
+                          }}
+                          className={`flex-1 py-1 rounded-lg transition ${loyaltyIsRegister ? 'bg-amber-500 text-slate-950 font-black' : 'text-slate-400'}`}
+                        >
+                          Nieuw Account
+                        </button>
+                      </div>
+
+                      {/* Login/Register Inputs */}
+                      <div className="space-y-2.5 pt-1">
+                        {loyaltyIsRegister && (
+                          <div>
+                            <label className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block mb-1">
+                              Volledige Naam:
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="bijv. Jan Jansen"
+                              value={loyaltyRegName}
+                              onChange={e => setLoyaltyRegName(e.target.value)}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block mb-1">
+                            📱 Mobiel Nummer:
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="0612345678"
+                            value={loyaltyPhoneInput}
+                            onChange={e => setLoyaltyPhoneInput(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[9px] text-slate-300 font-bold uppercase tracking-wider block mb-1">
+                            🔒 Wachtwoord:
+                          </label>
+                          {/* SECURE MASKED PASSWORD INPUT */}
+                          <input
+                            type="password"
+                            placeholder="••••••••"
+                            value={loyaltyPassInput}
+                            onChange={e => setLoyaltyPassInput(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                if (loyaltyIsRegister) {
+                                  if (!loyaltyRegName.trim() || !loyaltyPhoneInput.trim() || !loyaltyPassInput.trim()) {
+                                    setLoyaltyAuthError('Vul alle velden in!');
+                                    return;
+                                  }
+                                  const registered = registerLoyaltyCustomer(loyaltyRegName, loyaltyPhoneInput);
+                                  setLoyaltyUser(registered);
+                                  try { AudioFX.bell(); } catch {}
+                                } else {
+                                  if (!loyaltyPhoneInput.trim() || !loyaltyPassInput.trim()) {
+                                    setLoyaltyAuthError('Vul je telefoonnummer en wachtwoord in!');
+                                    return;
+                                  }
+                                  const cust = findLoyaltyCustomerByPhoneOrName(loyaltyPhoneInput);
+                                  if (cust) {
+                                    setLoyaltyUser(cust);
+                                    setLoyaltyAuthError(null);
+                                    try { AudioFX.bell(); } catch {}
+                                  } else {
+                                    setLoyaltyAuthError('Onjuist mobiel nummer of wachtwoord!');
+                                    try { AudioFX.beep(); } catch {}
+                                  }
+                                }
+                              }
+                            }}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2 text-xs text-white font-mono focus:outline-none focus:border-amber-400 tracking-widest"
+                          />
+                        </div>
+
+                        {loyaltyAuthError && (
+                          <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-[10px] font-bold text-center animate-pulse">
+                            {loyaltyAuthError}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playClick();
+                            if (loyaltyIsRegister) {
+                              if (!loyaltyRegName.trim() || !loyaltyPhoneInput.trim() || !loyaltyPassInput.trim()) {
+                                setLoyaltyAuthError('Vul alle velden in!');
+                                return;
+                              }
+                              const registered = registerLoyaltyCustomer(loyaltyRegName, loyaltyPhoneInput);
+                              setLoyaltyUser(registered);
+                              try { AudioFX.bell(); } catch {}
+                            } else {
+                              if (!loyaltyPhoneInput.trim() || !loyaltyPassInput.trim()) {
+                                setLoyaltyAuthError('Vul je telefoonnummer en wachtwoord in!');
+                                return;
+                              }
+                              const cust = findLoyaltyCustomerByPhoneOrName(loyaltyPhoneInput);
+                              if (cust) {
+                                setLoyaltyUser(cust);
+                                setLoyaltyAuthError(null);
+                                try { AudioFX.bell(); } catch {}
+                              } else {
+                                setLoyaltyAuthError('Onjuist mobiel nummer of wachtwoord!');
+                                try { AudioFX.beep(); } catch {}
+                              }
+                            }
+                          }}
+                          className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition shadow-lg active:scale-95 flex items-center justify-center gap-1.5"
+                        >
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>{loyaltyIsRegister ? '✨ Registreer (+50 Coins)' : '🔒 Veilig Inloggen'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* LOGGED-IN DIGITAL LOYALTY CARD & REWARDS DASHBOARD */
+                    <div className="space-y-3">
+                      {/* DIGITAL LOYALTY PASS CARD */}
+                      <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-600 via-yellow-600 to-amber-700 text-slate-950 shadow-2xl relative overflow-hidden border border-amber-300/40">
+                        <div className="absolute top-0 right-0 p-3 opacity-15 text-6xl select-none font-black">
+                          🍔
+                        </div>
+
+                        <div className="flex justify-between items-start relative z-10">
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-slate-950/20 text-slate-950 px-2 py-0.5 rounded-full">
+                              Werkdonalds Spaarkaart
+                            </span>
+                            <h3 className="font-black text-base mt-1 text-slate-950 leading-tight">
+                              {loyaltyUser.name}
+                            </h3>
+                            <span className="text-[10px] font-mono font-bold text-slate-900 block">
+                              {loyaltyUser.phone}
+                            </span>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-slate-950 text-amber-300 px-2.5 py-1 rounded-full shadow">
+                              {loyaltyUser.tier}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* COINS BALANCE & QR CODE */}
+                        <div className="mt-4 pt-3 border-t border-slate-950/20 flex items-center justify-between relative z-10">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-900 block">
+                              Actueel Saldo:
+                            </span>
+                            <div className="text-2xl font-black text-slate-950 font-mono flex items-center gap-1">
+                              <span>🪙</span>
+                              <span>{loyaltyUser.coins}</span>
+                              <span className="text-[10px] font-normal text-slate-900">Coins</span>
+                            </div>
+                          </div>
+
+                          {/* DIGITAL QR CODE FOR SCANNING AT POS/KIOSK */}
+                          <div className="p-1.5 bg-white rounded-xl shadow-md border border-slate-300 text-center flex flex-col items-center">
+                            <div className="w-12 h-12 bg-slate-950 rounded p-1 flex items-center justify-center">
+                              {/* QR Code graphic representation */}
+                              <div className="grid grid-cols-3 gap-0.5 w-full h-full">
+                                <div className="bg-amber-400 rounded-xs" />
+                                <div className="bg-white rounded-xs" />
+                                <div className="bg-amber-400 rounded-xs" />
+                                <div className="bg-white rounded-xs" />
+                                <div className="bg-amber-400 rounded-xs" />
+                                <div className="bg-white rounded-xs" />
+                                <div className="bg-amber-400 rounded-xs" />
+                                <div className="bg-white rounded-xs" />
+                                <div className="bg-amber-400 rounded-xs" />
+                              </div>
+                            </div>
+                            <span className="text-[7px] font-mono font-bold text-slate-700 mt-0.5">SCAN BIJ KASSA</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ACTIVE VOUCHER DISPLAY (IF REDEEMED) */}
+                      {redeemedVoucher && (
+                        <div className="p-3 bg-gradient-to-r from-emerald-950 to-slate-900 border border-emerald-500/40 rounded-2xl space-y-1.5 animate-in fade-in zoom-in duration-200 shadow-lg">
+                          <div className="flex items-center justify-between text-[9px] font-black text-emerald-400 uppercase tracking-wider">
+                            <span>🎉 VOUCHER INGELOST!</span>
+                            <span className="font-mono text-emerald-300">GELDIG</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{redeemedVoucher.emoji}</span>
+                            <div>
+                              <div className="font-bold text-xs text-white">{redeemedVoucher.title}</div>
+                              <div className="text-[10px] font-mono font-bold text-amber-300 bg-slate-950 px-2 py-0.5 rounded border border-amber-500/30 inline-block mt-0.5">
+                                Code: {redeemedVoucher.code}
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-[9px] text-slate-400">Scan deze code bij de kassa of bestelzuil voor jouw gratis item/korting.</p>
+                        </div>
+                      )}
+
+                      {/* REWARDS CATALOG */}
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-black text-amber-400 uppercase tracking-wider block">
+                          🎁 Beloningen Inwisselen:
+                        </span>
+
+                        <div className="space-y-1.5">
+                          {LOYALTY_REWARDS.map(rew => {
+                            const canAfford = loyaltyUser.coins >= rew.coinsCost;
+                            return (
+                              <div
+                                key={rew.id}
+                                className={`p-2.5 rounded-xl border flex items-center justify-between transition ${
+                                  canAfford ? 'bg-slate-900 border-amber-500/30 hover:bg-slate-850' : 'bg-slate-950/60 border-slate-850 opacity-60'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <span className="text-xl shrink-0">{rew.emoji}</span>
+                                  <div className="min-w-0">
+                                    <div className="font-black text-xs text-white truncate">{rew.title}</div>
+                                    <div className="text-[9px] text-slate-400 truncate">{rew.description}</div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  disabled={!canAfford}
+                                  onClick={() => {
+                                    playClick();
+                                    const updated = deductCoinsFromCustomer(loyaltyUser.phone, rew.coinsCost);
+                                    if (updated) {
+                                      setLoyaltyUser(updated);
+                                      const code = `WD-LOYAL-${Math.floor(1000 + Math.random() * 9000)}`;
+                                      setRedeemedVoucher({
+                                        title: rew.title,
+                                        code,
+                                        emoji: rew.emoji
+                                      });
+                                      try { AudioFX.bell(); } catch {}
+                                    }
+                                  }}
+                                  className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black transition shrink-0 active:scale-95 ${
+                                    canAfford
+                                      ? 'bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-md'
+                                      : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                  }`}
+                                >
+                                  🪙 {rew.coinsCost}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
