@@ -270,6 +270,11 @@ export const PickupScreen: React.FC = () => {
       try {
         const url = rssMap[nosCategory];
         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+        
+        if (!res.ok) {
+          throw new Error(`Main RSS converter returned status ${res.status}`);
+        }
+        
         const data = await res.json();
         
         if (isMounted && data && data.items && data.items.length > 0) {
@@ -287,11 +292,17 @@ export const PickupScreen: React.FC = () => {
           setNewsArticles(items);
           setNosHeadlines(newTitles);
           return;
+        } else {
+          throw new Error('No items or invalid format in main RSS response');
         }
-      } catch {
-        // Fallback retry
+      } catch (err) {
+        console.warn('Main news fetch failed, trying fallback:', err);
+        // Fallback retry with NU.nl
         try {
           const res2 = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.nu.nl%2Frss%2FAlgemeen');
+          if (!res2.ok) {
+            throw new Error(`Fallback RSS converter returned status ${res2.status}`);
+          }
           const data2 = await res2.json();
           if (isMounted && data2 && data2.items && data2.items.length > 0) {
             const items = data2.items.slice(0, 10).map((item: any) => ({
@@ -304,8 +315,41 @@ export const PickupScreen: React.FC = () => {
             setNewsArticles(items);
             setNosHeadlines([weatherItem, ...items.map(it => it.title)]);
             return;
+          } else {
+            throw new Error('No items in fallback RSS response');
           }
-        } catch {}
+        } catch (err2) {
+          console.warn('Fallback news fetch also failed, using high-quality offline data:', err2);
+          if (isMounted) {
+            const fallbackList = {
+              general: [
+                { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },
+                { title: 'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland', link: 'https://nos.nl' },
+                { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' },
+                { title: 'Treinverkeer rond Utrecht hersteld na succesvolle herstelwerkzaamheden', link: 'https://nos.nl' }
+              ],
+              sport: [
+                { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
+                { title: 'Formule 1: Spannende strijd verwacht tijdens komend Grand Prix weekend', link: 'https://nos.nl' },
+                { title: 'Eredivisie: Koploper verstevigt positie na overtuigende thuisoverwinning', link: 'https://nos.nl' }
+              ],
+              tech: [
+                { title: 'Tech-bedrijven presenteren nieuwste gadgets op beurs in Amsterdam', link: 'https://nos.nl' },
+                { title: 'Grote stappen gezet in de ontwikkeling van quantum-computers in Delft', link: 'https://nos.nl' },
+                { title: 'Nieuwe wetgeving moet privacy van online consumenten beter beschermen', link: 'https://nos.nl' }
+              ],
+              binnenland: [
+                { title: 'Lokale ondernemers in Utrecht starten initiatief tegen voedselverspilling', link: 'https://nos.nl' },
+                { title: 'Nieuwe fietspaden geopend om bereikbaarheid in de Randstad te vergroten', link: 'https://nos.nl' },
+                { title: 'Historisch pand in Maastricht prachtig gerestaureerd en opengesteld voor publiek', link: 'https://nos.nl' }
+              ]
+            };
+            const currentFallback = fallbackList[nosCategory] || fallbackList.general;
+            const weatherItem = "🌤️ WEERBERICHT: Wisselvallig met zonnige perioden (19°C) [Offline modus]";
+            setNewsArticles(currentFallback);
+            setNosHeadlines([weatherItem, ...currentFallback.map(f => f.title)]);
+          }
+        }
       }
     };
 
