@@ -692,6 +692,26 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         localStorage.setItem('wd_cash_requests', JSON.stringify(parsedCashReqs));
       }
 
+      // 8. Fetch loyalty_customers from Supabase (for WerkLoyalty cross-terminal sync)
+      const { data: dbLoyalty, error: loyaltyErr } = await posClient
+        .from('loyalty_customers')
+        .select('*');
+      if (!loyaltyErr && dbLoyalty && dbLoyalty.length > 0) {
+        const parsedLoyalty = dbLoyalty.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          phone: c.phone,
+          coins: Number(c.coins || 0),
+          totalSpent: Number(c.total_spent || 0),
+          ordersCount: Number(c.orders_count || 0),
+          tier: c.tier || 'Brons',
+          joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
+        }));
+        localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(parsedLoyalty));
+        localStorage.setItem('wd_loyalty_ts', Date.now().toString());
+        window.dispatchEvent(new Event('wd_loyalty_updated'));
+      }
+
       setSyncStatus('synced');
       setLastSyncTime(new Date());
       setIsOnline(true);

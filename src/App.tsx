@@ -16,6 +16,7 @@ import { SupabaseModal } from './components/SupabaseModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
 import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
 import { AutoUpdateBanner } from './components/AutoUpdateBanner';
+import { PickupControlScreen } from './components/WerkdonaldsPOS/PickupControlScreen';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -46,6 +47,7 @@ const MainLayout: React.FC = () => {
             )}
             {posScreen === 'keuken' && <KitchenScreen />}
             {posScreen === 'afhaal' && <PickupScreen />}
+            {posScreen === 'pickup_control' && <PickupControlScreen />}
             {posScreen === 'voorraad' && <InventoryScreen />}
             {posScreen === 'manager' && <ManagerScreen />}
             {posScreen === 'volgscherm' && <OrderTrackingScreen />}

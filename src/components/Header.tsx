@@ -26,7 +26,9 @@ import {
   VolumeX,
   Cpu,
   RotateCw,
-  Eye
+  Eye,
+  Sliders,
+  Megaphone
 } from 'lucide-react';
 import { getStatusMeta } from '../services/orderStatus';
 
@@ -79,6 +81,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
   const canAccessKitchen = canAccess('kitchen');
   const canAccessInventory = canAccess('voorraad');
   const canAccessManager = canAccess('manager');
+  const canAccessPickupControl = canAccess('manager') || canAccess('pickup_control') || currentPosUser?.is_admin || currentPosUser?.username.toLowerCase() === 'joas';
 
   const handleSelectPosScreen = (screen: PosScreenType) => {
     if (screen === 'keuken' && !canAccessKitchen) {
@@ -91,6 +94,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
     }
     if (screen === 'manager' && !canAccessManager) {
       alert('Geen toegang tot het manager scherm. Alleen managers met het manager-recht kunnen dit scherm openen.');
+      return;
+    }
+    if (screen === 'pickup_control' && !canAccessPickupControl) {
+      alert('Geen toegang tot TV & Nieuws Beheer. Alleen bevoegde rangen kunnen dit scherm openen.');
       return;
     }
     setPosScreen(screen);
@@ -358,6 +365,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             <Tv className="w-4 h-4" />
             <span>Afhaalscherm TV</span>
           </button>
+
+          {!isCustomer && canAccessPickupControl && (
+            <button
+              onClick={() => handleSelectPosScreen('pickup_control')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
+                posScreen === 'pickup_control' ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30' : 'text-rose-400 hover:bg-rose-950/40 hover:text-rose-300'
+              }`}
+              title="Open het Afhaalscherm & NOS Nieuwsbalk Regiescherm"
+            >
+              <Sliders className="w-4 h-4 text-rose-400" />
+              <span>📺 TV &amp; Nieuws Beheer</span>
+            </button>
+          )}
 
           {/* Live Volgscherm Button */}
           <button

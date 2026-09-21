@@ -4,6 +4,13 @@ import { AudioFX, SpeechVoiceOption, TtsEngineMode, AudioDiagnosticStatus } from
 import { getStatusMeta, isOrderInProgress, isOrderReady } from '../../services/orderStatus';
 import { getSupabaseClient } from '../../services/store';
 import { 
+  getNewsConfig, 
+  getCustomNewsItems, 
+  REAL_NOS_FALLBACK_HEADLINES, 
+  NewsTickerConfig, 
+  NewsItem 
+} from '../../services/newsService';
+import { 
   Tv, 
   Volume2, 
   Maximize2, 
@@ -247,12 +254,28 @@ export const PickupScreen: React.FC = () => {
     { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
     { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' }
   ]);
+  const [newsConfigState, setNewsConfigState] = useState<NewsTickerConfig>(getNewsConfig());
+  const [customNewsItems, setCustomNewsItems] = useState<NewsItem[]>(getCustomNewsItems());
+
+  useEffect(() => {
+    const handleSync = () => {
+      const cfg = getNewsConfig();
+      setNewsConfigState(cfg);
+      setCustomNewsItems(getCustomNewsItems());
+      if (cfg.category !== nosCategory) {
+        setNosCategory(cfg.category);
+      }
+    };
+    window.addEventListener('wd_news_config_updated', handleSync);
+    return () => window.removeEventListener('wd_news_config_updated', handleSync);
+  }, [nosCategory]);
+
   const [nosHeadlines, setNosHeadlines] = useState<string[]>([
     "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C) · W wind 3 Bft",
-    'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca',
-    'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland',
-    'Nederlandse atleten behalen goud op de Europese kampioenschappen',
-    'Nieuwe technologische doorbraak in AI en automatisering aangekondigd'
+    'Kabinet presenteert verduurzamingspakket voor Nederlandse horeca & MKB',
+    'Lente-weer zet door met aanhoudend zonnige perioden en 20 graden in heel Nederland',
+    'Consumentenvertrouwen stijgt verder door stabilisering van koopkracht',
+    'Nederlandse atleten behalen goud en zilver op de Europese kampioenschappen'
   ]);
 
   useEffect(() => {
@@ -265,43 +288,20 @@ export const PickupScreen: React.FC = () => {
       binnenland: 'https://feeds.nos.nl/nosnieuwsbinnenland',
     };
 
-    const categoryFallbacks: Record<string, Array<{ title: string; link: string; description: string; pubDate: string }>> = {
-      general: [
-        { title: 'Kabinet presenteert verduurzamingspakket voor Nederlandse horeca & MKB', link: 'https://nos.nl', description: 'Ondernemers krijgen subsidie voor energiezuinige keukenapparatuur en warmtepompinstallaties.', pubDate: new Date().toISOString() },
-        { title: 'Lente-weer zet door met aanhoudend zonnige perioden en 20 graden', link: 'https://nos.nl', description: 'De weermodellen voorspellen droog en zonnig voorjaarsweer in heel Nederland.', pubDate: new Date().toISOString() },
-        { title: 'Consumentenvertrouwen stijgt verder door stabilisering van koopkracht', link: 'https://nos.nl', description: 'Het CBS meldt een positieve trend in consumentenbestedingen.', pubDate: new Date().toISOString() },
-        { title: 'Spoorvernieuwing Randstad succesvol afgerond: snellere treinverbindingen', link: 'https://nos.nl', description: 'Reizigers kunnen rekenen op frequenter treinverkeer tussen grote steden.', pubDate: new Date().toISOString() },
-        { title: 'Nederlandse innovaties op het gebied van duurzame verpakkingen bekroond', link: 'https://nos.nl', description: 'Nieuwe biologisch afbreekbare materialen vervangen eenmalig plastic in de horeca.', pubDate: new Date().toISOString() },
-        { title: 'Rijkswaterstaat breidt laadnetwerk langs snelwegen versneld uit', link: 'https://nos.nl', description: 'Honderden nieuwe snelladers geplaatst bij verzorgingsplaatsen.', pubDate: new Date().toISOString() }
-      ],
-      sport: [
-        { title: 'Nederlandse atleten pakken goud en zilver op het Europees Kampioenschap', link: 'https://nos.nl', description: 'Een uitstekende prestatie op de estafette zorgt voor een recordmedaillespiegel.', pubDate: new Date().toISOString() },
-        { title: 'Formule 1: Kwalificatiestrijd belooft spannend weekend op het circuit', link: 'https://nos.nl', description: 'Kleine verschillen in rondetijden zorgen voor een verrassende startopstelling.', pubDate: new Date().toISOString() },
-        { title: 'Oranje op stoom voor cruciale kwalificatiewedstrijden in vol stadion', link: 'https://nos.nl', description: 'De bondscoach blikt vooruit op de tactische opstelling.', pubDate: new Date().toISOString() },
-        { title: 'Nederlandse wielrenners oppermachtig in klassieke voorjaarskoers', link: 'https://nos.nl', description: 'Een tactische demarrage op 15 kilometer van de streep bracht de overwinning.', pubDate: new Date().toISOString() }
-      ],
-      tech: [
-        { title: 'Europese techbedrijven kondigen grootschalige investeringen in AI aan', link: 'https://nos.nl', description: 'Europese samenwerking voor veilige, snelle en verantwoorde AI-taalmodellen.', pubDate: new Date().toISOString() },
-        { title: 'Nieuwe generatie zonnepanelen behaalt recordrendement in tests', link: 'https://nos.nl', description: 'Innovatieve perovskiet-cellen wekken 30 procent meer stroom op uit daglicht.', pubDate: new Date().toISOString() },
-        { title: 'Cybersecurity-experts delen nieuwe richtlijnen voor veilig digitaal betalen', link: 'https://nos.nl', description: 'Tips om consumenten en bedrijven beter te beschermen tegen online oplichting.', pubDate: new Date().toISOString() },
-        { title: 'Nederlandse startup ontwikkelt supersnelle accu voor elektrische vrachtwagens', link: 'https://nos.nl', description: 'Laadtijden teruggebracht naar minder dan tien minuten.', pubDate: new Date().toISOString() }
-      ],
-      binnenland: [
-        { title: 'NS breidt dienstregeling uit met extra intercity’s tijdens de spits', link: 'https://nos.nl', description: 'Meer capaciteit en zitplaatsen op de drukste Nederlandse trajecten.', pubDate: new Date().toISOString() },
-        { title: 'Onderzoek: Gebruik van elektrische fietsen stijgt spectaculair in steden', link: 'https://nos.nl', description: 'Steeds meer mensen verruilen de auto voor de fiets voor dagelijks woon-werkverkeer.', pubDate: new Date().toISOString() },
-        { title: 'Gemeenten investeren extra in groene parken en klimaatbestendige buurten', link: 'https://nos.nl', description: 'Nieuwe bomen en regenwateropvang verminderen hittestress in de zomer.', pubDate: new Date().toISOString() },
-        { title: 'Landelijke opschoondag levert recordhoeveelheid gescheiden afval op', link: 'https://nos.nl', description: 'Duizenden vrijwilligers kwamen in actie voor schonere straten en natuurgebieden.', pubDate: new Date().toISOString() }
-      ]
-    };
-
     const fetchLiveNews = async () => {
-      const fallbackList = categoryFallbacks[nosCategory] || categoryFallbacks.general;
+      const fallbackList = REAL_NOS_FALLBACK_HEADLINES[nosCategory] || REAL_NOS_FALLBACK_HEADLINES.general;
       const weatherItem = "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C) · Wind W 3 Bft";
+
+      // Combine custom alerts + custom items + NOS headlines
+      const customAlertList = newsConfigState.isCustomAlertActive && newsConfigState.customAlertText.trim()
+        ? [`🚨 ${newsConfigState.customAlertText.trim()}`]
+        : [];
+      const customHeadlineList = customNewsItems.map(it => `📣 [${it.category}] ${it.title}`);
 
       try {
         const targetUrl = rssMap[nosCategory] || rssMap.general;
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
 
         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(targetUrl)}`, {
           signal: controller.signal
@@ -314,34 +314,34 @@ export const PickupScreen: React.FC = () => {
             const items = data.items.slice(0, 15).map((item: any) => ({
               title: item.title,
               link: item.link || 'https://nos.nl',
-              pubDate: item.pubDate || new Date().toISOString(),
+              pubDate: item.pubDate ? new Date(item.pubDate).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : 'Zojuist',
               description: item.description?.replace(/<[^>]*>?/gm, '').slice(0, 140) || ''
             }));
 
-            const newTitles = [weatherItem, ...items.map(it => it.title)];
+            const newTitles = [...customAlertList, ...customHeadlineList, weatherItem, ...items.map(it => `${it.title} (${it.pubDate})`)];
             setNewsArticles(items);
             setNosHeadlines(newTitles);
             return;
           }
         }
       } catch (err) {
-        // Quietly fallback to direct rich dataset without throwing 500 errors or showing broken text
+        // Fallback gracefully
       }
 
-      // Always supply full fallback array so ticker is continuously populated
       if (isMounted) {
-        setNewsArticles(fallbackList);
-        setNosHeadlines([weatherItem, ...fallbackList.map(f => f.title)]);
+        const fallbackTitles = fallbackList.map(f => `${f.title} (${f.pubDate})`);
+        setNewsArticles(fallbackList as any);
+        setNosHeadlines([...customAlertList, ...customHeadlineList, weatherItem, ...fallbackTitles]);
       }
     };
 
     fetchLiveNews();
-    const interval = setInterval(fetchLiveNews, 180000); // 3 min refresh
+    const interval = setInterval(fetchLiveNews, 120000); // 2 min refresh
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [nosCategory]);
+  }, [nosCategory, newsConfigState.isCustomAlertActive, newsConfigState.customAlertText, customNewsItems]);
 
   const [presetNameInput, setPresetNameInput] = useState<string>('');
   const [savedPresets, setSavedPresets] = useState<Array<{ id: string; name: string; clockStyle: any; tvView: any; autoRotate: boolean; widgets: any; layoutRatio?: any }>>([
@@ -789,9 +789,24 @@ export const PickupScreen: React.FC = () => {
             </div>
           </div>
 
-          {/* Center Stage: Ultra-Cool Giant Pixel LED Matrix or Neon Digital Clock */}
+          {/* Center Stage: Ultra-Cool Giant Pixel LED Matrix, Neon Digital Clock, OR Emergency Alert (when active) */}
           <div className="col-span-6 flex justify-center">
-            {clockStyle === 'pixel' ? (
+            {newsConfigState.isCustomAlertActive && newsConfigState.customAlertText.trim() ? (
+              /* SPOEDBERICHT VERVANGT TIJDELIJK DE KLOK */
+              <div className="w-full max-w-xl px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 via-amber-500 to-rose-600 border-2 border-amber-300 shadow-[0_0_40px_rgba(244,63,94,0.85)] flex items-center justify-between gap-3 animate-pulse">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="px-2.5 py-1 bg-slate-950 text-amber-300 font-black text-xs sm:text-sm rounded-lg uppercase tracking-wider font-mono border border-amber-400 shrink-0 shadow-md">
+                    🚨 SPOEDBERICHT
+                  </div>
+                  <span className="font-black text-slate-950 text-sm sm:text-base lg:text-lg tracking-tight uppercase truncate">
+                    {newsConfigState.customAlertText}
+                  </span>
+                </div>
+                <div className="text-slate-950 font-mono font-black text-xs shrink-0 bg-white/40 backdrop-blur px-2.5 py-1 rounded-lg border border-white/60 shadow">
+                  TV BERICHT
+                </div>
+              </div>
+            ) : clockStyle === 'pixel' ? (
               /* RETRO PIXEL LED MATRIX CLOCK BOARD */
               <div className="px-8 py-2.5 rounded-2xl bg-slate-950 border-4 border-slate-800 shadow-[0_0_35px_rgba(34,197,94,0.25)] flex flex-col items-center backdrop-blur-md relative overflow-hidden ring-2 ring-emerald-500/40">
                 <div 
@@ -1549,36 +1564,40 @@ export const PickupScreen: React.FC = () => {
         {activeWidgets.ticker && (
           <footer 
             onClick={() => setShowNewsModal(true)}
-            title="Klik om alle NU.nl nieuwsberichten te bekijken"
-            className={`mt-3 pt-2 px-3 py-2 rounded-2xl border-2 flex items-center justify-between text-xs sm:text-sm font-bold shrink-0 overflow-hidden shadow-xl cursor-pointer hover:border-rose-500/80 transition group ${
-              clockStyle === 'pixel' 
-                ? 'bg-slate-950 border-emerald-500/60 text-emerald-300 font-mono' 
-                : clockStyle === 'neon' 
-                ? 'bg-slate-900 border-amber-500/50 text-amber-300 font-mono' 
-                : 'bg-slate-900/90 border-slate-800 text-slate-300'
-            }`}
+            title="Klik om alle NOS nieuwsberichten en details te bekijken"
+            className="mt-3 bg-slate-950 border-2 border-slate-800 hover:border-rose-600/80 p-2 rounded-2xl flex items-center justify-between text-xs sm:text-sm font-bold shrink-0 overflow-hidden shadow-2xl cursor-pointer transition group"
           >
-            <div className="flex items-center gap-2 px-3 py-1 bg-rose-600 text-white rounded-xl font-black shrink-0 shadow animate-pulse group-hover:bg-rose-500 transition">
+            {/* Authentic NOS Red Emblem */}
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#E3000F] text-white rounded-xl font-black shrink-0 shadow-lg group-hover:bg-rose-600 transition">
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-              <span className="text-[11px] font-mono tracking-wider uppercase">🔴 NOS NIEUWS &amp; WEER</span>
-              <span className="text-[9px] bg-black/30 px-1.5 py-0.5 rounded text-rose-200">Klik 🔍</span>
+              <span className="text-xs font-black tracking-widest font-sans">NOS</span>
+              <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded text-rose-100 font-mono tracking-wider uppercase">
+                {nosCategory}
+              </span>
             </div>
 
             <div className="flex-1 overflow-hidden mx-4 relative h-6 flex items-center">
-              <div className="whitespace-nowrap flex items-center gap-8 animate-marquee">
+              <div className={`whitespace-nowrap flex items-center gap-8 ${newsConfigState.paused ? '' : 'animate-marquee'}`}>
                 {[...nosHeadlines, ...nosHeadlines].map((headline, idx) => {
                   const isWeather = headline.includes('WEERBERICHT');
+                  const isAlert = headline.startsWith('🚨');
                   return (
-                    <span key={idx} className="flex items-center gap-3 shrink-0">
-                      <span className={isWeather ? 'text-sky-400 font-bold text-base' : 'text-amber-400 font-bold'}>
-                        {isWeather ? '🌤️' : '★'}
-                      </span>
-                      <span className={`transition-colors ${
-                        isWeather 
+                    <span key={idx} className="flex items-center gap-2.5 shrink-0">
+                      {isAlert ? (
+                        <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-black rounded text-[10px] uppercase">
+                          SPOED
+                        </span>
+                      ) : (
+                        <span className="text-rose-500 font-black text-xs">●</span>
+                      )}
+                      <span className={`transition-colors font-bold ${
+                        isAlert
+                          ? 'text-amber-300 font-black'
+                          : isWeather 
                           ? 'text-sky-300 font-black' 
                           : clockStyle === 'pixel' 
                           ? 'text-emerald-300 font-mono' 
-                          : 'text-slate-200 group-hover:text-white'
+                          : 'text-slate-100 group-hover:text-white'
                       }`}>
                         {headline}
                       </span>
@@ -1588,8 +1607,8 @@ export const PickupScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="text-amber-400 font-mono font-black shrink-0 pl-2">
-              {timeStr}
+            <div className="text-amber-400 font-mono font-black shrink-0 px-2 text-xs">
+              NOS LIVE • {timeStr}
             </div>
           </footer>
         )}

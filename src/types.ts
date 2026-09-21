@@ -15,7 +15,7 @@ export interface BrandConfig {
   headerGradient: string;
 }
 
-export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'volgscherm' | 'voorraad' | 'manager';
+export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'pickup_control' | 'volgscherm' | 'voorraad' | 'manager';
 
 export type WerkPayScreenType = 'wallet' | 'overboeken' | 'accounts';
 

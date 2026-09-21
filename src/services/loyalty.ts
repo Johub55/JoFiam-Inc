@@ -1,3 +1,6 @@
+import { broadcastSync } from './syncHelpers';
+import { getSupabaseClient } from './store';
+
 export interface LoyaltyCustomer {
   id: string;
   name: string;
@@ -125,9 +128,56 @@ export function saveLoyaltyCustomers(list: LoyaltyCustomer[]) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem('wd_loyalty_ts', Date.now().toString());
+    window.dispatchEvent(new Event('wd_loyalty_updated'));
+    broadcastSync('SYNC_LOYALTY_CUSTOMERS', { customers: list });
+    syncLoyaltyToSupabase(list);
   } catch (e) {
     console.error('Failed to save loyalty customers:', e);
   }
+}
+
+async function syncLoyaltyToSupabase(list: LoyaltyCustomer[]) {
+  try {
+    const sb = getSupabaseClient();
+    if (!sb) return;
+    const rows = list.map(c => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      coins: c.coins,
+      total_spent: c.totalSpent,
+      orders_count: c.ordersCount,
+      tier: c.tier,
+      joined_date: c.joinedDate,
+      updated_at: new Date().toISOString()
+    }));
+    await sb.from('loyalty_customers').upsert(rows, { onConflict: 'id' });
+  } catch (err) {
+    // Ignore if table doesn't exist
+  }
+}
+
+// Global cross-tab event listeners for loyalty accounts
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY || e.key === 'wd_loyalty_ts') {
+      window.dispatchEvent(new Event('wd_loyalty_updated'));
+    }
+  });
+
+  try {
+    if ('BroadcastChannel' in window) {
+      const ch = new BroadcastChannel('wd_unified_sync_channel');
+      ch.onmessage = (msg) => {
+        if (msg.data?.type === 'SYNC_LOYALTY_CUSTOMERS' && msg.data.payload?.customers) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(msg.data.payload.customers));
+          localStorage.setItem('wd_loyalty_ts', Date.now().toString());
+          window.dispatchEvent(new Event('wd_loyalty_updated'));
+        }
+      };
+    }
+  } catch {}
 }
 
 export function findLoyaltyCustomerByPhoneOrName(query: string): LoyaltyCustomer | null {
