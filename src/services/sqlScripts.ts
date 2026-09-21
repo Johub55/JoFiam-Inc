@@ -175,6 +175,20 @@ INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
 VALUES ('default', FALSE, FALSE)
 ON CONFLICT (id) DO NOTHING;
 
+-- 1.13 WerkLoyalty Klanten & WerkCoins Punten
+CREATE TABLE IF NOT EXISTS public.loyalty_customers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  coins NUMERIC(10, 2) NOT NULL DEFAULT 50.00,
+  total_spent NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+  orders_count INT NOT NULL DEFAULT 0,
+  tier TEXT NOT NULL DEFAULT 'Brons',
+  joined_date TEXT DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- 2. INDEXEN & KOLOM MIGRATIES
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS sale_price NUMERIC(10, 2) DEFAULT 0.00;
@@ -460,6 +474,7 @@ ALTER TABLE public.cash_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phone_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loyalty_customers ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -498,6 +513,9 @@ BEGIN
 
   DROP POLICY IF EXISTS "Public full access pos_settings" ON public.pos_settings;
   CREATE POLICY "Public full access pos_settings" ON public.pos_settings FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Public full access loyalty_customers" ON public.loyalty_customers;
+  CREATE POLICY "Public full access loyalty_customers" ON public.loyalty_customers FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
@@ -522,6 +540,7 @@ ALTER TABLE public.phone_messages REPLICA IDENTITY FULL;
 ALTER TABLE public.coupons REPLICA IDENTITY FULL;
 ALTER TABLE public.gift_cards REPLICA IDENTITY FULL;
 ALTER TABLE public.pos_settings REPLICA IDENTITY FULL;
+ALTER TABLE public.loyalty_customers REPLICA IDENTITY FULL;
 
 DO $$
 BEGIN
@@ -536,6 +555,7 @@ BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.coupons; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.gift_cards; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_settings; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.loyalty_customers; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 `;
 

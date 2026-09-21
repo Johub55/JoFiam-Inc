@@ -262,13 +262,32 @@ export const PickupScreen: React.FC = () => {
       const cfg = getNewsConfig();
       setNewsConfigState(cfg);
       setCustomNewsItems(getCustomNewsItems());
-      if (cfg.category !== nosCategory) {
-        setNosCategory(cfg.category);
-      }
+      setNosCategory(cfg.category);
     };
+
+    handleSync();
+
     window.addEventListener('wd_news_config_updated', handleSync);
-    return () => window.removeEventListener('wd_news_config_updated', handleSync);
-  }, [nosCategory]);
+    window.addEventListener('storage', handleSync);
+
+    let ch: BroadcastChannel | null = null;
+    try {
+      if ('BroadcastChannel' in window) {
+        ch = new BroadcastChannel('wd_unified_sync_channel');
+        ch.onmessage = (msg) => {
+          if (msg.data?.type === 'SYNC_NEWS_CONFIG') {
+            handleSync();
+          }
+        };
+      }
+    } catch {}
+
+    return () => {
+      window.removeEventListener('wd_news_config_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+      if (ch) ch.close();
+    };
+  }, []);
 
   const [nosHeadlines, setNosHeadlines] = useState<string[]>([
     "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C) · W wind 3 Bft",
@@ -792,17 +811,33 @@ export const PickupScreen: React.FC = () => {
           {/* Center Stage: Ultra-Cool Giant Pixel LED Matrix, Neon Digital Clock, OR Emergency Alert (when active) */}
           <div className="col-span-6 flex justify-center">
             {newsConfigState.isCustomAlertActive && newsConfigState.customAlertText.trim() ? (
-              /* SPOEDBERICHT VERVANGT TIJDELIJK DE KLOK */
-              <div className="w-full max-w-xl px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 via-amber-500 to-rose-600 border-2 border-amber-300 shadow-[0_0_40px_rgba(244,63,94,0.85)] flex items-center justify-between gap-3 animate-pulse">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="px-2.5 py-1 bg-slate-950 text-amber-300 font-black text-xs sm:text-sm rounded-lg uppercase tracking-wider font-mono border border-amber-400 shrink-0 shadow-md">
-                    🚨 SPOEDBERICHT
-                  </div>
-                  <span className="font-black text-slate-950 text-sm sm:text-base lg:text-lg tracking-tight uppercase truncate">
-                    {newsConfigState.customAlertText}
-                  </span>
+              /* SPOEDBERICHT VERVANGT TIJDELIJK DE KLOK MET VOLLEDIGE LOPENDE TEKST WEERGAVE */
+              <div className="w-full max-w-3xl px-5 py-2.5 rounded-2xl bg-gradient-to-r from-rose-600 via-amber-500 to-rose-600 border-2 border-amber-300 shadow-[0_0_40px_rgba(244,63,94,0.85)] flex items-center justify-between gap-3 animate-pulse overflow-hidden">
+                <div className="px-2.5 py-1 bg-slate-950 text-amber-300 font-black text-xs sm:text-sm rounded-lg uppercase tracking-wider font-mono border border-amber-400 shrink-0 shadow-md z-10">
+                  🚨 SPOEDBERICHT
                 </div>
-                <div className="text-slate-950 font-mono font-black text-xs shrink-0 bg-white/40 backdrop-blur px-2.5 py-1 rounded-lg border border-white/60 shadow">
+                
+                <div className="flex-1 overflow-hidden relative h-7 flex items-center mx-2 min-w-0">
+                  {newsConfigState.customAlertText.length > 32 ? (
+                    <div 
+                      className="whitespace-nowrap flex items-center gap-12 animate-marquee"
+                      style={{ animationDuration: `${Math.max(10, newsConfigState.customAlertText.length * 0.35)}s` }}
+                    >
+                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase">
+                        {newsConfigState.customAlertText}
+                      </span>
+                      <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase">
+                        {newsConfigState.customAlertText}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="font-black text-slate-950 text-base sm:text-lg lg:text-xl tracking-tight uppercase w-full text-center">
+                      {newsConfigState.customAlertText}
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-slate-950 font-mono font-black text-xs shrink-0 bg-white/40 backdrop-blur px-2.5 py-1 rounded-lg border border-white/60 shadow z-10">
                   TV BERICHT
                 </div>
               </div>
@@ -1577,7 +1612,10 @@ export const PickupScreen: React.FC = () => {
             </div>
 
             <div className="flex-1 overflow-hidden mx-4 relative h-6 flex items-center">
-              <div className={`whitespace-nowrap flex items-center gap-8 ${newsConfigState.paused ? '' : 'animate-marquee'}`}>
+              <div 
+                className={`whitespace-nowrap flex items-center gap-8 ${newsConfigState.paused ? '' : 'animate-marquee'}`}
+                style={{ animationDuration: `${newsConfigState.speedSeconds || 22}s` }}
+              >
                 {[...nosHeadlines, ...nosHeadlines].map((headline, idx) => {
                   const isWeather = headline.includes('WEERBERICHT');
                   const isAlert = headline.startsWith('🚨');
