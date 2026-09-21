@@ -1058,12 +1058,45 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         )
         .subscribe();
 
+      // 8. Global Announcement Broadcast Channel
+      const broadcastChannel = posClient.channel('global_audio_broadcast');
+      broadcastChannel
+        .on('broadcast', { event: 'speak_order' }, (payload: any) => {
+          if (!isMounted) return;
+          console.log('📣 Received cross-device order speak broadcast:', payload);
+          if (payload && payload.payload) {
+            const { orderNo, identifier, orderType } = payload.payload;
+            AudioFX.speakOrder(orderNo, identifier, orderType, true, true); // force=true, fromBroadcast=true
+          }
+        })
+        .on('broadcast', { event: 'speak_text' }, (payload: any) => {
+          if (!isMounted) return;
+          console.log('📣 Received cross-device custom text speak broadcast:', payload);
+          if (payload && payload.payload) {
+            const { text, orderNo, target } = payload.payload;
+            AudioFX.playSpeech(text, orderNo, target, true); // fromBroadcast=true
+          }
+        })
+        .subscribe((status: any) => {
+          if (status === 'SUBSCRIBED' && isMounted) {
+            console.log('🟢 Audio Broadcast Channel subscribed successfully!');
+            AudioFX.setBroadcastSender((event: string, pld: any) => {
+              broadcastChannel.send({
+                type: 'broadcast',
+                event,
+                payload: pld
+              }).catch((e: any) => console.warn('Broadcast send error:', e));
+            });
+          }
+        });
+
     } catch (err) {
       console.warn('Realtime subscription error:', err);
     }
 
     return () => {
       isMounted = false;
+      AudioFX.setBroadcastSender(() => {});
       if (orderChannel && posClient) posClient.removeChannel(orderChannel);
       if (bankChannel && (payClient || posClient)) (payClient || posClient).removeChannel(bankChannel);
       if (prodChannel && posClient) posClient.removeChannel(prodChannel);
@@ -1071,6 +1104,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       if (gcChannel && posClient) posClient.removeChannel(gcChannel);
       if (settingsChannel && posClient) posClient.removeChannel(settingsChannel);
       if (cashReqChannel && posClient) posClient.removeChannel(cashReqChannel);
+      if (posClient) {
+        try {
+          posClient.channel('global_audio_broadcast').unsubscribe();
+        } catch {}
+      }
     };
   }, [posClient, payClient]);
 

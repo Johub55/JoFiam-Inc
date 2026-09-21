@@ -265,14 +265,13 @@ export const PickupScreen: React.FC = () => {
       binnenland: 'https://feeds.nos.nl/nosnieuwsbinnenland',
     };
 
-    // Silent background fetch: only updates state once 100% downloaded & parsed
     const fetchLiveNews = async () => {
       try {
-        const url = rssMap[nosCategory];
-        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+        // Direct query to NU.nl RSS using the rss2json converter
+        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.nu.nl%2Frss%2FAlgemeen`);
         
         if (!res.ok) {
-          throw new Error(`Main RSS converter returned status ${res.status}`);
+          throw new Error(`NU.nl RSS converter returned status ${res.status}`);
         }
         
         const data = await res.json();
@@ -288,67 +287,24 @@ export const PickupScreen: React.FC = () => {
           const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C) · W wind 3 Bft";
           const newTitles = [weatherItem, ...items.map(it => it.title)];
 
-          // Seamlessly swap out old news only when new news is ready
           setNewsArticles(items);
           setNosHeadlines(newTitles);
           return;
         } else {
-          throw new Error('No items or invalid format in main RSS response');
+          throw new Error('No items or invalid format in NU.nl RSS response');
         }
       } catch (err) {
-        console.warn('Main news fetch failed, trying fallback:', err);
-        // Fallback retry with NU.nl
-        try {
-          const res2 = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Fwww.nu.nl%2Frss%2FAlgemeen');
-          if (!res2.ok) {
-            throw new Error(`Fallback RSS converter returned status ${res2.status}`);
-          }
-          const data2 = await res2.json();
-          if (isMounted && data2 && data2.items && data2.items.length > 0) {
-            const items = data2.items.slice(0, 10).map((item: any) => ({
-              title: item.title,
-              link: item.link,
-              pubDate: item.pubDate,
-              description: item.description || ''
-            }));
-            const weatherItem = "🌤️ WEERBERICHT: Zonnig & half bewolkt in NL (18°C)";
-            setNewsArticles(items);
-            setNosHeadlines([weatherItem, ...items.map(it => it.title)]);
-            return;
-          } else {
-            throw new Error('No items in fallback RSS response');
-          }
-        } catch (err2) {
-          console.warn('Fallback news fetch also failed, using high-quality offline data:', err2);
-          if (isMounted) {
-            const fallbackList = {
-              general: [
-                { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },
-                { title: 'Zonnige lente-dag op komst met temperaturen tot 20 graden in heel Nederland', link: 'https://nos.nl' },
-                { title: 'Nieuwe technologische doorbraak in AI en automatisering aangekondigd', link: 'https://nos.nl' },
-                { title: 'Treinverkeer rond Utrecht hersteld na succesvolle herstelwerkzaamheden', link: 'https://nos.nl' }
-              ],
-              sport: [
-                { title: 'Nederlandse atleten behalen goud op de Europese kampioenschappen', link: 'https://nos.nl' },
-                { title: 'Formule 1: Spannende strijd verwacht tijdens komend Grand Prix weekend', link: 'https://nos.nl' },
-                { title: 'Eredivisie: Koploper verstevigt positie na overtuigende thuisoverwinning', link: 'https://nos.nl' }
-              ],
-              tech: [
-                { title: 'Tech-bedrijven presenteren nieuwste gadgets op beurs in Amsterdam', link: 'https://nos.nl' },
-                { title: 'Grote stappen gezet in de ontwikkeling van quantum-computers in Delft', link: 'https://nos.nl' },
-                { title: 'Nieuwe wetgeving moet privacy van online consumenten beter beschermen', link: 'https://nos.nl' }
-              ],
-              binnenland: [
-                { title: 'Lokale ondernemers in Utrecht starten initiatief tegen voedselverspilling', link: 'https://nos.nl' },
-                { title: 'Nieuwe fietspaden geopend om bereikbaarheid in de Randstad te vergroten', link: 'https://nos.nl' },
-                { title: 'Historisch pand in Maastricht prachtig gerestaureerd en opengesteld voor publiek', link: 'https://nos.nl' }
-              ]
-            };
-            const currentFallback = fallbackList[nosCategory] || fallbackList.general;
-            const weatherItem = "🌤️ WEERBERICHT: Wisselvallig met zonnige perioden (19°C) [Offline modus]";
-            setNewsArticles(currentFallback);
-            setNosHeadlines([weatherItem, ...currentFallback.map(f => f.title)]);
-          }
+        console.warn('NU.nl news fetch failed, showing error status in bar:', err);
+        if (isMounted) {
+          const errorTitles = [
+            "⚠️ LIVE NIEUWS TIJDELIJK ONBEREIKBAAR: NU.nl newsfeed kon niet worden geladen. Offline stand is geactiveerd.",
+            "Gelieve uw netwerkverbinding te controleren of probeer de pagina te herladen.",
+            "🌤️ WEERBERICHT: Wisselvallig met zonnige perioden (19°C) [Offline stand]"
+          ];
+          setNosHeadlines(errorTitles);
+          setNewsArticles([
+            { title: '⚠️ Fout bij het laden van live nieuws. NU.nl feed is tijdelijk onbereikbaar.', link: '#' }
+          ]);
         }
       }
     };
@@ -567,7 +523,8 @@ export const PickupScreen: React.FC = () => {
   );
 
   const waitingOrders = pickupOrders.filter(o => o.status === 'new' || o.status === 'wachten').slice(0, 15);
-  const preparingOrders = pickupOrders.filter(o => o.status !== 'new' && o.status !== 'wachten' && isOrderInProgress(o.status)).slice(0, 15);
+  const preparingOrders = pickupOrders.filter(o => o.status !== 'new' && o.status !== 'wachten' && isOrderInProgress(o.status) && o.status !== 'inpakken').slice(0, 15);
+  const packingOrders = pickupOrders.filter(o => o.status === 'inpakken').slice(0, 15);
   const prepOrders = pickupOrders.filter(o => isOrderInProgress(o.status)).slice(0, 30);
   const readyOrders = pickupOrders.filter(o => isOrderReady(o.status)).slice(0, 30);
 
@@ -809,9 +766,8 @@ export const PickupScreen: React.FC = () => {
           {/* Center Stage: Ultra-Cool Giant Pixel LED Matrix or Neon Digital Clock */}
           <div className="col-span-6 flex justify-center">
             {clockStyle === 'pixel' ? (
-              /* RETRO PIXEL LED MATRIX CLOCK BOARD - CLEAN & ULTRA FOCUS */
+              /* RETRO PIXEL LED MATRIX CLOCK BOARD */
               <div className="px-8 py-2.5 rounded-2xl bg-slate-950 border-4 border-slate-800 shadow-[0_0_35px_rgba(34,197,94,0.25)] flex flex-col items-center backdrop-blur-md relative overflow-hidden ring-2 ring-emerald-500/40">
-                {/* LED Dot Matrix Pattern Layer */}
                 <div 
                   className="absolute inset-0 opacity-25 pointer-events-none" 
                   style={{
@@ -821,13 +777,11 @@ export const PickupScreen: React.FC = () => {
                 />
 
                 <div className="flex items-center justify-center relative z-10">
-                  {/* Pixel Time Display */}
                   <span className="font-mono font-black text-3xl sm:text-4xl lg:text-5xl text-emerald-400 tracking-[0.18em] drop-shadow-[0_0_18px_rgba(34,197,94,0.95)] uppercase">
                     {timeStr || '12:00:00'}
                   </span>
                 </div>
 
-                {/* Pixel Bottom Date Bar */}
                 <div className="flex items-center justify-center w-full gap-2 text-[10px] font-mono font-black text-emerald-300/90 uppercase tracking-widest mt-1 relative z-10 border-t border-emerald-900/60 pt-0.5">
                   <span>{dateStr || 'VANDAAG'}</span>
                 </div>
@@ -863,7 +817,7 @@ export const PickupScreen: React.FC = () => {
           <div className="col-span-3 flex items-center justify-end gap-2.5">
             {/* Auto-rotate status badge if active */}
             {autoRotate && (
-              <span className="hidden xl:flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider shadow-md">
+              <span className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider shadow-md">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 Auto-Wissel (Menu ⇄ Afhaal)
               </span>
@@ -877,10 +831,11 @@ export const PickupScreen: React.FC = () => {
                   document.exitFullscreen().catch(() => {});
                 }
               }}
-              className="p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-900 rounded-2xl transition border border-slate-800"
+              className="p-2.5 text-slate-400 hover:text-rose-400 hover:bg-slate-900 rounded-2xl transition border border-slate-800 flex items-center gap-1.5 font-bold text-xs"
               title="Sluit TV Volledig Scherm"
             >
-              <Minimize2 className="w-5 h-5" />
+              <Minimize2 className="w-4 h-4" />
+              <span>Sluit TV</span>
             </button>
           </div>
         </header>
@@ -937,7 +892,7 @@ export const PickupScreen: React.FC = () => {
                     : 'col-span-12'
                 } flex flex-col gap-3.5 h-full overflow-hidden`}>
 
-                  {/* WACHT TJD ESTIMATOR WIDGET */}
+                  {/* WACHT TIJD ESTIMATOR WIDGET */}
                   {activeWidgets.waitTime && (
                     <div className={`p-2.5 rounded-2xl border flex items-center justify-between shrink-0 ${
                       clockStyle === 'pixel' 
@@ -965,36 +920,73 @@ export const PickupScreen: React.FC = () => {
 
                   {/* BEREIDEN KEUKEN */}
                   {activeWidgets.prep && (
-                    <div className={`rounded-3xl p-4 shadow-xl flex flex-col flex-1 overflow-hidden transition ${
-                      clockStyle === 'pixel'
-                        ? 'bg-slate-950/90 border-2 border-emerald-500/60 shadow-[0_0_20px_rgba(34,197,94,0.15)] font-mono'
-                        : clockStyle === 'neon'
-                        ? 'bg-slate-900/90 border-2 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
-                        : 'bg-slate-900/90 border-2 border-slate-800'
-                    }`}>
-                      <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full animate-ping ${clockStyle === 'pixel' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                          <h3 className={`text-lg font-black uppercase tracking-tight ${clockStyle === 'pixel' ? 'text-emerald-400 font-mono tracking-wider' : clockStyle === 'neon' ? 'text-amber-400 font-mono' : 'text-amber-400'}`}>
-                            {clockStyle === 'pixel' ? '👾 IN BEREIDING' : '⏳ Wordt Bereid'} ({preparingOrders.length})
-                          </h3>
+                    <div className="flex flex-col gap-3 flex-1 overflow-hidden">
+                      {/* SUB-COLUMN: WORDT BEREID */}
+                      <div className={`rounded-3xl p-4 shadow-xl flex flex-col flex-1 overflow-hidden transition ${
+                        clockStyle === 'pixel'
+                          ? 'bg-slate-950/90 border-2 border-emerald-500/60 shadow-[0_0_20px_rgba(34,197,94,0.15)] font-mono'
+                          : clockStyle === 'neon'
+                          ? 'bg-slate-900/90 border-2 border-amber-500/50 shadow-[0_0_20px_rgba(245,158,11,0.2)]'
+                          : 'bg-slate-900/90 border-2 border-slate-800'
+                      }`}>
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-2.5 h-2.5 rounded-full animate-ping ${clockStyle === 'pixel' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                            <h3 className={`text-lg font-black uppercase tracking-tight ${clockStyle === 'pixel' ? 'text-emerald-400 font-mono tracking-wider' : clockStyle === 'neon' ? 'text-amber-400 font-mono' : 'text-amber-400'}`}>
+                              {clockStyle === 'pixel' ? '👾 IN BEREIDING' : '⏳ Wordt Bereid'} ({preparingOrders.length})
+                            </h3>
+                          </div>
+                        </div>
+                        <div className="flex-1 overflow-y-auto no-scrollbar">
+                          {preparingOrders.length === 0 ? (
+                            <p className={`text-xs font-bold py-6 text-center italic ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-600'}`}>
+                              Geen bestellingen in bereiding
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              {preparingOrders.map(o => (
+                                <div key={o.no} className={`p-2.5 rounded-xl border transition-all duration-300 transform hover:scale-[1.03] animate-order-pop ${clockStyle === 'pixel' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-mono' : 'bg-slate-950 border-amber-500/30 text-white'}`}>
+                                  <span className={`font-mono font-black text-lg ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-white'}`}>#{o.no}</span>
+                                  <p className={`text-[10px] font-bold truncate ${clockStyle === 'pixel' ? 'text-emerald-400/80 font-mono' : 'text-slate-400'}`}>voor {o.identifier || 'Afhaal'}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex-1 overflow-y-auto no-scrollbar">
-                        {preparingOrders.length === 0 ? (
-                          <p className={`text-xs font-bold py-6 text-center italic ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-600'}`}>
-                            Geen bestellingen in bereiding
-                          </p>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            {preparingOrders.map(o => (
-                              <div key={o.no} className={`p-2.5 rounded-xl border animate-order-pop ${clockStyle === 'pixel' ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 font-mono' : 'bg-slate-950 border-amber-500/30'}`}>
-                                <span className={`font-mono font-black text-lg ${clockStyle === 'pixel' ? 'text-emerald-300' : 'text-white'}`}>#{o.no}</span>
-                                <p className={`text-[10px] font-bold truncate ${clockStyle === 'pixel' ? 'text-emerald-400/80 font-mono' : 'text-slate-400'}`}>voor {o.identifier || 'Afhaal'}</p>
-                              </div>
-                            ))}
+
+                      {/* SUB-COLUMN: WORDT INGEPAKT */}
+                      <div className={`rounded-3xl p-4 shadow-xl flex flex-col flex-1 overflow-hidden transition ${
+                        clockStyle === 'pixel'
+                          ? 'bg-slate-950/90 border-2 border-emerald-500/60 shadow-[0_0_20px_rgba(34,197,94,0.15)] font-mono'
+                          : clockStyle === 'neon'
+                          ? 'bg-slate-900/90 border-2 border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.2)]'
+                          : 'bg-slate-900/90 border-2 border-slate-800'
+                      }`}>
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800 shrink-0 mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+                            <h3 className={`text-lg font-black uppercase tracking-tight ${clockStyle === 'pixel' ? 'text-blue-400 font-mono tracking-wider' : 'text-blue-400'}`}>
+                              📦 Wordt Ingepakt ({packingOrders.length})
+                            </h3>
                           </div>
-                        )}
+                        </div>
+                        <div className="flex-1 overflow-y-auto no-scrollbar">
+                          {packingOrders.length === 0 ? (
+                            <p className={`text-xs font-bold py-6 text-center italic ${clockStyle === 'pixel' ? 'text-emerald-600 font-mono' : 'text-slate-600'}`}>
+                              Geen bestellingen die worden ingepakt
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              {packingOrders.map(o => (
+                                <div key={o.no} className={`p-2.5 rounded-xl border transition-all duration-300 transform hover:scale-[1.03] animate-order-pop ${clockStyle === 'pixel' ? 'bg-blue-950/40 border-blue-500/30 text-blue-300 font-mono' : 'bg-slate-950 border-blue-500/30 text-white'}`}>
+                                  <span className={`font-mono font-black text-lg ${clockStyle === 'pixel' ? 'text-blue-300' : 'text-white'}`}>#{o.no}</span>
+                                  <p className={`text-[10px] font-bold truncate ${clockStyle === 'pixel' ? 'text-blue-400/80 font-mono' : 'text-slate-400'}`}>voor {o.identifier || 'Afhaal'}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1234,49 +1226,95 @@ export const PickupScreen: React.FC = () => {
                   )}
                 </div>
 
-                {/* WORDT BEREID DETAILS */}
-                <AutoScrollContainer className="flex-1 pr-1">
-                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mb-3">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
-                    🍳 BEREIDEN IN DE KEUKEN ({preparingOrders.length})
-                  </h3>
+                {/* WORDT BEREID & WORDT INGEPAKT DETAILS */}
+                <AutoScrollContainer className="flex-1 pr-1 space-y-6">
+                  {/* WORDT BEREID */}
+                  <div>
+                    <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping" />
+                      🍳 BEREIDEN IN DE KEUKEN ({preparingOrders.length})
+                    </h3>
 
-                  {preparingOrders.length === 0 ? (
-                    <div className="h-44 flex flex-col items-center justify-center text-slate-600 font-bold text-sm border-2 border-dashed border-slate-800 rounded-2xl bg-slate-950/20">
-                      <span className="text-3xl mb-1">{brandEmoji}</span>
-                      <span>Geen bestellingen in actieve bereiding</span>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-                      {preparingOrders.map(o => {
-                        const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
-                        return (
-                           <div
-                            key={o.no}
-                            className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between animate-order-pop"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between">
-                                <span className="font-mono font-black text-xl text-amber-300 tracking-tight">
-                                  #{o.no}
-                                </span>
-                                <span className="text-sm">
-                                  {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
-                                </span>
+                    {preparingOrders.length === 0 ? (
+                      <p className="py-3 px-4 rounded-xl bg-slate-950/40 text-slate-500 text-xs font-bold border border-dashed border-slate-800">
+                        Geen bestellingen in actieve bereiding
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+                        {preparingOrders.map(o => {
+                          const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+                          return (
+                             <div
+                              key={o.no}
+                              className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 text-left shadow-lg flex flex-col justify-between transition-all duration-300 transform hover:scale-[1.03] animate-order-pop"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono font-black text-xl text-amber-300 tracking-tight">
+                                    #{o.no}
+                                  </span>
+                                  <span className="text-sm">
+                                    {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
+                                  </span>
+                                </div>
+                                <div className="mt-1 font-bold text-[11px] text-slate-300 truncate">
+                                  voor <span className="text-amber-200">{displayName}</span>
+                                </div>
                               </div>
-                              <div className="mt-1 font-bold text-[11px] text-slate-300 truncate">
-                                voor <span className="text-amber-200">{displayName}</span>
+                              <div className="mt-2 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-amber-400/95 font-black">
+                                <span>Bereiden...</span>
+                                <span className="font-mono text-slate-500">{o.time}</span>
                               </div>
                             </div>
-                            <div className="mt-2 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-amber-400/95 font-black">
-                              <span>Bereiden...</span>
-                              <span className="font-mono text-slate-500">{o.time}</span>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* WORDT INGEPAKT */}
+                  <div>
+                    <h3 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                      <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
+                      📦 INPAKKEN / TRAYEN ({packingOrders.length})
+                    </h3>
+
+                    {packingOrders.length === 0 ? (
+                      <p className="py-3 px-4 rounded-xl bg-slate-950/40 text-slate-500 text-xs font-bold border border-dashed border-slate-800">
+                        Geen bestellingen die worden ingepakt
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
+                        {packingOrders.map(o => {
+                          const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+                          return (
+                             <div
+                              key={o.no}
+                              className="p-3.5 rounded-2xl bg-slate-950 border border-blue-500/30 text-left shadow-lg flex flex-col justify-between transition-all duration-300 transform hover:scale-[1.03] animate-order-pop"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono font-black text-xl text-blue-300 tracking-tight">
+                                    #{o.no}
+                                  </span>
+                                  <span className="text-sm">
+                                    {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
+                                  </span>
+                                </div>
+                                <div className="mt-1 font-bold text-[11px] text-slate-300 truncate">
+                                  voor <span className="text-blue-200">{displayName}</span>
+                                </div>
+                              </div>
+                              <div className="mt-2 pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10px] text-blue-400/95 font-black">
+                                <span>Inpakken...</span>
+                                <span className="font-mono text-slate-500">{o.time}</span>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </AutoScrollContainer>
               </section>
 
@@ -1485,7 +1523,7 @@ export const PickupScreen: React.FC = () => {
         {activeWidgets.ticker && (
           <footer 
             onClick={() => setShowNewsModal(true)}
-            title="Klik om alle NOS nieuwsberichten te bekijken"
+            title="Klik om alle NU.nl nieuwsberichten te bekijken"
             className={`mt-3 pt-2 px-3 py-2 rounded-2xl border-2 flex items-center justify-between text-xs sm:text-sm font-bold shrink-0 overflow-hidden shadow-xl cursor-pointer hover:border-rose-500/80 transition group ${
               clockStyle === 'pixel' 
                 ? 'bg-slate-950 border-emerald-500/60 text-emerald-300 font-mono' 
@@ -1496,7 +1534,7 @@ export const PickupScreen: React.FC = () => {
           >
             <div className="flex items-center gap-2 px-3 py-1 bg-rose-600 text-white rounded-xl font-black shrink-0 shadow animate-pulse group-hover:bg-rose-500 transition">
               <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-              <span className="text-[11px] font-mono tracking-wider uppercase">🔴 NOS LIVE ({nosCategory})</span>
+              <span className="text-[11px] font-mono tracking-wider uppercase">🔴 NU.NL LIVE</span>
               <span className="text-[9px] bg-black/30 px-1.5 py-0.5 rounded text-rose-200">Klik 🔍</span>
             </div>
 
@@ -1675,54 +1713,114 @@ export const PickupScreen: React.FC = () => {
                 </div>
               </div>
 
-              <AutoScrollContainer className="flex-1 pt-4">
-                {prepOrders.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-600 font-bold text-sm">
-                    <span className="text-3xl mb-1">{brandEmoji}</span>
-                    <span>Geen bestellingen in bereiding</span>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {prepOrders.map(o => {
-                      const meta = getStatusMeta(o.status);
-                      const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+              <AutoScrollContainer className="flex-1 pt-4 space-y-6">
+                {/* SUBSECTION 1: BEREIDEN */}
+                <div>
+                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 bg-amber-400 rounded-full animate-ping" />
+                    🍳 Wordt Bereid ({preparingOrders.length})
+                  </h3>
+                  {preparingOrders.length === 0 ? (
+                    <p className="py-2.5 px-3.5 rounded-xl bg-slate-950/40 text-slate-500 text-xs font-bold border border-dashed border-slate-800">
+                      Geen bestellingen in bereiding
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {preparingOrders.map(o => {
+                        const meta = getStatusMeta(o.status);
+                        const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
 
-                      return (
-                        <div
-                          key={o.no}
-                          onClick={() => setTrackedOrderNo(o.no)}
-                          className="p-3.5 rounded-2xl bg-slate-950 border-2 border-dashed border-amber-500/40 text-left shadow-inner flex flex-col justify-between hover:border-amber-400 transition cursor-pointer group"
-                          title="Klik om status te bekijken"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <span className="font-mono font-black text-2xl sm:text-3xl text-amber-300 group-hover:scale-105 transition-transform">
-                                #{o.no}
-                              </span>
-                              <span className="text-sm">
-                                {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
-                              </span>
+                        return (
+                          <div
+                            key={o.no}
+                            onClick={() => setTrackedOrderNo(o.no)}
+                            className="p-3.5 rounded-2xl bg-slate-950 border-2 border-dashed border-amber-500/40 text-left shadow-inner flex flex-col justify-between hover:border-amber-400 transition cursor-pointer group"
+                            title="Klik om status te bekijken"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-black text-2xl sm:text-3xl text-amber-300 group-hover:scale-105 transition-transform">
+                                  #{o.no}
+                                </span>
+                                <span className="text-sm">
+                                  {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
+                                </span>
+                              </div>
+
+                              <div className="mt-1 font-bold text-xs text-slate-200 truncate" title={displayName}>
+                                voor {displayName}
+                              </div>
                             </div>
 
-                            <div className="mt-1 font-bold text-xs text-slate-200 truncate" title={displayName}>
-                              voor {displayName}
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-amber-400/90 flex items-center gap-1 truncate">
+                                  <span>{meta.emoji}</span>
+                                  <span className="truncate">{meta.shortLabel}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {o.time}
+                              </span>
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
-                          <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-amber-400/90 flex items-center gap-1 truncate">
-                              <span>{meta.emoji}</span>
-                              <span className="truncate">{meta.shortLabel}</span>
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              {o.time}
-                            </span>
+                {/* SUBSECTION 2: INPAKKEN */}
+                <div>
+                  <h3 className="text-xs font-black text-blue-400 uppercase tracking-widest flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+                    📦 Wordt Ingepakt ({packingOrders.length})
+                  </h3>
+                  {packingOrders.length === 0 ? (
+                    <p className="py-2.5 px-3.5 rounded-xl bg-slate-950/40 text-slate-500 text-xs font-bold border border-dashed border-slate-800">
+                      Geen bestellingen die worden ingepakt
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {packingOrders.map(o => {
+                        const meta = getStatusMeta(o.status);
+                        const displayName = o.identifier || (o.orderType === 'dine_in' ? 'Tafel' : 'Afhaal');
+
+                        return (
+                          <div
+                            key={o.no}
+                            onClick={() => setTrackedOrderNo(o.no)}
+                            className="p-3.5 rounded-2xl bg-slate-950 border-2 border-dashed border-blue-500/40 text-left shadow-inner flex flex-col justify-between hover:border-blue-400 transition cursor-pointer group"
+                            title="Klik om status te bekijken"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="font-mono font-black text-2xl sm:text-3xl text-blue-300 group-hover:scale-105 transition-transform">
+                                  #{o.no}
+                                </span>
+                                <span className="text-sm">
+                                  {o.orderType === 'dine_in' ? '🍽️' : '🛍️'}
+                                </span>
+                              </div>
+
+                              <div className="mt-1 font-bold text-xs text-slate-200 truncate" title={displayName}>
+                                voor {displayName}
+                              </div>
+                            </div>
+
+                            <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-blue-400/90 flex items-center gap-1 truncate">
+                                  <span>{meta.emoji}</span>
+                                  <span className="truncate">{meta.shortLabel}</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-mono">
+                                {o.time}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </AutoScrollContainer>
             </div>
 

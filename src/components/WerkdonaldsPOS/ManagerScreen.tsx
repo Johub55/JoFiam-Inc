@@ -96,6 +96,39 @@ export const ManagerScreen: React.FC = () => {
   const [editingUser, setEditingUser] = useState<PosUser | null>(null);
   const [editUserPass, setEditUserPass] = useState<string>('');
 
+  // Clock-In Shift Timer State for Staff
+  const [clockedInStaff, setClockedInStaff] = useState<{ username: string; clockInTime: number }[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('wd_clocked_in_staff');
+        return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+  React.useEffect(() => {
+    const t = setInterval(() => setNowTime(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const toggleClockIn = (username: string) => {
+    let updated;
+    const existing = clockedInStaff.find(c => c.username.toLowerCase() === username.toLowerCase());
+    if (existing) {
+      updated = clockedInStaff.filter(c => c.username.toLowerCase() !== username.toLowerCase());
+    } else {
+      updated = [...clockedInStaff, { username, clockInTime: Date.now() }];
+    }
+    setClockedInStaff(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wd_clocked_in_staff', JSON.stringify(updated));
+    }
+  };
+
   const PERMISSION_OPTIONS = [
     { id: 'pos', label: 'Kassa & Bestellen', desc: 'Bestelscherm & kassa bedienen' },
     { id: 'kitchen', label: 'Keukenscherm (KDS)', desc: 'Keukendisplay inzien en bestellingen afronden' },
@@ -117,7 +150,23 @@ export const ManagerScreen: React.FC = () => {
 
   const workPayRevenue = validOrders.filter(o => o.paymentMethod === 'workpay').reduce((sum, o) => sum + o.total, 0);
   const cashRevenue = validOrders.filter(o => o.paymentMethod === 'cash').reduce((sum, o) => sum + o.total, 0);
+  const pinRevenue = validOrders.filter(o => o.paymentMethod === 'pin' || o.paymentMethod === 'card').reduce((sum, o) => sum + o.total, 0);
   const giftCardRevenue = validOrders.filter(o => o.paymentMethod === 'giftcard').reduce((sum, o) => sum + o.total, 0);
+  const idealRevenue = validOrders.filter(o => o.paymentMethod === 'ideal' || o.paymentMethod === 'online').reduce((sum, o) => sum + o.total, 0);
+
+  // Top 5 Selling Products Calculation
+  const productSalesMap: Record<string, { name: string; emoji: string; qty: number; totalRev: number }> = {};
+  validOrders.forEach(o => {
+    o.items.forEach(it => {
+      if (!productSalesMap[it.name]) {
+        productSalesMap[it.name] = { name: it.name, emoji: '🍔', qty: 0, totalRev: 0 };
+      }
+      productSalesMap[it.name].qty += it.qty;
+      productSalesMap[it.name].totalRev += (it.price || 0) * it.qty;
+    });
+  });
+  const topProducts = Object.values(productSalesMap).sort((a, b) => b.qty - a.qty).slice(0, 5);
+  const maxQty = topProducts.length > 0 ? topProducts[0].qty : 1;
 
   // Export CSV
   const handleExportCSV = () => {
@@ -593,8 +642,124 @@ export const ManagerScreen: React.FC = () => {
         </div>
 
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow">
-          <span className="text-[11px] font-bold uppercase text-slate-400">Korting Gegeven</span>
-          <div className="text-xl font-black text-rose-400 mt-1">{euro(totalDiscounts)}</div>
+          <span className="text-[11px] font-bold uppercase text-slate-400">Gem. Bestelwaarde</span>
+          <div className="text-xl font-black text-cyan-400 mt-1">
+            {euro(validOrders.length > 0 ? totalRevenue / validOrders.length : 0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Manager 1 & 2: Live Payment Method Monitor & Top 5 Product Heatmap */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Manager 1: Live Payment Breakdown */}
+        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-extrabold text-sm text-white flex items-center gap-2">
+                <span>💳 Manager 1: Omzet &amp; Betaalmethoden Breakdown</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">Live verdeling van inkomsten per kanaal vandaag</p>
+            </div>
+            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-xl">
+              Totaal: {euro(totalRevenue)}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                💳 Pin / Kaart
+              </span>
+              <div className="text-sm font-black text-blue-400">{euro(pinRevenue)}</div>
+              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                <div 
+                  className="bg-blue-500 h-full rounded-full" 
+                  style={{ width: `${totalRevenue > 0 ? (pinRevenue / totalRevenue) * 100 : 0}%` }} 
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                💵 Contant Geld
+              </span>
+              <div className="text-sm font-black text-emerald-400">{euro(cashRevenue)}</div>
+              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                <div 
+                  className="bg-emerald-500 h-full rounded-full" 
+                  style={{ width: `${totalRevenue > 0 ? (cashRevenue / totalRevenue) * 100 : 0}%` }} 
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                📱 WerkPay App
+              </span>
+              <div className="text-sm font-black text-purple-400">{euro(workPayRevenue)}</div>
+              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                <div 
+                  className="bg-purple-500 h-full rounded-full" 
+                  style={{ width: `${totalRevenue > 0 ? (workPayRevenue / totalRevenue) * 100 : 0}%` }} 
+                />
+              </div>
+            </div>
+
+            <div className="bg-slate-950 border border-slate-800 p-3 rounded-xl space-y-1">
+              <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                🎁 Cadeaubonnen
+              </span>
+              <div className="text-sm font-black text-amber-400">{euro(giftCardRevenue)}</div>
+              <div className="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                <div 
+                  className="bg-amber-400 h-full rounded-full" 
+                  style={{ width: `${totalRevenue > 0 ? (giftCardRevenue / totalRevenue) * 100 : 0}%` }} 
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Manager 2: Populairste Producten Top 5 */}
+        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-extrabold text-sm text-white flex items-center gap-2">
+              <span>🔥 Manager 2: Top 5 Best-Selling Producten</span>
+            </h2>
+            <span className="text-[10px] uppercase font-mono font-bold text-slate-500">Aantal verkocht</span>
+          </div>
+
+          {topProducts.length === 0 ? (
+            <p className="text-xs text-slate-500 py-4 text-center">Nog geen verkopen geregistreerd vandaag.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {topProducts.map((tp, idx) => {
+                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
+                const pct = Math.round((tp.qty / maxQty) * 100);
+
+                return (
+                  <div key={tp.name} className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 font-bold text-white">
+                        <span className="font-mono text-amber-400 text-sm">{medal}</span>
+                        <span className="truncate max-w-[180px]">{tp.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-mono font-black text-amber-400">{tp.qty}x</span>
+                        <span className="text-[10px] text-slate-400 ml-1.5 font-mono">({euro(tp.totalRev)})</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
+                      <div 
+                        className="bg-gradient-to-r from-amber-500 to-amber-300 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -993,24 +1158,59 @@ export const ManagerScreen: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Permissions pills */}
-                  <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-900">
-                    <span className="text-[10px] text-slate-500 font-bold self-center mr-1">Toegang:</span>
-                    {u.perms && u.perms.length > 0 ? (
-                      u.perms.map(p => {
-                        const opt = PERMISSION_OPTIONS.find(o => o.id === p);
-                        return (
-                          <span
-                            key={p}
-                            className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900 border border-slate-800 text-slate-300"
+                  {/* Permissions pills & Manager 3 Dienst-Timer Inkloksysteem */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-900">
+                    <div className="flex flex-wrap gap-1">
+                      <span className="text-[10px] text-slate-500 font-bold self-center mr-1">Toegang:</span>
+                      {u.perms && u.perms.length > 0 ? (
+                        u.perms.map(p => {
+                          const opt = PERMISSION_OPTIONS.find(o => o.id === p);
+                          return (
+                            <span
+                              key={p}
+                              className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-900 border border-slate-800 text-slate-300"
+                            >
+                              {opt ? opt.label.split(' ')[0] : p}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="text-[10px] text-slate-500 italic">Geen extra rechten</span>
+                      )}
+                    </div>
+
+                    {/* Manager 3: Live Inklok & Dienst-Timer Button */}
+                    {u.username !== 'bestel_kassa' && u.username !== 'klant' && (() => {
+                      const clockRecord = clockedInStaff.find(c => c.username.toLowerCase() === u.username.toLowerCase());
+                      const isClockedIn = !!clockRecord;
+                      const elapsedSec = clockRecord ? Math.floor((nowTime - clockRecord.clockInTime) / 1000) : 0;
+                      const hrs = Math.floor(elapsedSec / 3600);
+                      const mins = Math.floor((elapsedSec % 3600) / 60);
+                      const secs = elapsedSec % 60;
+                      const durationStr = `${hrs > 0 ? `${hrs}u ` : ''}${mins}m ${secs}s`;
+
+                      return (
+                        <div className="flex items-center gap-2">
+                          {isClockedIn && (
+                            <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-md animate-pulse">
+                              ⏱️ {durationStr}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleClockIn(u.username)}
+                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition ${
+                              isClockedIn 
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30' 
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                            }`}
+                            title={isClockedIn ? 'Meld medewerker af (Uitklokken)' : 'Meld medewerker aan voor dienst (Inklokken)'}
                           >
-                            {opt ? opt.label.split(' ')[0] : p}
-                          </span>
-                        );
-                      })
-                    ) : (
-                      <span className="text-[10px] text-slate-500 italic">Geen extra rechten</span>
-                    )}
+                            <span>{isClockedIn ? '🔴 Uitklokken' : '🟢 Inklokken'}</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );

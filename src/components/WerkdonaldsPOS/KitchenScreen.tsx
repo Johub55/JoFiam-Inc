@@ -133,6 +133,102 @@ export function getEstimatedPrepTime(order: Order): number {
   return Math.min(Math.max(totalSecs, 45), 600); // Tussen 45 seconden en 10 minuten
 }
 
+export interface RecipeDetails {
+  title: string;
+  category: string;
+  steps: string[];
+  allergens: string[];
+  tempNote: string;
+  prepTimeSec: number;
+}
+
+export function getRecipeDetails(itemName: string): RecipeDetails {
+  const n = itemName.toLowerCase();
+  
+  if (n.includes('burger') || n.includes('mac') || n.includes('pounder') || n.includes('tasty') || n.includes('cheeseburger') || n.includes('hamburger') || n.includes('kroket') || n.includes('rib')) {
+    return {
+      title: itemName,
+      category: '🍔 Burger & Wrap Station',
+      steps: [
+        '1. Rooster de onder- en bovenkant van het broodje (15 sec in de toaster).',
+        '2. Breng de kenmerkende saus aan op de onderste en bovenste bun.',
+        '3. Leg gesneden uitjes, augurk en verse ijsbergsla op de saus.',
+        '4. Bak de 100% rundvlees patties/burgerschijf op de grill (kerntemp > 75°C).',
+        '5. Smelt een plakje cheddarkaas op het warme vlees.',
+        '6. Sluit het broodje en verpak strak in de juiste wikkel.'
+      ],
+      allergens: ['🌾 Gluten (Tarwe)', '🥛 Lactose (Melk/Kaas)', '🥚 Ei (Saus)', '🌱 Soja', '🌰 Sesam (Broodje)'],
+      tempNote: 'Kerntemperatuur vlees: minimaal 75°C. Maximaal 10 min in warmhoudstation.',
+      prepTimeSec: 120
+    };
+  }
+  
+  if (n.includes('chicken') || n.includes('nugget') || n.includes('tender') || n.includes('wings') || n.includes('wrap') || n.includes('kip')) {
+    return {
+      title: itemName,
+      category: '🍗 Kip & Snack Station',
+      steps: [
+        '1. Frituur het kapproduct direct vanuit de diepvries op 175°C (3.5 - 4 min).',
+        '2. Laat het product 15 seconden uitlekken boven de frituurpan.',
+        '3. Voor Wraps: Verwarm de tortilla, voeg honog-mosterd/sauzen, sla en warme kip toe en rol strak op.',
+        '4. Voor Nuggets/Tenders: Schep het exacte aantal in de kartonnen snackbox.',
+        '5. Voeg de gewenste dipsaus (BBQ, Zoetzuur, Mayonaise) toe aan de bestelzak.'
+      ],
+      allergens: ['🌾 Gluten (Krokant korstje)', '🌱 Soja', '🥚 Ei (Sauzen)', '🌾 Mosterd (Honey-Mustard)'],
+      tempNote: 'Frituur op exact 175°C. Schud het frituurmandje na 30 seconden.',
+      prepTimeSec: 180
+    };
+  }
+
+  if (n.includes('friet') || n.includes('twister') || n.includes('aardappel')) {
+    return {
+      title: itemName,
+      category: '🍟 Frituur & Sides Station',
+      steps: [
+        '1. Vul het frituurmandje tot max. 500g verse frites.',
+        '2. Frituur 3 minuten op 175°C tot goudgeel en knapperig.',
+        '3. Schud af boven de bak, giet in de zoutpan en strooi gelijkmatig zout.',
+        '4. Schep direct met de frites-schep in de juiste portiezak (Klein/Medium/Groot).',
+        '5. Voor Loaded Friet: Toef cheddar, baconbits en bieslook toevoegen.'
+      ],
+      allergens: ['🌱 Soja (Frituurolie)', '🥛 Lactose (Alleen bij Loaded Cheese/Truffel)'],
+      tempNote: 'Direct warm serveren. Friet verliest knapperigheid na 5 minuten.',
+      prepTimeSec: 180
+    };
+  }
+
+  if (n.includes('ijs') || n.includes('sundae') || n.includes('flurry') || n.includes('shake')) {
+    return {
+      title: itemName,
+      category: '🍦 IJs & Shake Station',
+      steps: [
+        '1. Neem een schone beker of ijsbakje.',
+        '2. Tap vers zacht ijs of melkshake uit de gekoelde machine.',
+        '3. Voor Flurry: Voeg de gewenste crunch/topping toe (Oreo, Stroopwafel, M&M).',
+        '4. Mix de topping 5 seconden door met de mixer op de standaard.',
+        '5. Serveer direct met een lepel/rietje.'
+      ],
+      allergens: ['🥛 Lactose (Verse Zuivel)', '🌾 Gluten (Crunches/Cookies)', '🌰 Noten/Pinda sporen'],
+      tempNote: 'Bewaartemperatuur ijsmachine: -4°C tot -8°C.',
+      prepTimeSec: 45
+    };
+  }
+
+  return {
+    title: itemName,
+    category: '🧑‍🍳 Algemene Bereiding',
+    steps: [
+      '1. Controleer de bon op speciale wensen of sausaanpassingen.',
+      '2. Bereid het item volgens de standaard kwaliteitsnormen.',
+      '3. Plaats in de juiste verpakking en controleer op allergenen.',
+      '4. Zet de status op "Inpakken" of "Gereed".'
+    ],
+    allergens: ['Bekijk verpakking voor specifieke allergenen'],
+    tempNote: 'Hygiënisch verpakken en vers serveren.',
+    prepTimeSec: 60
+  };
+}
+
 export const KitchenScreen: React.FC = () => {
   const { 
     orders, 
@@ -145,9 +241,12 @@ export const KitchenScreen: React.FC = () => {
   } = useApp();
 
   const [now, setNow] = useState<number>(Date.now());
-  const [filterTab, setFilterTab] = useState<'all' | 'prep' | 'done'>('all');
+  const [filterTab, setFilterTab] = useState<'all' | 'prep' | 'packing' | 'done'>('all');
   const [stationFilter, setStationFilter] = useState<StationType>('all');
   const [soundOn, setSoundOn] = useState<boolean>(AudioFX.isEnabled);
+
+  // Recipe & Allergen Quick-View Modal State
+  const [selectedRecipeItem, setSelectedRecipeItem] = useState<{ name: string; note?: string } | null>(null);
 
   const [showVoiceSettings, setShowVoiceSettings] = useState<boolean>(false);
   const [availableVoices, setAvailableVoices] = useState<any[]>([]);
@@ -235,15 +334,19 @@ export const KitchenScreen: React.FC = () => {
 
   // Orders that are currently on the kitchen screen: in progress or ready
   const activeOrders = orders.filter(o => isOrderInProgress(o.status) || isOrderReady(o.status));
-  const prepOrders = orders.filter(o => isOrderInProgress(o.status));
+  const prepOrders = orders.filter(o => isOrderInProgress(o.status) && o.status !== 'inpakken');
+  const packingOrders = orders.filter(o => o.status === 'inpakken' || o.items.some(it => it.stage === 'inpakken'));
   const readyOrders = orders.filter(o => isOrderReady(o.status));
 
   const prepCount = prepOrders.length;
+  const packingCount = packingOrders.length;
   const readyCount = readyOrders.length;
 
   // Filter based on active tab
   let tabFilteredOrders = filterTab === 'prep' 
     ? prepOrders 
+    : filterTab === 'packing'
+    ? packingOrders
     : filterTab === 'done' 
     ? readyOrders 
     : activeOrders;
@@ -838,6 +941,23 @@ export const KitchenScreen: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setFilterTab('packing')}
+            className={`px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
+              filterTab === 'packing'
+                ? 'bg-blue-500 text-slate-950 shadow font-black'
+                : 'bg-slate-900 hover:bg-slate-850 text-slate-400 border border-slate-800'
+            }`}
+          >
+            <span>📦 Inpakken / Trayen</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono font-black ${
+              filterTab === 'packing' ? 'bg-slate-950 text-blue-400' : 'bg-slate-800 text-blue-400'
+            }`}>
+              {packingCount}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setFilterTab('done')}
             className={`px-3 py-1.5 rounded-xl font-bold text-xs transition flex items-center gap-2 ${
               filterTab === 'done'
@@ -1206,10 +1326,20 @@ export const KitchenScreen: React.FC = () => {
                                   {it.qty}×
                                 </span>
                                 <div>
-                                  <div className={`text-xs font-bold leading-snug ${
-                                    currentStage === 'klaar' ? 'line-through text-slate-400' : 'text-white'
-                                  }`}>
-                                    {it.name}
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`text-xs font-bold leading-snug ${
+                                      currentStage === 'klaar' ? 'line-through text-slate-400' : 'text-white'
+                                    }`}>
+                                      {it.name}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedRecipeItem({ name: it.name, note: it.itemNote })}
+                                      className="px-1.5 py-0.2 rounded bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 border border-amber-500/40 text-[9px] font-bold flex items-center gap-1 transition"
+                                      title="Bekijk recept, bouwvolgorde en allergenen"
+                                    >
+                                      <span>ℹ️ Recept</span>
+                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -1385,6 +1515,88 @@ export const KitchenScreen: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Recipe & Allergen Quick-View Modal */}
+      {selectedRecipeItem && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <div className="text-xs uppercase font-mono font-bold text-amber-400">
+                  {getRecipeDetails(selectedRecipeItem.name).category}
+                </div>
+                <h2 className="text-xl font-black text-white mt-0.5">
+                  {selectedRecipeItem.name}
+                </h2>
+                {selectedRecipeItem.note && (
+                  <div className="text-xs text-rose-300 font-medium mt-1 bg-rose-500/10 px-2.5 py-1 rounded-lg border border-rose-500/30 inline-block">
+                    📝 Opmerking: {selectedRecipeItem.note}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRecipeItem(null)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Assembly Steps */}
+            <div>
+              <h3 className="text-xs uppercase font-mono font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+                <span>👩‍🍳</span>
+                <span>Bouwvolgorde & Bereidingsstappen:</span>
+              </h3>
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2 text-xs text-slate-200 font-medium">
+                {getRecipeDetails(selectedRecipeItem.name).steps.map((step, idx) => (
+                  <div key={idx} className="flex items-start gap-2">
+                    <span className="text-slate-300">{step}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Allergens & Temperatures */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <span>⚠️</span> Allergenen
+                </h4>
+                <div className="flex flex-wrap gap-1">
+                  {getRecipeDetails(selectedRecipeItem.name).allergens.map((alg, idx) => (
+                    <span key={idx} className="px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[10px] font-bold">
+                      {alg}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <span>🌡️</span> Kwaliteit & Temp
+                </h4>
+                <p className="text-[11px] text-slate-300 leading-snug">
+                  {getRecipeDetails(selectedRecipeItem.name).tempNote}
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedRecipeItem(null)}
+                className="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition shadow-lg"
+              >
+                Sluiten
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

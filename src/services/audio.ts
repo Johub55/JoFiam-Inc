@@ -50,9 +50,14 @@ class SoundEffects {
   private pendingSpeech: { text: string; orderNo: number | string; target: string } | null = null;
   private speechQueue: Array<{ text: string; orderNo: number | string; target: string }> = [];
   private isPlayingSpeech: boolean = false;
+  private broadcastSender: ((event: string, payload: any) => void) | null = null;
   
   private listeners: ((announcement: { orderNo: number | string; text: string; id: number } | null) => void)[] = [];
   private diagListeners: ((diag: AudioDiagnosticStatus) => void)[] = [];
+
+  public setBroadcastSender(sender: (event: string, payload: any) => void) {
+    this.broadcastSender = sender;
+  }
 
   private currentDiag: AudioDiagnosticStatus = {
     ctxState: 'uninitialized',
@@ -381,7 +386,7 @@ class SoundEffects {
    * Announces: "Bestelling <nummer> voor <tafel of persoon> is gereed om af te halen!"
    * Never announces delivery orders.
    */
-  public speakOrder(orderNo: number | string, identifier?: string, orderType?: string, force: boolean = false) {
+  public speakOrder(orderNo: number | string, identifier?: string, orderType?: string, force: boolean = false, fromBroadcast: boolean = false) {
     // Deduplication check: ignore if called within 1.5 seconds for the same order number unless forced
     const nowTime = Date.now();
     const lastTime = this.lastAnnouncedOrders.get(orderNo);
@@ -394,6 +399,12 @@ class SoundEffects {
     // 1. Delivery orders are NEVER announced
     if (orderType === 'delivery' || (identifier && identifier.toLowerCase().includes('bezorg'))) {
       return;
+    }
+
+    // Broadcast first if initiated locally
+    if (!fromBroadcast && this.broadcastSender) {
+      console.log(`📣 Broadcasting speak_order event for order #${orderNo}`);
+      this.broadcastSender('speak_order', { orderNo, identifier, orderType });
     }
 
     // 2. Play 2-tone airport/fastfood chime first
@@ -441,22 +452,27 @@ class SoundEffects {
 
     // 5. Execute natural human voice after chime
     setTimeout(() => {
-      this.playSpeech(textToSpeak, orderNo, target);
+      this.playSpeech(textToSpeak, orderNo, target, true); // true to prevent re-broadcasting individual speech
     }, 400);
   }
 
   public testSpeech(sampleOrderNo: number | string = 1001, sampleIdentifier: string = 'Tafel 4') {
     this.unlock();
-    this.speakOrder(sampleOrderNo, sampleIdentifier, 'dine_in', true);
+    this.speakOrder(sampleOrderNo, sampleIdentifier, 'dine_in', true, false);
   }
 
   /**
    * Universal speech player using a common queueing pattern:
    * Keeps speeches and announcements from overlapping or getting interrupted.
    */
-  public playSpeech(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4') {
+  public playSpeech(text: string, orderNo: number | string = 1001, target: string = 'Tafel 4', fromBroadcast: boolean = false) {
     if (typeof window === 'undefined' || !this.isEnabled) return;
     this.unlock();
+
+    if (!fromBroadcast && this.broadcastSender) {
+      console.log('📣 Broadcasting speak_text event:', text);
+      this.broadcastSender('speak_text', { text, orderNo, target });
+    }
 
     // Push the item to the queue
     this.speechQueue.push({ text, orderNo, target });
@@ -636,7 +652,7 @@ class SoundEffects {
         const googleUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=nl&client=tw-ob&q=${encoded}`;
         
         const audio = document.createElement('audio');
-        audio.referrerPolicy = 'no-referrer';
+        (audio as any).referrerPolicy = 'no-referrer';
         audio.src = googleUrl;
         audio.volume = 1.0;
         this.activeAudioElement = audio;
