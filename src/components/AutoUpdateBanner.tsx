@@ -8,9 +8,9 @@ export const AutoUpdateBanner: React.FC = () => {
   const [isManuallyChecking, setIsManuallyChecking] = useState<boolean>(false);
 
   const getVersionUrl = () => {
-    const baseUrl = (import.meta as any).env?.BASE_URL || './';
-    const prefix = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-    return `${prefix}version.json?t=${Date.now()}`;
+    const path = window.location.pathname;
+    const dir = path.endsWith('/') ? path : path.substring(0, path.lastIndexOf('/') + 1);
+    return `${window.location.origin}${dir}version.json?t=${Date.now()}`;
   };
 
   // Fetch initial version on mount

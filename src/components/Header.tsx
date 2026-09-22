@@ -105,6 +105,11 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
 
   const isKoekploeg = activeBrand === 'koekploeg';
 
+  // If logged in as RPI Kiosk account or locked terminal, hide the top header completely
+  if (currentPosUser?.username === 'rpi' || currentPosUser?.is_terminal_locked) {
+    return null;
+  }
+
   return (
     <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 shadow-xl">
       {/* Top Banner with App Switcher & User Statuses */}
@@ -383,20 +388,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
           >
             <Tv className="w-4 h-4" />
             <span>Afhaalscherm TV</span>
-          </button>
-
-          {/* WerkLoyalty Klantenterminal (RPI Touchscreen) */}
-          <button
-            onClick={() => handleSelectPosScreen('loyalty_terminal')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              posScreen === 'loyalty_terminal' 
-                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30' 
-                : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30'
-            }`}
-            title="Open de WerkLoyalty Touchscreen Klantenterminal (RPI 3B Kiosk)"
-          >
-            <span>👑</span>
-            <span>WerkLoyalty Spaarpaal</span>
           </button>
 
           {!isCustomer && canAccessPickupControl && (

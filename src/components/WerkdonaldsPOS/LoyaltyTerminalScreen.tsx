@@ -16,7 +16,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Zap,
-  ShoppingBag
+  ShoppingBag,
+  MapPin,
+  Settings,
+  Lock,
+  KeyRound
 } from 'lucide-react';
 import { 
   getLoyaltyCustomers, 
@@ -29,11 +33,31 @@ import {
 } from '../../services/loyalty';
 import { AudioFX } from '../../services/audio';
 import { euro } from '../../services/store';
+import { useApp } from '../../context/AppContext';
+
+export const PAAL_OPTIONS = [
+  { id: 'paal_1', name: '📍 Paal 1 (Hoofdingang / Kassa 1)', shortName: 'Paal 1' },
+  { id: 'paal_2', name: '📍 Paal 2 (Zij-ingang / Kassa 2)', shortName: 'Paal 2' },
+  { id: 'paal_3', name: '📍 Paal 3 (Drive-Thru Paal)', shortName: 'Paal 3' },
+  { id: 'paal_4', name: '📍 Paal 4 (Afhaalpaal)', shortName: 'Paal 4' },
+];
 
 export const LoyaltyTerminalScreen: React.FC = () => {
+  const { currentPosUser, logoutPos } = useApp();
   const [customers, setCustomers] = useState<LoyaltyCustomer[]>(getLoyaltyCustomers());
   const [activeCustomer, setActiveCustomer] = useState<LoyaltyCustomer | null>(null);
   
+  // Paal Koppeling State
+  const [selectedPaalId, setSelectedPaalId] = useState<string>(() => {
+    return localStorage.getItem('wd_loyalty_paal_id') || 'paal_1';
+  });
+
+  // Manager Security Unlock (for exit / change paal)
+  const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
+  const [pinInput, setPinInput] = useState<string>('');
+  const [pinError, setPinError] = useState<string>('');
+  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+
   // Numpad input
   const [phoneInput, setPhoneInput] = useState<string>('');
   const [searchError, setSearchError] = useState<string>('');
@@ -44,6 +68,17 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   
   // Redeemed voucher success modal
   const [redeemedReward, setRedeemedReward] = useState<{ reward: LoyaltyReward; voucherCode: string } | null>(null);
+
+  const currentPaal = PAAL_OPTIONS.find(p => p.id === selectedPaalId) || PAAL_OPTIONS[0];
+
+  const handleSelectPaal = (id: string) => {
+    const found = PAAL_OPTIONS.find(p => p.id === id);
+    if (found) {
+      setSelectedPaalId(id);
+      localStorage.setItem('wd_loyalty_paal_id', id);
+      localStorage.setItem('wd_loyalty_paal_name', found.name);
+    }
+  };
 
   // Auto-reset idle timer for public touchscreen security (25s)
   const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -182,41 +217,59 @@ export const LoyaltyTerminalScreen: React.FC = () => {
       <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Top Header for Touchscreen Terminal */}
-      <header className="px-6 py-4 bg-slate-900/90 border-b border-slate-800/80 backdrop-blur-md flex items-center justify-between z-10">
+      <header className="px-6 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-black flex items-center justify-center text-2xl shadow-lg shadow-amber-500/25">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-slate-950 font-black flex items-center justify-center text-xl shadow-md">
             👑
           </div>
           <div>
-            <h1 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
+            <h1 className="text-base font-black text-white uppercase tracking-tight flex items-center gap-2">
               WerkLoyalty Touch-Terminal
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
                 RPI 3B Kiosk
               </span>
+              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold flex items-center gap-1">
+                <MapPin className="w-3 h-3 text-emerald-400" />
+                {currentPaal.shortName}
+              </span>
             </h1>
-            <p className="text-xs text-slate-400">
-              Spaar &amp; Wissel WerkCoins In Bij De Kassa
+            <p className="text-[11px] text-slate-400">
+              Spaar &amp; Wissel WerkCoins In • {currentPaal.name}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {activeCustomer && (
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-2 transition"
+              className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
               <span>Klaar / Afmelden</span>
             </button>
           )}
 
+          {/* Manager Lock / Paal Settings Button */}
+          <button
+            onClick={() => {
+              setPinInput('');
+              setPinError('');
+              setShowManagerModal(true);
+            }}
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition flex items-center gap-1.5"
+            title="Paal Instellingen & Manager Vergrendeling"
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs font-bold hidden sm:inline">Beheer</span>
+          </button>
+
           <button
             onClick={toggleFullscreen}
-            className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition"
+            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition"
             title="Volledig scherm (Kiosk Mode)"
           >
-            <Maximize className="w-4 h-4" />
+            <Maximize className="w-3.5 h-3.5" />
           </button>
         </div>
       </header>
@@ -583,6 +636,143 @@ export const LoyaltyTerminalScreen: React.FC = () => {
             >
               Sluiten &amp; Verder
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: MANAGER SECURITY & PAAL BEHEER */}
+      {showManagerModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-amber-500/60 rounded-3xl w-full max-w-md p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black">
+                  <ShieldCheck className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-white uppercase tracking-tight">
+                    Paal Beheer &amp; Vergrendeling
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Beveiligd voor Manager &amp; Kassa-Medewerkers
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowManagerModal(false);
+                  setIsUnlocked(false);
+                }}
+                className="text-slate-400 hover:text-white p-1 font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            {!isUnlocked ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (pinInput === 'extra9' || pinInput === '1234' || pinInput === 'admin123' || currentPosUser?.is_admin) {
+                    setIsUnlocked(true);
+                    setPinError('');
+                  } else {
+                    setPinError('Ongeldige PIN code! Voer de manager PIN in (extra9 of 1234)');
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-xs text-slate-300 font-bold block mb-1.5 flex items-center gap-1">
+                    <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                    Voer Manager PIN / Wachtwoord In:
+                  </label>
+                  <input
+                    type="password"
+                    autoFocus
+                    value={pinInput}
+                    onChange={(e) => setPinInput(e.target.value)}
+                    placeholder="Wachtwoord (bijv. extra9 of 1234)"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-400"
+                  />
+                  {pinError && (
+                    <p className="text-xs text-rose-400 font-bold mt-1.5 text-center">
+                      {pinError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowManagerModal(false)}
+                    className="flex-1 py-3 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700"
+                  >
+                    Annuleren
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-3 rounded-xl text-xs font-black bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-lg"
+                  >
+                    Ontgrendelen
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label className="text-xs text-slate-300 font-extrabold uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                    Gekoppelde Paal Selector:
+                  </label>
+                  <div className="space-y-2">
+                    {PAAL_OPTIONS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectPaal(p.id)}
+                        className={`w-full p-3 rounded-xl text-xs font-bold text-left flex items-center justify-between transition ${
+                          selectedPaalId === p.id
+                            ? 'bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300'
+                            : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <span>{p.name}</span>
+                        {selectedPaalId === p.id && (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-800 pt-4 space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logoutPos();
+                      setShowManagerModal(false);
+                      setIsUnlocked(false);
+                    }}
+                    className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-rose-600/30"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>Verlaat Terminal / Uitloggen Van Paal</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowManagerModal(false);
+                      setIsUnlocked(false);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                  >
+                    Sluiten
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
