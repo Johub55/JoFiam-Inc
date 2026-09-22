@@ -7,12 +7,18 @@ export const AutoUpdateBanner: React.FC = () => {
   const [countdown, setCountdown] = useState<number>(4);
   const [isManuallyChecking, setIsManuallyChecking] = useState<boolean>(false);
 
+  const getVersionUrl = () => {
+    const baseUrl = (import.meta as any).env?.BASE_URL || './';
+    const prefix = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
+    return `${prefix}version.json?t=${Date.now()}`;
+  };
+
   // Fetch initial version on mount
   useEffect(() => {
     let isMounted = true;
     const fetchInitialVersion = async () => {
       try {
-        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+        const res = await fetch(getVersionUrl(), { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (isMounted && data.buildTime) {
@@ -34,7 +40,7 @@ export const AutoUpdateBanner: React.FC = () => {
 
     const checkVersion = async () => {
       try {
-        const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+        const res = await fetch(getVersionUrl(), { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data.buildTime && data.buildTime > initialBuildTime + 2000) {
@@ -69,7 +75,7 @@ export const AutoUpdateBanner: React.FC = () => {
   const handleManualCheck = async () => {
     setIsManuallyChecking(true);
     try {
-      const res = await fetch(`/version.json?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(getVersionUrl(), { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (initialBuildTime && data.buildTime && data.buildTime > initialBuildTime + 2000) {
