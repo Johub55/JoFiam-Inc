@@ -12,6 +12,7 @@ import { PaymentModal } from './components/WerkdonaldsPOS/PaymentModal';
 import { WalletScreen } from './components/WerkPayBank/WalletScreen';
 import { ManagerAccountsScreen } from './components/WerkPayBank/ManagerAccountsScreen';
 import { StaffCashRequestNotifier } from './components/WerkdonaldsPOS/StaffCashRequestNotifier';
+import { StaffPaalPairingNotifier } from './components/WerkdonaldsPOS/StaffPaalPairingNotifier';
 import { SupabaseModal } from './components/SupabaseModal';
 import { GitHubExportModal } from './components/GitHubExportModal';
 import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
@@ -94,6 +95,7 @@ const MainLayout: React.FC = () => {
 
       {/* Global Modals & Notifications */}
       <StaffCashRequestNotifier />
+      <StaffPaalPairingNotifier />
       <ReceiptModal />
       {showPaymentModal && (
         <PaymentModal onClose={() => setShowPaymentModal(false)} />

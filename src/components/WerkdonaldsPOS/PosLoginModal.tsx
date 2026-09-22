@@ -67,59 +67,10 @@ export const PosLoginModal: React.FC<PosLoginModalProps> = ({ onClose, onSuccess
 
         {/* Body */}
         <div className="p-5 space-y-4">
-          
-          {/* Quick Order Account Banner */}
-          <div className="p-3 bg-emerald-950/30 border border-emerald-500/30 rounded-2xl flex items-center justify-between gap-3">
-            <div>
-              <span className="font-extrabold text-xs text-emerald-300 block flex items-center gap-1.5">
-                <ShoppingBag className="w-4 h-4 text-emerald-400" />
-                Bestel Account (Geen Login)
-              </span>
-              <span className="text-[11px] text-slate-400">
-                Direct eten bestellen op de kassa.
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={handleUseBestelAccount}
-              className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs transition shrink-0"
-            >
-              Direct Bestellen
-            </button>
-          </div>
-
-          {/* RPI Spaarpaal Kiosk Banner */}
-          <div className="p-3 bg-amber-950/30 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3">
-            <div>
-              <span className="font-extrabold text-xs text-amber-300 flex items-center gap-1.5">
-                <span>👑</span>
-                Raspberry Pi Spaarpaal Kiosk
-              </span>
-              <span className="text-[11px] text-slate-400 block">
-                Account: <code className="text-amber-300 bg-amber-950/60 px-1 py-0.5 rounded font-mono">rpi</code> | Wachtwoord: <code className="text-amber-300 bg-amber-950/60 px-1 py-0.5 rounded font-mono">extra9</code>
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                setUsername('rpi');
-                setPassword('extra9');
-                const res = await loginPos('rpi', 'extra9');
-                if (res.success) {
-                  if (onSuccess) onSuccess();
-                  onClose();
-                }
-              }}
-              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition shrink-0 shadow-md shadow-amber-500/20"
-            >
-              Start RPI Kiosk
-            </button>
-          </div>
-
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-800"></div>
             <span className="flex-shrink mx-3 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-              Of inloggen als medewerker
+              Inloggen op POS / Kassa
             </span>
             <div className="flex-grow border-t border-slate-800"></div>
           </div>

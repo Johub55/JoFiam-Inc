@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { euro, ORDER_KIOSK_USER } from '../../services/store';
 import { Product, CartItem } from '../../types';
 import { PosLoginModal } from './PosLoginModal';
+import { LoyaltyQuickPopup } from './LoyaltyQuickPopup';
 import { 
   ALL_SAUCES, 
   ALL_MENU_DRINKS, 
@@ -68,6 +69,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   const displayProducts = brandProducts && brandProducts.length > 0 ? brandProducts : products;
 
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
+  const [showLoyaltyPopup, setShowLoyaltyPopup] = useState<boolean>(false);
   const [selectedCat, setSelectedCat] = useState<string>('Alles');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
@@ -926,6 +928,21 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               <span className="text-blue-400 text-lg">{euro(finalTotal)}</span>
             </div>
           </div>
+
+          {/* WerkLoyalty Spaarpaal Pop-up Button */}
+          <button
+            type="button"
+            onClick={() => setShowLoyaltyPopup(true)}
+            className="w-full py-2 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-between transition shadow-sm"
+          >
+            <span className="flex items-center gap-1.5">
+              <span>👑</span>
+              <span>WerkLoyalty Spaarpaal</span>
+            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold border border-amber-500/30">
+              Pop-up
+            </span>
+          </button>
 
           {/* Checkout Button */}
           <button
@@ -2220,6 +2237,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
           </div>
         </div>
       )}
+
+      {/* MODAL 3: WerkLoyalty Spaarpaal Quick Popup */}
+      <LoyaltyQuickPopup
+        isOpen={showLoyaltyPopup}
+        onClose={() => setShowLoyaltyPopup(false)}
+      />
 
     </div>
   );

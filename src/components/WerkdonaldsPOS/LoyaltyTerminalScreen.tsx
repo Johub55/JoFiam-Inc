@@ -32,7 +32,8 @@ import {
   LoyaltyReward 
 } from '../../services/loyalty';
 import { AudioFX } from '../../services/audio';
-import { euro } from '../../services/store';
+import { euro, INITIAL_POS_USERS } from '../../services/store';
+import { broadcastSync } from '../../services/syncHelpers';
 import { useApp } from '../../context/AppContext';
 
 export const PAAL_OPTIONS = [
@@ -52,6 +53,67 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     return localStorage.getItem('wd_loyalty_paal_id') || 'paal_1';
   });
 
+  const currentPaal = PAAL_OPTIONS.find(p => p.id === selectedPaalId) || PAAL_OPTIONS[0];
+
+  // Pairing status with active Kassa session
+  const [pairedKassaUser, setPairedKassaUser] = useState<string>(() => {
+    return localStorage.getItem('wd_paired_kassa_user') || 'Geen Actieve Kassa';
+  });
+  const [isPairingPending, setIsPairingPending] = useState<boolean>(false);
+  const [hidePhoneNumpad, setHidePhoneNumpad] = useState<boolean>(() => {
+    return localStorage.getItem('wd_hide_phone_numpad') === 'true';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let ch: BroadcastChannel | null = null;
+    try {
+      if ('BroadcastChannel' in window) {
+        ch = new BroadcastChannel('wd_unified_sync_channel');
+        ch.onmessage = (evt) => {
+          if (evt.data?.type === 'SPAARPAAL_PAIR_ACCEPTED') {
+            const { kassaUser, paalName } = evt.data.payload || {};
+            setIsPairingPending(false);
+            if (kassaUser) {
+              setPairedKassaUser(kassaUser);
+              localStorage.setItem('wd_paired_kassa_user', kassaUser);
+              AudioFX.chime();
+              
+              // Automatically enter Fullscreen mode when paired!
+              if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+              }
+              alert(`🎉 Spaarpaal '${paalName || currentPaal.shortName}' is nu succesvol gekoppeld met Kassa '${kassaUser}'! Fullscreen geactiveerd.`);
+            }
+          } else if (evt.data?.type === 'SPAARPAAL_PAIR_REJECTED') {
+            setIsPairingPending(false);
+            alert('❌ Koppeling verzoek geweigerd op het kassa-scherm.');
+          }
+        };
+      }
+    } catch (e) {
+      console.debug('BroadcastChannel error in LoyaltyTerminalScreen', e);
+    }
+
+    return () => {
+      if (ch) ch.close();
+    };
+  }, [currentPaal]);
+
+  const handleRequestPairing = (targetKassaName: string) => {
+    setIsPairingPending(true);
+    broadcastSync('SPAARPAAL_PAIR_REQUEST', {
+      id: `pair_${Date.now()}`,
+      terminalId: 'rpi_terminal_1',
+      paalName: currentPaal.name,
+      targetKassaUser: targetKassaName,
+      timestamp: Date.now()
+    });
+    AudioFX.bell();
+    alert(`⏳ Koppeling verzoek verstuurd naar '${targetKassaName}'! Accepteer het verzoek op het kassa-scherm.`);
+  };
+
   // Manager Security Unlock (for exit / change paal)
   const [showManagerModal, setShowManagerModal] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>('');
@@ -68,8 +130,6 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   
   // Redeemed voucher success modal
   const [redeemedReward, setRedeemedReward] = useState<{ reward: LoyaltyReward; voucherCode: string } | null>(null);
-
-  const currentPaal = PAAL_OPTIONS.find(p => p.id === selectedPaalId) || PAAL_OPTIONS[0];
 
   const handleSelectPaal = (id: string) => {
     const found = PAAL_OPTIONS.find(p => p.id === id);
@@ -720,18 +780,54 @@ export const LoyaltyTerminalScreen: React.FC = () => {
               </form>
             ) : (
               <div className="space-y-5">
+                
+                {/* Active Kassa Pairing Selector */}
+                <div>
+                  <label className="text-xs text-amber-300 font-extrabold uppercase tracking-wider block mb-1 flex items-center gap-1.5">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Koppel Met Actieve Kassa Account:
+                  </label>
+                  <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
+                    Kies een actieve kassa waaraan deze Spaarpaal wordt gekoppeld. De gekozen kassa ontvangt een <strong>pop-up verzoek om te accepteren</strong>!
+                  </p>
+                  <div className="space-y-2">
+                    {INITIAL_POS_USERS.filter(u => u.username !== 'rpi' && u.username !== 'bestel_kassa').map(u => (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => handleRequestPairing(u.name)}
+                        disabled={isPairingPending}
+                        className={`w-full p-3 rounded-xl text-xs font-bold text-left flex items-center justify-between border transition ${
+                          pairedKassaUser === u.name
+                            ? 'bg-amber-500/20 border-2 border-amber-500 text-amber-300'
+                            : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${pairedKassaUser === u.name ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`}></span>
+                          <span>{u.name} ({u.username})</span>
+                        </div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                          {pairedKassaUser === u.name ? '🟢 Gekoppeld' : 'Koppeling Sturen 🔗'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Paal Location Selection */}
                 <div>
                   <label className="text-xs text-slate-300 font-extrabold uppercase tracking-wider block mb-2 flex items-center gap-1.5">
                     <MapPin className="w-4 h-4 text-emerald-400" />
-                    Gekoppelde Paal Selector:
+                    Locatie / Paal Naam:
                   </label>
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {PAAL_OPTIONS.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => handleSelectPaal(p.id)}
-                        className={`w-full p-3 rounded-xl text-xs font-bold text-left flex items-center justify-between transition ${
+                        className={`w-full p-2.5 rounded-xl text-xs font-bold text-left flex items-center justify-between transition ${
                           selectedPaalId === p.id
                             ? 'bg-emerald-500/20 border-2 border-emerald-500 text-emerald-300'
                             : 'bg-slate-950 border border-slate-800 text-slate-300 hover:bg-slate-800'
@@ -746,7 +842,28 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="border-t border-slate-800 pt-4 space-y-2">
+                {/* Hide / Show Phone Input Option */}
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-white block">Telefoon Invoer</span>
+                    <span className="text-[10px] text-slate-400">Verberg numpad voor snelle Kiosk</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !hidePhoneNumpad;
+                      setHidePhoneNumpad(next);
+                      localStorage.setItem('wd_hide_phone_numpad', String(next));
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                      hidePhoneNumpad ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-slate-300'
+                    }`}
+                  >
+                    {hidePhoneNumpad ? 'Verborgen' : 'Zichtbaar'}
+                  </button>
+                </div>
+
+                <div className="border-t border-slate-800 pt-3 space-y-2">
                   <button
                     type="button"
                     onClick={() => {
