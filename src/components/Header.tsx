@@ -340,7 +340,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
 
       {/* Secondary Bar for POS Screens when in 'pos' mode */}
       {appMode === 'pos' && (
-        <div className="px-4 sm:px-6 py-2 flex items-center gap-2 overflow-x-auto bg-slate-900/90 border-b border-slate-800 text-xs">
+        (currentPosUser?.is_terminal_locked || currentPosUser?.username === 'rpi') ? (
+          <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between bg-amber-950/80 border-b border-amber-500/30 text-amber-300 text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🔒</span>
+              <span className="text-white font-extrabold">Raspberry Pi Terminal (Kiosk Stand)</span>
+              <span className="text-amber-400 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30 font-black">
+                👑 WerkLoyalty Spaarpaal
+              </span>
+            </div>
+            <button
+              onClick={logoutPos}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black transition shadow-md shadow-rose-600/30"
+              title="Sessie Beëindigen / Uitloggen van RPI Terminal"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sessie Beëindigen</span>
+            </button>
+          </div>
+        ) : (
+          <div className="px-4 sm:px-6 py-2 flex items-center gap-2 overflow-x-auto bg-slate-900/90 border-b border-slate-800 text-xs">
           <button
             onClick={() => handleSelectPosScreen('kassa')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
@@ -364,6 +383,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
           >
             <Tv className="w-4 h-4" />
             <span>Afhaalscherm TV</span>
+          </button>
+
+          {/* WerkLoyalty Klantenterminal (RPI Touchscreen) */}
+          <button
+            onClick={() => handleSelectPosScreen('loyalty_terminal')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
+              posScreen === 'loyalty_terminal' 
+                ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/30' 
+                : 'bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 border border-amber-500/30'
+            }`}
+            title="Open de WerkLoyalty Touchscreen Klantenterminal (RPI 3B Kiosk)"
+          >
+            <span>👑</span>
+            <span>WerkLoyalty Spaarpaal</span>
           </button>
 
           {!isCustomer && canAccessPickupControl && (
@@ -454,6 +487,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             </button>
           )}
         </div>
+        )
       )}
 
       {/* Secondary Bar for WerkPay Screens when in 'werkpay' mode */}

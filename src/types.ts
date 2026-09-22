@@ -15,7 +15,7 @@ export interface BrandConfig {
   headerGradient: string;
 }
 
-export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'pickup_control' | 'volgscherm' | 'voorraad' | 'manager';
+export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'pickup_control' | 'volgscherm' | 'voorraad' | 'manager' | 'loyalty_terminal';
 
 export type WerkPayScreenType = 'wallet' | 'overboeken' | 'accounts';
 
@@ -153,6 +153,8 @@ export interface PosUser {
   password?: string;
   perms: string[];
   is_admin?: boolean;
+  is_terminal_locked?: boolean;
+  assigned_screen?: PosScreenType;
   session_token?: string;
 }
 

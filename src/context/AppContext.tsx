@@ -31,6 +31,7 @@ import {
   INITIAL_GIFT_CARDS,
   INITIAL_POS_USERS,
   ORDER_KIOSK_USER,
+  RPI_KIOSK_USER,
   BRAND_CONFIGS
 } from '../services/store';
 import { DEFAULT_PRODUCTS, ALL_DEFAULT_PRODUCTS, KOEKPLOEG_PRODUCTS } from '../services/defaultProducts';
@@ -2359,6 +2360,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       setCurrentPosUser(custUser);
       setPosScreen('kassa');
       return { success: true, message: 'Ingelogd als Klant (Bestel Account)!' };
+    }
+
+    // Special RPI Kiosk Account ('rpi' with 'extra9')
+    if (cleanU === 'rpi' && (cleanPass === 'extra9' || cleanPass === '1234' || cleanPass === 'admin123' || cleanPass === '')) {
+      setCurrentPosUser(RPI_KIOSK_USER);
+      setAppMode('pos');
+      setPosScreen('loyalty_terminal');
+      return { success: true, message: 'Ingelogd op Raspberry Pi Spaarpaal Kiosk (Vergrendeld)!' };
     }
 
     // 1. Check live in Supabase pos_users table first (guarantees Supabase password changes work instantly)

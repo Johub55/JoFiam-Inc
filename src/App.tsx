@@ -17,6 +17,7 @@ import { GitHubExportModal } from './components/GitHubExportModal';
 import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
 import { AutoUpdateBanner } from './components/AutoUpdateBanner';
 import { PickupControlScreen } from './components/WerkdonaldsPOS/PickupControlScreen';
+import { LoyaltyTerminalScreen } from './components/WerkdonaldsPOS/LoyaltyTerminalScreen';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -51,6 +52,7 @@ const MainLayout: React.FC = () => {
             {posScreen === 'voorraad' && <InventoryScreen />}
             {posScreen === 'manager' && <ManagerScreen />}
             {posScreen === 'volgscherm' && <OrderTrackingScreen />}
+            {posScreen === 'loyalty_terminal' && <LoyaltyTerminalScreen />}
           </>
         )}
 

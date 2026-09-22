@@ -78,6 +78,17 @@ export const ORDER_KIOSK_USER: PosUser = {
   is_admin: false
 };
 
+export const RPI_KIOSK_USER: PosUser = {
+  id: 98,
+  name: 'Raspberry Pi Spaarpaal Terminal',
+  username: 'rpi',
+  password: 'extra9',
+  perms: ['loyalty_terminal'],
+  is_admin: false,
+  is_terminal_locked: true,
+  assigned_screen: 'loyalty_terminal'
+};
+
 export const INITIAL_POS_USERS: PosUser[] = [
   { 
     id: 1, 
@@ -87,7 +98,8 @@ export const INITIAL_POS_USERS: PosUser[] = [
     perms: ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay'], 
     is_admin: true 
   },
-  ORDER_KIOSK_USER
+  ORDER_KIOSK_USER,
+  RPI_KIOSK_USER
 ];
 
 export function euro(amount: number | string | undefined | null): string {
