@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { euro } from '../../services/store';
 import { Product, Coupon, GiftCard, PosUser } from '../../types';
 import { DiyTerminalModal } from './DiyTerminalModal';
+import { showToast } from '../../services/appToast';
 import { 
   BarChart3, 
   FileText, 
@@ -170,7 +171,10 @@ export const ManagerScreen: React.FC = () => {
 
   // Export CSV
   const handleExportCSV = () => {
-    if (orders.length === 0) return alert('Geen bestellingen om te exporteren.');
+    if (orders.length === 0) {
+      showToast('Geen bestellingen om te exporteren.', 'warning');
+      return;
+    }
     let csv = 'OrderNr;Tijd;Totaal;Korting;Type;Klant_Tafel;Betaalmethode;Kassier;Status\n';
     orders.forEach(o => {
       csv += `${o.no};${o.time};${o.total.toFixed(2)};${o.discount.toFixed(2)};${o.orderType};${o.identifier};${o.paymentMethod};${o.cashier};${o.status}\n`;
@@ -186,7 +190,10 @@ export const ManagerScreen: React.FC = () => {
   const handleCreateProduct = (e: React.FormEvent) => {
     e.preventDefault();
     const pr = parseFloat(newProdPrice);
-    if (!newProdName.trim() || isNaN(pr) || pr <= 0) return alert('Vul geldige productgegevens in.');
+    if (!newProdName.trim() || isNaN(pr) || pr <= 0) {
+      showToast('Vul geldige productgegevens in.', 'warning');
+      return;
+    }
     const sale = parseFloat(newProdSalePrice) || 0;
     createProduct({
       name: newProdName.trim(),
@@ -200,7 +207,7 @@ export const ManagerScreen: React.FC = () => {
     setNewProdName('');
     setNewProdPrice('');
     setNewProdSalePrice('');
-    alert(`Product ${newProdName} toegevoegd!`);
+    showToast(`Product ${newProdName} toegevoegd!`, 'success');
   };
 
   const handleSaveEditProduct = (e: React.FormEvent) => {
@@ -213,7 +220,10 @@ export const ManagerScreen: React.FC = () => {
   const handleCreateGiftCard = (e: React.FormEvent) => {
     e.preventDefault();
     const amt = parseFloat(newGiftAmount);
-    if (!newGiftCode.trim() || isNaN(amt) || amt <= 0) return alert('Vul een geldige code en bedrag in.');
+    if (!newGiftCode.trim() || isNaN(amt) || amt <= 0) {
+      showToast('Vul een geldige code en bedrag in.', 'warning');
+      return;
+    }
     createGiftCard(newGiftCode.trim(), amt);
     setNewGiftCode('');
     setNewGiftAmount('');
@@ -222,7 +232,10 @@ export const ManagerScreen: React.FC = () => {
   const handleCreateCoupon = (e: React.FormEvent) => {
     e.preventDefault();
     const val = parseFloat(newCouponVal);
-    if (!newCouponCode.trim() || isNaN(val) || val <= 0) return alert('Vul een code en waarde in.');
+    if (!newCouponCode.trim() || isNaN(val) || val <= 0) {
+      showToast('Vul een code en waarde in.', 'warning');
+      return;
+    }
     createCoupon({
       code: newCouponCode.trim().toUpperCase(),
       discount_type: newCouponType,
@@ -235,7 +248,10 @@ export const ManagerScreen: React.FC = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPass.trim()) return alert('Vul alle velden in.');
+    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPass.trim()) {
+      showToast('Vul alle velden in.', 'warning');
+      return;
+    }
     const effectivePerms = newUserIsAdmin 
       ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
       : newUserPerms;
@@ -252,13 +268,13 @@ export const ManagerScreen: React.FC = () => {
     setNewUserPass('');
     setNewUserIsAdmin(false);
     setNewUserPerms(['pos', 'kitchen', 'pickup', 'cash_pay']);
-    alert(res.message);
+    showToast(res.message, res.success ? 'success' : 'error');
   };
 
   const handleStartEditUser = (u: PosUser) => {
     // Joas can only be edited by Joas
     if (u.username.toLowerCase() === 'joas' && currentPosUser?.username.toLowerCase() !== 'joas') {
-      alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.');
+      showToast('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.', 'warning');
       return;
     }
     setEditingUser({ ...u, perms: [...(u.perms || [])] });
@@ -269,7 +285,7 @@ export const ManagerScreen: React.FC = () => {
     e.preventDefault();
     if (!editingUser) return;
     if (editingUser.username.toLowerCase() === 'joas' && currentPosUser?.username.toLowerCase() !== 'joas') {
-      alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.');
+      showToast('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.', 'warning');
       return;
     }
 
@@ -283,7 +299,7 @@ export const ManagerScreen: React.FC = () => {
       password: editUserPass.trim() || undefined
     });
 
-    alert(res.message);
+    showToast(res.message, res.success ? 'success' : 'error');
     if (res.success) {
       setEditingUser(null);
     }
@@ -291,16 +307,16 @@ export const ManagerScreen: React.FC = () => {
 
   const handleDeleteUser = async (u: PosUser) => {
     if (u.username.toLowerCase() === 'joas') {
-      alert('De hoofdbeheerder Joas kan niet worden verwijderd!');
+      showToast('De hoofdbeheerder Joas kan niet worden verwijderd!', 'error');
       return;
     }
     if (u.username === 'bestel_kassa') {
-      alert('Het standaard bestelaccount kan niet worden verwijderd.');
+      showToast('Het standaard bestelaccount kan niet worden verwijderd.', 'error');
       return;
     }
     if (confirm(`Weet je zeker dat je medewerker "${u.name}" wilt verwijderen?`)) {
       const res = await deletePosUser(u.id);
-      alert(res.message);
+      showToast(res.message, res.success ? 'success' : 'error');
     }
   };
 
@@ -600,7 +616,7 @@ export const ManagerScreen: React.FC = () => {
                 onClick={() => {
                   if (confirm('Weet je zeker dat je alle producten wilt resetten naar de standaardlijst?')) {
                     resetProductsToDefault();
-                    alert('Menu succesvol gereset!');
+                    showToast('Menu succesvol gereset!', 'success');
                   }
                 }}
                 className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
@@ -1136,7 +1152,7 @@ export const ManagerScreen: React.FC = () => {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => alert('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.')}
+                          onClick={() => showToast('Joas kan je alleen aanpassen als je zelf als Joas bent ingelogd.', 'warning')}
                           className="px-2.5 py-1 rounded-lg bg-slate-900 text-slate-400 font-medium text-xs border border-slate-800 flex items-center gap-1 cursor-not-allowed"
                           title="Alleen Joas kan het account van Joas bewerken"
                         >

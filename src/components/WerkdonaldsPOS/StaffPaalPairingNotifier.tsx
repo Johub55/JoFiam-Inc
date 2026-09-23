@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { broadcastSync } from '../../services/syncHelpers';
 import { AudioFX } from '../../services/audio';
+import { showToast } from '../../services/appToast';
 import { ShieldCheck, Check, X, MapPin, Tv2 } from 'lucide-react';
 
 export interface PaalPairRequest {
@@ -66,7 +67,7 @@ export const StaffPaalPairingNotifier: React.FC = () => {
 
     localStorage.setItem('wd_paired_paal_terminal', pairRequest.paalName);
     setPairRequest(null);
-    alert(`🟢 Kassa succesvol gekoppeld aan Spaarpaal '${pairRequest.paalName}'!`);
+    showToast(`🟢 Kassa succesvol gekoppeld aan Spaarpaal '${pairRequest.paalName}'!`, 'success');
   };
 
   const handleReject = () => {

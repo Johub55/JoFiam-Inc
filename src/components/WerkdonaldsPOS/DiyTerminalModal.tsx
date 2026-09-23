@@ -4,6 +4,7 @@ import {
   ARDUINO_SKETCH_CODE, 
   TerminalCallbacks 
 } from '../../services/terminalService';
+import { showToast } from '../../services/appToast';
 import { 
   Cpu, 
   Usb, 
@@ -63,7 +64,7 @@ export const DiyTerminalModal: React.FC<DiyTerminalModalProps> = ({ onClose, onS
     const res = await terminalManager.connect();
     setIsConnected(terminalManager.getIsConnected());
     if (!res.success) {
-      alert(res.message);
+      showToast(res.message, 'error');
     }
   };
 

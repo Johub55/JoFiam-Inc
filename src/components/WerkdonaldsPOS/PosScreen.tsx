@@ -37,6 +37,7 @@ import {
   Lock,
   ShieldCheck
 } from 'lucide-react';
+import { showToast } from '../../services/appToast';
 
 interface PosScreenProps {
   onOpenPaymentModal: () => void;
@@ -216,7 +217,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   // Surprise Me Handler
   const handleSurpriseMe = () => {
     if (orderStopActive && !currentPosUser?.is_admin) {
-      alert('Bestellingen zijn momenteel gepauzeerd door de bestelstop.');
+      showToast('Bestellingen zijn momenteel gepauzeerd door de bestelstop.', 'warning');
       return;
     }
     const available = products.filter(p => p.inStock && p.name !== '✨ Bouw je Eigen Burger');
@@ -228,7 +229,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   // Open Kiosk modal
   const openKiosk = (p: Product) => {
     if (orderStopActive && !currentPosUser?.is_admin) {
-      alert('Bestellingen zijn momenteel gepauzeerd door de bestelstop.');
+      showToast('Bestellingen zijn momenteel gepauzeerd door de bestelstop.', 'warning');
       return;
     }
     if (!p.inStock) return;
@@ -2218,7 +2219,10 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
               <button
                 onClick={() => {
                   const pr = parseFloat(customItemPrice);
-                  if (isNaN(pr) || pr <= 0) return alert('Voer een geldig bedrag in.');
+                  if (isNaN(pr) || pr <= 0) {
+                    showToast('Voer een geldig bedrag in.', 'warning');
+                    return;
+                  }
                   addToCart({
                     productId: 9999,
                     name: customItemName || 'Toeslag / Extra item',

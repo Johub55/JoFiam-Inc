@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { AudioFX, SpeechVoiceOption, TtsEngineMode, AudioDiagnosticStatus } from '../../services/audio';
 import { getStatusMeta, isOrderInProgress, isOrderReady } from '../../services/orderStatus';
 import { getSupabaseClient } from '../../services/store';
+import { showToast } from '../../services/appToast';
 import { 
   getNewsConfig, 
   getCustomNewsItems, 
@@ -661,7 +662,7 @@ export const PickupScreen: React.FC = () => {
       // Graceful fallback
     }
 
-    alert(`🚀 TV Preset "${newPreset.name}" opgeslagen! Synchroon met Supabase & lokaal.`);
+    showToast(`🚀 TV Preset "${newPreset.name}" opgeslagen! Synchroon met Supabase & lokaal.`, 'success');
   };
 
   const handleSelectVoice = (uri: string) => {

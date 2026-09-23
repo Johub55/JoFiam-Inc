@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { SCHEMA_ONLY_SUPABASE_SQL, BASIS_SUPABASE_SQL, UNIFIED_SUPABASE_SQL } from '../services/sqlScripts';
 import { DEFAULT_PRODUCTS } from '../services/defaultProducts';
+import { showToast } from '../services/appToast';
 import { 
   Database, 
   Copy, 
@@ -398,7 +399,7 @@ END $$;`;
                       } catch (e) {
                         console.warn("Fallback copy method used due to clipboard error:", e);
                       }
-                      alert('Contant Verzoeken SQL gekopieerd! Plak dit in de Supabase SQL Editor om verzoeken direct over kassa-schermen te synchroniseren.');
+                      showToast('Contant Verzoeken SQL gekopieerd! Plak dit in de Supabase SQL Editor om verzoeken direct over kassa-schermen te synchroniseren.', 'success');
                     }}
                     className="px-2.5 py-1 text-[11px] font-bold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg transition shrink-0"
                   >
@@ -461,7 +462,7 @@ END $$;`;
                       } catch (e) {
                         console.warn("Fallback copy method used due to clipboard error:", e);
                       }
-                      alert('Telefoon SQL gekopieerd! Plak dit in de Supabase SQL Editor om alleen de telefoon toe te voegen.');
+                      showToast('Telefoon SQL gekopieerd! Plak dit in de Supabase SQL Editor om alleen de telefoon toe te voegen.', 'success');
                     }}
                     className="px-2.5 py-1 text-[11px] font-bold bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-lg transition shrink-0"
                   >
@@ -501,7 +502,7 @@ END $$;`;
                       } catch (e) {
                         console.warn("Fallback copy method used due to clipboard error:", e);
                       }
-                      alert('RLS SQL gekopieerd! Plak dit in de Supabase SQL Editor om updates toe te staan.');
+                      showToast('RLS SQL gekopieerd! Plak dit in de Supabase SQL Editor om updates toe te staan.', 'success');
                     }}
                     className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-slate-950 rounded-lg transition shrink-0"
                   >

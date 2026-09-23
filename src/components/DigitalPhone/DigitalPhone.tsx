@@ -36,6 +36,8 @@ import {
   Users
 } from 'lucide-react';
 import { BankAccount, PosUser } from '../../types';
+import { GtaEasterEggModal } from '../GtaEasterEggModal';
+import { showToast } from '../../services/appToast';
 import { 
   LoyaltyCustomer, 
   LOYALTY_REWARDS, 
@@ -682,6 +684,7 @@ export const DigitalPhone: React.FC = () => {
   const [smsInput, setSmsInput] = useState<string>('');
   const [showNewChatList, setShowNewChatList] = useState<boolean>(false);
   const [contacts, setContacts] = useState<SMSContact[]>([]);
+  const [showGtaModal, setShowGtaModal] = useState<boolean>(false);
 
   // Initialize Contacts list, loading purely from localStorage but excluding any leftover mock profiles
   useEffect(() => {
@@ -720,6 +723,10 @@ export const DigitalPhone: React.FC = () => {
         
         // Only process if it is sent to me
         if (targetId !== myId) return;
+
+        if (text && String(text).trim().toLowerCase() === 'gta') {
+          setShowGtaModal(true);
+        }
 
         setContacts(prev => {
           const existing = prev.find(c => c.id === senderId);
@@ -1034,6 +1041,10 @@ export const DigitalPhone: React.FC = () => {
     if (!text) return;
     playClick();
 
+    if (text.trim().toLowerCase() === 'gta') {
+      setShowGtaModal(true);
+    }
+
     if (!overrideText) {
       setSmsInput('');
     }
@@ -1191,11 +1202,11 @@ export const DigitalPhone: React.FC = () => {
     playClick();
     const amt = parseFloat(wdCashAmount);
     if (isNaN(amt) || amt <= 0) {
-      alert('Vul een geldig bedrag in!');
+      showToast('Vul een geldig bedrag in!', 'warning');
       return;
     }
     if (!wdCashReason.trim()) {
-      alert('Vul de reden van de uitbetaling of kasaanvraag in!');
+      showToast('Vul de reden van de uitbetaling of kasaanvraag in!', 'warning');
       return;
     }
 
@@ -1208,6 +1219,7 @@ export const DigitalPhone: React.FC = () => {
       setWdCashReason('');
       try { AudioFX.bell(); } catch {}
       setTimeout(() => setWdCashSuccess(false), 4000);
+      showToast(`Kas-aanvraag van ${euro(amt)} ingediend!`, 'success');
     }
   };
 
@@ -1600,18 +1612,18 @@ export const DigitalPhone: React.FC = () => {
                               playClick();
                               const amt = parseFloat(wpTransferAmount);
                               if (isNaN(amt) || amt <= 0) {
-                                alert("Vul een geldig bedrag in!");
+                                showToast("Vul een geldig bedrag in!", "warning");
                                 return;
                               }
 
                               const targetLower = wpTransferTarget.trim().toLowerCase();
                               if (!targetLower) {
-                                alert("Vul een ontvanger in!");
+                                showToast("Vul een ontvanger in!", "warning");
                                 return;
                               }
 
                               if (wpAccount.username.toLowerCase() === targetLower) {
-                                alert("Je kunt geen geld naar jezelf overboeken!");
+                                showToast("Je kunt geen geld naar jezelf overboeken!", "warning");
                                 return;
                               }
 
@@ -1619,12 +1631,12 @@ export const DigitalPhone: React.FC = () => {
                               // Direct state deduction for live preview reactivity
                               const targetAcc = bankAccounts.find(x => x.username.toLowerCase() === targetLower);
                               if (!targetAcc) {
-                                alert(`Ontvanger "@${targetLower}" niet gevonden op het WerkPay netwerk!`);
+                                showToast(`Ontvanger "@${targetLower}" niet gevonden op het WerkPay netwerk!`, "error");
                                 return;
                               }
 
                               if (wpAccount.balance < amt && !wpAccount.is_admin) {
-                                alert("Onvoldoende saldo op deze rekening!");
+                                showToast("Onvoldoende saldo op deze rekening!", "error");
                                 return;
                               }
 
@@ -1996,7 +2008,7 @@ export const DigitalPhone: React.FC = () => {
                         <button
                           onClick={() => {
                             if (!dialInput) {
-                              alert("Toets eerst een nummer of kies een contact!");
+                              showToast("Toets eerst een nummer of kies een contact!", "warning");
                               return;
                             }
                             // See if dialInput is an active username
@@ -2409,7 +2421,7 @@ export const DigitalPhone: React.FC = () => {
                                           onClick={async () => {
                                             playClick();
                                             if (!wpIsLoggedIn || !wpAccount) {
-                                              alert("Log eerst in op je WerkPay bankrekening via de WerkPay app op de telefoon om te betalen!");
+                                              showToast("Log eerst in op je WerkPay bankrekening via de WerkPay app op de telefoon om te betalen!", "warning");
                                               setActiveApp('werkpay');
                                               return;
                                             }
@@ -2422,7 +2434,7 @@ export const DigitalPhone: React.FC = () => {
                                               });
                                               sendSms(contact.id, `✅ Tikkie van €${numAmt.toFixed(2)} succesvol voldaan via WerkPay!`);
                                             } else {
-                                              alert("Betaling mislukt! Onvoldoende saldo op je WerkPay rekening.");
+                                              showToast("Betaling mislukt! Onvoldoende saldo op je WerkPay rekening.", "error");
                                             }
                                           }}
                                           className="w-full py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-black text-[10px] shadow flex items-center justify-center gap-1 transition"
@@ -3254,6 +3266,12 @@ export const DigitalPhone: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Easter Egg GTA Arcade Game */}
+      <GtaEasterEggModal
+        isOpen={showGtaModal}
+        onClose={() => setShowGtaModal(false)}
+      />
     </>
   );
 };

@@ -480,11 +480,6 @@ export const KitchenScreen: React.FC = () => {
             {busyLevel}
           </div>
 
-          <div className="text-xs px-3 py-1.5 rounded-xl font-bold border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Gem. Bereiding: <span className="font-mono font-black">{formattedAvgPrepTime}</span></span>
-          </div>
-
           <button
             type="button"
             onClick={handleToggleSound}
@@ -1173,52 +1168,6 @@ export const KitchenScreen: React.FC = () => {
                         </button>
                       </div>
                     </div>
-
-                    {/* Time prioritization and target indicator */}
-                    {!isReady && (
-                      <div className="mb-3 p-2 rounded-xl bg-slate-950/80 border border-slate-850/50 space-y-1.5 text-[11px]">
-                        <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-500" />
-                            <span>Richttijd: <strong className="text-slate-300">{formatSecs(targetPrepSecs)}</strong></span>
-                          </span>
-                          <span className={`font-mono font-black ${
-                            isOvertime ? 'text-rose-400 animate-pulse' : ratio > 0.8 ? 'text-amber-400' : 'text-emerald-400'
-                          }`}>
-                            {formatSecs(elapsedSecs)} / {formatSecs(targetPrepSecs)}
-                          </span>
-                        </div>
-                        
-                        {/* Preparation gauge/progress bar */}
-                        <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-slate-800">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isOvertime 
-                                ? 'bg-rose-500' 
-                                : ratio > 0.8 
-                                ? 'bg-amber-400' 
-                                : 'bg-emerald-500'
-                            }`}
-                            style={{ width: `${Math.min(ratio * 100, 100)}%` }}
-                          />
-                        </div>
-
-                        {/* Warning or status text */}
-                        <div className="flex justify-between items-center text-[9px] uppercase tracking-wider font-bold">
-                          <span className="text-slate-500">Prioriteit:</span>
-                          {isOvertime ? (
-                            <span className="text-rose-400 flex items-center gap-1 animate-pulse">
-                              <AlertTriangle className="w-3 h-3 text-rose-400" />
-                              <span>OVERTIJD (+{formatSecs(elapsedSecs - targetPrepSecs)})</span>
-                            </span>
-                          ) : ratio > 0.8 ? (
-                            <span className="text-amber-400">⏳ BIJNA RICHTTIJD</span>
-                          ) : (
-                            <span className="text-emerald-400">🟢 BINNEN RICHTTIJD</span>
-                          )}
-                        </div>
-                      </div>
-                    )}
 
                     {/* Status Selector Bar (Chefs can pick ANY overall status) */}
                     <div className="mb-3 bg-slate-950/80 p-2 rounded-xl border border-slate-800">

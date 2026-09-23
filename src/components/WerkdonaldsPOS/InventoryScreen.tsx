@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { euro } from '../../services/store';
+import { showToast } from '../../services/appToast';
 import { InventoryItem } from '../../types';
 import { 
   Boxes, 
@@ -10,6 +11,8 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   ShoppingCart,
+  Zap,
+  RotateCcw,
   X 
 } from 'lucide-react';
 
@@ -35,9 +38,28 @@ export const InventoryScreen: React.FC = () => {
   const totalRevenue = orders.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + o.total, 0);
   const estimatedNetProfit = Math.max(0, totalRevenue - totalExpenses);
 
+  const lowStockItems = inventory.filter(i => i.stock_qty <= i.min_qty);
+
+  const handleAutoReorderAllLow = () => {
+    if (lowStockItems.length === 0) {
+      showToast('Geen artikelen onder de minimale voorraadgrens!', 'info');
+      return;
+    }
+    let reorderedCount = 0;
+    lowStockItems.forEach(item => {
+      const needed = Math.max(20, (item.min_qty * 2) - item.stock_qty);
+      buyInventory(item.id, needed);
+      reorderedCount++;
+    });
+    showToast(`⚡ Automatisch ${reorderedCount} lage voorraad artikelen bijbesteld!`, 'success');
+  };
+
   const handleCreateItem = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newItemName.trim()) return alert('Voer een naam in.');
+    if (!newItemName.trim()) {
+      showToast('Voer een naam in voor de grondstof.', 'warning');
+      return;
+    }
     addInventoryItem({
       item_name: newItemName.trim(),
       stock_qty: newItemQty,
@@ -48,6 +70,7 @@ export const InventoryScreen: React.FC = () => {
     });
     setShowAddModal(false);
     setNewItemName('');
+    showToast(` Grondstof '${newItemName.trim()}' toegevoegd aan voorraad!`, 'success');
   };
 
   return (
@@ -65,13 +88,26 @@ export const InventoryScreen: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg transition"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nieuwe Grondstof Toevoegen</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {lowStockItems.length > 0 && (
+            <button
+              onClick={handleAutoReorderAllLow}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-lg transition animate-pulse"
+              title="Aanvullen tot veilige voorraad"
+            >
+              <Zap className="w-4 h-4 fill-current" />
+              <span>Auto-Bijbestellen ({lowStockItems.length} tekorten)</span>
+            </button>
+          )}
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-lg transition"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nieuwe Grondstof Toevoegen</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}

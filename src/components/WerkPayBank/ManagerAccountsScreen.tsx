@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { euro, formatCardUid } from '../../services/store';
 import { BankAccount } from '../../types';
+import { showToast } from '../../services/appToast';
 import { 
   ShieldCheck, 
   Search, 
@@ -59,7 +60,10 @@ export const ManagerAccountsScreen: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUsername.trim() || !newHolder.trim()) return alert('Vul gebruikersnaam en kaarthouder in.');
+    if (!newUsername.trim() || !newHolder.trim()) {
+      showToast('Vul gebruikersnaam en kaarthouder in.', 'warning');
+      return;
+    }
     
     // Generate random 16-digit card UID
     const r1 = Math.floor(1000 + Math.random() * 9000);

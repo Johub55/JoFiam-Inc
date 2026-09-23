@@ -21,6 +21,7 @@ import {
   LoyaltyReward 
 } from '../../services/loyalty';
 import { AudioFX } from '../../services/audio';
+import { showToast } from '../../services/appToast';
 import { useApp } from '../../context/AppContext';
 
 interface LoyaltyQuickPopupProps {
@@ -82,7 +83,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
 
   const handleRegisterNew = () => {
     if (!phoneInput) {
-      alert('Voer eerst het telefoonnummer in.');
+      showToast('Voer eerst het telefoonnummer in.', 'warning');
       return;
     }
     const nameToUse = newName.trim() || 'Kassa Klant';
@@ -96,7 +97,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
   const handleRedeemOnCart = (reward: LoyaltyReward) => {
     if (!activeCustomer) return;
     if (activeCustomer.coins < reward.coinsCost) {
-      alert(`Te weinig WerkCoins! (Nodig: ${reward.coinsCost}, Huidig: ${activeCustomer.coins})`);
+      showToast(`Te weinig WerkCoins! (Nodig: ${reward.coinsCost}, Huidig: ${activeCustomer.coins})`, 'warning');
       return;
     }
 
@@ -106,7 +107,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
       const voucherCode = `LOYALTY_${reward.id.toUpperCase()}`;
       applyCouponCode(voucherCode);
       AudioFX.chime();
-      alert(`🎉 Beloning '${reward.title}' is toegevoegd aan de actieve kassa sessie!`);
+      showToast(`🎉 Beloning '${reward.title}' is toegevoegd aan de actieve kassa sessie!`, 'success');
       onClose();
     }
   };

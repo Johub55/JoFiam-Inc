@@ -19,6 +19,7 @@ import { DigitalPhone } from './components/DigitalPhone/DigitalPhone';
 import { AutoUpdateBanner } from './components/AutoUpdateBanner';
 import { PickupControlScreen } from './components/WerkdonaldsPOS/PickupControlScreen';
 import { LoyaltyTerminalScreen } from './components/WerkdonaldsPOS/LoyaltyTerminalScreen';
+import { AppToast } from './components/AppToast';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -94,6 +95,7 @@ const MainLayout: React.FC = () => {
       </main>
 
       {/* Global Modals & Notifications */}
+      <AppToast />
       <StaffCashRequestNotifier />
       <StaffPaalPairingNotifier />
       <ReceiptModal />

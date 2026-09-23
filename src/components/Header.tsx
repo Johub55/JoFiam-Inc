@@ -3,6 +3,7 @@ import { useApp } from '../context/AppContext';
 import { euro } from '../services/store';
 import { AudioFX } from '../services/audio';
 import { PosScreenType } from '../types';
+import { showToast } from '../services/appToast';
 import { PosLoginModal } from './WerkdonaldsPOS/PosLoginModal';
 import { DiyTerminalModal } from './WerkdonaldsPOS/DiyTerminalModal';
 import { 
@@ -85,19 +86,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
 
   const handleSelectPosScreen = (screen: PosScreenType) => {
     if (screen === 'keuken' && !canAccessKitchen) {
-      alert('Geen toegang tot de keuken. Als je dit recht niet hebt mag je dit scherm niet openen.');
+      showToast('Geen toegang tot de keuken. Als je dit recht niet hebt mag je dit scherm niet openen.', 'error');
       return;
     }
     if (screen === 'voorraad' && !canAccessInventory) {
-      alert('Geen toegang tot de voorraad. Als je dit recht niet hebt mag je dit scherm niet openen.');
+      showToast('Geen toegang tot de voorraad. Als je dit recht niet hebt mag je dit scherm niet openen.', 'error');
       return;
     }
     if (screen === 'manager' && !canAccessManager) {
-      alert('Geen toegang tot het manager scherm. Alleen managers met het manager-recht kunnen dit scherm openen.');
+      showToast('Geen toegang tot het manager scherm. Alleen managers met het manager-recht kunnen dit scherm openen.', 'error');
       return;
     }
     if (screen === 'pickup_control' && !canAccessPickupControl) {
-      alert('Geen toegang tot TV & Nieuws Beheer. Alleen bevoegde rangen kunnen dit scherm openen.');
+      showToast('Geen toegang tot TV & Nieuws Beheer. Alleen bevoegde rangen kunnen dit scherm openen.', 'error');
       return;
     }
     setPosScreen(screen);

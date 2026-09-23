@@ -34,6 +34,7 @@ import {
 import { AudioFX } from '../../services/audio';
 import { euro, INITIAL_POS_USERS } from '../../services/store';
 import { broadcastSync } from '../../services/syncHelpers';
+import { showToast } from '../../services/appToast';
 import { useApp } from '../../context/AppContext';
 
 export const PAAL_OPTIONS = [
@@ -84,11 +85,11 @@ export const LoyaltyTerminalScreen: React.FC = () => {
               if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(() => {});
               }
-              alert(`🎉 Spaarpaal '${paalName || currentPaal.shortName}' is nu succesvol gekoppeld met Kassa '${kassaUser}'! Fullscreen geactiveerd.`);
+              showToast(`🎉 Spaarpaal '${paalName || currentPaal.shortName}' is nu succesvol gekoppeld met Kassa '${kassaUser}'! Fullscreen geactiveerd.`, 'success');
             }
           } else if (evt.data?.type === 'SPAARPAAL_PAIR_REJECTED') {
             setIsPairingPending(false);
-            alert('❌ Koppeling verzoek geweigerd op het kassa-scherm.');
+            showToast('❌ Koppeling verzoek geweigerd op het kassa-scherm.', 'error');
           }
         };
       }
@@ -111,7 +112,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
       timestamp: Date.now()
     });
     AudioFX.bell();
-    alert(`⏳ Koppeling verzoek verstuurd naar '${targetKassaName}'! Accepteer het verzoek op het kassa-scherm.`);
+    showToast(`⏳ Koppeling verzoek verstuurd naar '${targetKassaName}'! Accepteer het verzoek op het kassa-scherm.`, 'info');
   };
 
   // Manager Security Unlock (for exit / change paal)
@@ -223,7 +224,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
 
   const handleRegisterNew = () => {
     if (!phoneInput) {
-      alert('Voer eerst je mobiele telefoonnummer in op de numpad.');
+      showToast('Voer eerst je mobiele telefoonnummer in op de numpad.', 'warning');
       return;
     }
     const nameToUse = newCustName.trim() || 'Vaste Klant';
@@ -240,7 +241,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     resetIdleTimer();
 
     if (activeCustomer.coins < reward.coinsCost) {
-      alert(`Je hebt ${reward.coinsCost - activeCustomer.coins} WerkCoins te weinig voor deze beloning! Spaar door te bestellen aan de kassa.`);
+      showToast(`Je hebt ${reward.coinsCost - activeCustomer.coins} WerkCoins te weinig voor deze beloning! Spaar door te meebestellen aan de kassa.`, 'warning');
       return;
     }
 
@@ -752,7 +753,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                     autoFocus
                     value={pinInput}
                     onChange={(e) => setPinInput(e.target.value)}
-                    placeholder="Wachtwoord (bijv. extra9 of 1234)"
+                    placeholder="Voer wachtwoord in"
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-center text-lg font-mono font-bold text-amber-400 focus:outline-none focus:border-amber-400"
                   />
                   {pinError && (
