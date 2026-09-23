@@ -32,10 +32,13 @@ import {
 } from 'lucide-react';
 import { 
   getLoyaltyCustomers, 
+  fetchLoyaltyFromSupabase,
+  normalizePhone,
   findLoyaltyCustomerByPhoneOrName, 
   registerLoyaltyCustomer, 
   deductCoinsFromCustomer, 
   redeemRewardForCustomer,
+  saveLoyaltyCustomers,
   LOYALTY_REWARDS, 
   LoyaltyCustomer, 
   LoyaltyReward,
@@ -65,14 +68,24 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   const [customers, setCustomers] = useState<LoyaltyCustomer[]>(getLoyaltyCustomers());
   const [activeCustomer, setActiveCustomer] = useState<LoyaltyCustomer | null>(null);
   
-  // Auto sync from cloud on terminal mount
+  // Prefer Supabase cloud sync over local storage whenever network & posClient exist
   useEffect(() => {
-    if (forceSyncNow) {
-      forceSyncNow().then(() => {
-        setCustomers(getLoyaltyCustomers());
-      }).catch(() => {});
-    }
-  }, [forceSyncNow]);
+    let isMounted = true;
+    const loadCloudLoyalty = async () => {
+      if (posClient) {
+        const cloudData = await fetchLoyaltyFromSupabase(posClient);
+        if (isMounted && cloudData) {
+          setCustomers(cloudData);
+        }
+      } else if (forceSyncNow) {
+        forceSyncNow().then(() => {
+          if (isMounted) setCustomers(getLoyaltyCustomers());
+        }).catch(() => {});
+      }
+    };
+    loadCloudLoyalty();
+    return () => { isMounted = false; };
+  }, [posClient, forceSyncNow]);
   
   // Paal Koppeling State
   const [selectedPaalId, setSelectedPaalId] = useState<string>(() => {
@@ -224,22 +237,14 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     const cleanQuery = query.trim();
     if (!cleanQuery) return;
 
-    // 1. Try local list first
-    const found = findLoyaltyCustomerByPhoneOrName(cleanQuery);
-    if (found) {
-      setActiveCustomer(found);
-      AudioFX.success();
-      setSearchError('');
-      return;
-    }
-
-    // 2. Try direct live lookup in Supabase cloud
+    // 1. PRIMARY SOURCE OF TRUTH: Supabase Cloud Database Query
     if (posClient) {
       try {
+        const cleanPhone = normalizePhone(cleanQuery);
         const { data, error } = await posClient
           .from('loyalty_customers')
           .select('*')
-          .or(`phone.ilike.%${cleanQuery}%,name.ilike.%${cleanQuery}%`)
+          .or(`phone.eq.${cleanPhone},phone.ilike.%${cleanQuery}%,name.ilike.%${cleanQuery}%`)
           .limit(1);
 
         if (!error && data && data.length > 0) {
@@ -263,19 +268,28 @@ export const LoyaltyTerminalScreen: React.FC = () => {
             ordersTodayCount: Number(row.orders_today_count || 0),
             joinedDate: row.joined_date || new Date().toISOString().split('T')[0]
           };
+
+          // Cache in local storage and update state
           const localList = getLoyaltyCustomers();
           const updatedList = [remoteCust, ...localList.filter(c => c.id !== remoteCust.id)];
-          localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(updatedList));
-          localStorage.setItem('wd_loyalty_ts', Date.now().toString());
-          window.dispatchEvent(new Event('wd_loyalty_updated'));
+          saveLoyaltyCustomers(updatedList, posClient);
           setActiveCustomer(remoteCust);
           AudioFX.success();
           setSearchError('');
           return;
         }
       } catch (err) {
-        console.warn('Live cloud search error:', err);
+        console.warn('⚠️ Primary Supabase search exception:', err);
       }
+    }
+
+    // 2. SECONDARY FALLBACK: Local Storage Cache (Only used if offline or Supabase unreachable)
+    const localFound = findLoyaltyCustomerByPhoneOrName(cleanQuery);
+    if (localFound) {
+      setActiveCustomer(localFound);
+      AudioFX.success();
+      setSearchError('');
+      return;
     }
 
     setSearchError('Geen account gevonden voor dit nummer. Registreer gratis in 1 tik!');
@@ -328,7 +342,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
       return;
     }
     const nameToUse = newCustName.trim() || 'Vaste Klant';
-    const newCust = registerLoyaltyCustomer(nameToUse, finalPhone);
+    const newCust = registerLoyaltyCustomer(nameToUse, finalPhone, posClient);
     setActiveCustomer(newCust);
     setCustomers(getLoyaltyCustomers());
     setShowRegisterModal(false);
@@ -345,7 +359,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     if (!activeCustomer) return;
     resetIdleTimer();
 
-    const result = redeemRewardForCustomer(activeCustomer.phone, reward);
+    const result = redeemRewardForCustomer(activeCustomer.phone, reward, posClient);
     if (result.error || !result.customer) {
       showToast(result.error || 'Kon beloning niet inwisselen', 'warning');
       return;
@@ -409,15 +423,20 @@ export const LoyaltyTerminalScreen: React.FC = () => {
         <div className="flex items-center gap-2">
           {/* Live Online Supabase Indicator */}
           <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-slate-950/80 border-slate-800">
-            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="text-slate-300">{isOnline ? 'Cloud Supabase Online' : 'Lokale Opslag'}</span>
+            <span className={`w-2 h-2 rounded-full ${posClient && isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="text-slate-300">
+              {posClient && isOnline ? '⚡ Supabase Cloud Actief' : '💾 Offline Cache Mode'}
+            </span>
             <button
               onClick={async () => {
-                if (forceSyncNow) {
+                if (posClient) {
+                  const cloudData = await fetchLoyaltyFromSupabase(posClient);
+                  if (cloudData) setCustomers(cloudData);
+                } else if (forceSyncNow) {
                   await forceSyncNow();
                   setCustomers(getLoyaltyCustomers());
-                  showToast('⚡ Live cloud data ververst vanuit Supabase!', 'success');
                 }
+                showToast('⚡ Live cloud data ververst vanuit Supabase!', 'success');
               }}
               className="p-1 hover:text-white text-slate-400 transition ml-0.5"
               title="Nu handmatig met Supabase synchroniseren"
@@ -1227,7 +1246,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                     setIsUnlocked(true);
                     setPinError('');
                   } else {
-                    setPinError('Ongeldige PIN code! Voer de manager PIN in (extra9 of 1234)');
+                    setPinError('Ongeldige PIN / Wachtwoord code! Probeer het opnieuw of vraag een manager.');
                   }
                 }}
                 className="space-y-4"

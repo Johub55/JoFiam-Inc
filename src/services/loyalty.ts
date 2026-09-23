@@ -470,6 +470,55 @@ const DEFAULT_LOYALTY_CUSTOMERS: LoyaltyCustomer[] = [
 
 const STORAGE_KEY = 'wd_loyalty_customers_db';
 
+export async function fetchLoyaltyFromSupabase(customClient?: any): Promise<LoyaltyCustomer[] | null> {
+  try {
+    const sb = customClient || getSupabaseClient();
+    if (!sb) return null;
+    const { data, error } = await sb
+      .from('loyalty_customers')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('⚠️ Supabase fetch loyalty_customers error:', error.message || error);
+      return null;
+    }
+
+    if (data && Array.isArray(data)) {
+      const parsed: LoyaltyCustomer[] = data.map((c: any) => ({
+        id: String(c.id),
+        name: String(c.name || 'Vaste Klant'),
+        phone: String(c.phone || ''),
+        coins: Number(c.coins || 0),
+        totalSpent: Number(c.total_spent || 0),
+        ordersCount: Number(c.orders_count || 0),
+        tier: (c.tier as any) || 'Brons',
+        currentMonthSpent: Number(c.current_month_spent || 0),
+        lastMonthSpent: Number(c.last_month_spent || 0),
+        currentMonthKey: c.current_month_key || '',
+        monthsBelowTarget: Number(c.months_below_target || 0),
+        vipSubscriptionActive: Boolean(c.vip_subscription_active),
+        vipSubscriptionExpires: c.vip_subscription_expires || undefined,
+        vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
+        lastSpinDate: c.last_spin_date || undefined,
+        ordersTodayCount: Number(c.orders_today_count || 0),
+        joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
+      }));
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+        localStorage.setItem('wd_loyalty_ts', Date.now().toString());
+        window.dispatchEvent(new Event('wd_loyalty_updated'));
+      }
+      return parsed;
+    }
+    return null;
+  } catch (err) {
+    console.warn('⚠️ Supabase fetch exception:', err);
+    return null;
+  }
+}
+
 export function getLoyaltyCustomers(): LoyaltyCustomer[] {
   if (typeof window === 'undefined') return DEFAULT_LOYALTY_CUSTOMERS;
   try {
@@ -486,14 +535,14 @@ export function getLoyaltyCustomers(): LoyaltyCustomer[] {
   }
 }
 
-export function saveLoyaltyCustomers(list: LoyaltyCustomer[]) {
+export function saveLoyaltyCustomers(list: LoyaltyCustomer[], customClient?: any) {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
     localStorage.setItem('wd_loyalty_ts', Date.now().toString());
     window.dispatchEvent(new Event('wd_loyalty_updated'));
     broadcastSync('SYNC_LOYALTY_CUSTOMERS', { customers: list });
-    syncLoyaltyToSupabase(list);
+    syncLoyaltyToSupabase(list, customClient);
   } catch (e) {
     console.error('Failed to save loyalty customers:', e);
   }
@@ -835,7 +884,7 @@ export function findLoyaltyCustomerByPhoneOrName(query: string): LoyaltyCustomer
   }) || null;
 }
 
-export function registerLoyaltyCustomer(name: string, phone: string): LoyaltyCustomer {
+export function registerLoyaltyCustomer(name: string, phone: string, customClient?: any): LoyaltyCustomer {
   const customers = getLoyaltyCustomers();
   let cleanPhone = normalizePhone(phone);
   if (!cleanPhone || cleanPhone.length < 6) {
@@ -849,7 +898,7 @@ export function registerLoyaltyCustomer(name: string, phone: string): LoyaltyCus
     // If name is provided and different, update name
     if (name.trim() && existing.name !== name.trim() && name.trim() !== 'Vaste Klant') {
       customers[existingIdx] = { ...existing, name: name.trim() };
-      saveLoyaltyCustomers(customers);
+      saveLoyaltyCustomers(customers, customClient);
       return customers[existingIdx];
     }
     return existing;
@@ -867,11 +916,11 @@ export function registerLoyaltyCustomer(name: string, phone: string): LoyaltyCus
   };
 
   const updated = [newCust, ...customers];
-  saveLoyaltyCustomers(updated);
+  saveLoyaltyCustomers(updated, customClient);
   return newCust;
 }
 
-export function addCoinsToCustomer(phone: string, subtotalAmount: number, paidAmount?: number, orderNo?: number): LoyaltyCustomer | null {
+export function addCoinsToCustomer(phone: string, subtotalAmount: number, paidAmount?: number, orderNo?: number, customClient?: any): LoyaltyCustomer | null {
   const customers = getLoyaltyCustomers();
   const idx = customers.findIndex(c => c.phone === phone);
   if (idx === -1) return null;
@@ -905,13 +954,14 @@ export function addCoinsToCustomer(phone: string, subtotalAmount: number, paidAm
   const finalEvaluated = evaluateCustomerTierRetention(updatedCust);
 
   customers[idx] = finalEvaluated;
-  saveLoyaltyCustomers(customers);
+  saveLoyaltyCustomers(customers, customClient);
   return finalEvaluated;
 }
 
 export function redeemRewardForCustomer(
   phone: string, 
-  reward: LoyaltyReward
+  reward: LoyaltyReward,
+  customClient?: any
 ): { customer: LoyaltyCustomer | null; voucher: LoyaltyVoucher | null; error?: string } {
   const customers = getLoyaltyCustomers();
   const idx = customers.findIndex(c => c.phone === phone);
@@ -946,11 +996,11 @@ export function redeemRewardForCustomer(
   updatedCust.vouchers = [newVoucher, ...(updatedCust.vouchers || [])];
 
   customers[idx] = updatedCust;
-  saveLoyaltyCustomers(customers);
+  saveLoyaltyCustomers(customers, customClient);
   return { customer: updatedCust, voucher: newVoucher };
 }
 
-export function deductCoinsFromCustomer(phone: string, coinsToDeduct: number): LoyaltyCustomer | null {
+export function deductCoinsFromCustomer(phone: string, coinsToDeduct: number, customClient?: any): LoyaltyCustomer | null {
   const customers = getLoyaltyCustomers();
   const idx = customers.findIndex(c => c.phone === phone);
   if (idx === -1) return null;
@@ -959,6 +1009,6 @@ export function deductCoinsFromCustomer(phone: string, coinsToDeduct: number): L
   updatedCust.coins = Math.max(0, updatedCust.coins - coinsToDeduct);
 
   customers[idx] = updatedCust;
-  saveLoyaltyCustomers(customers);
+  saveLoyaltyCustomers(customers, customClient);
   return updatedCust;
 }
