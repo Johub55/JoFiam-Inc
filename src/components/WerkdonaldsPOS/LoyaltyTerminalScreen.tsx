@@ -984,7 +984,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                 <button
                   onClick={() => {
                     setIsGuestMode(true);
-                    AudioFX.pop();
+                    AudioFX.click();
                   }}
                   className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 active:scale-95 transition"
                 >
