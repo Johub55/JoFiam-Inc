@@ -340,6 +340,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
         meta = { code: giftCardCode.trim().toUpperCase() };
       }
 
+      if (activeLoyaltyCustomer) {
+        meta.loyaltyPhone = activeLoyaltyCustomer.phone;
+        meta.loyaltyCustomerName = activeLoyaltyCustomer.name;
+      }
+
       const res = await processCheckout(paymentMethod, orderType, identifier, meta);
       if (!res.success) {
         setErrorMessage(res.message);

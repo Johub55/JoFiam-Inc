@@ -4,6 +4,7 @@ import { euro, ORDER_KIOSK_USER } from '../../services/store';
 import { Product, CartItem } from '../../types';
 import { PosLoginModal } from './PosLoginModal';
 import { LoyaltyQuickPopup } from './LoyaltyQuickPopup';
+import { GiftCardModal } from './GiftCardModal';
 import { 
   ALL_SAUCES, 
   ALL_MENU_DRINKS, 
@@ -35,7 +36,8 @@ import {
   RefreshCw,
   ShoppingBag,
   Lock,
-  ShieldCheck
+  ShieldCheck,
+  Gift
 } from 'lucide-react';
 import { showToast } from '../../services/appToast';
 
@@ -71,6 +73,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
 
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [showLoyaltyPopup, setShowLoyaltyPopup] = useState<boolean>(false);
+  const [showGiftCardModal, setShowGiftCardModal] = useState<boolean>(false);
   const [selectedCat, setSelectedCat] = useState<string>('Alles');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
@@ -694,6 +697,15 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowGiftCardModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-purple-500/20 hover:bg-purple-500 text-purple-300 hover:text-white border border-purple-500/30 transition shadow-sm"
+              title="Cadeaukaart bestellen of saldo controleren"
+            >
+              <Gift className="w-4 h-4 text-purple-400" />
+              <span>Cadeaukaart</span>
+            </button>
+
             <button
               onClick={() => setShowCustomItemModal(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
@@ -2246,6 +2258,12 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
       <LoyaltyQuickPopup
         isOpen={showLoyaltyPopup}
         onClose={() => setShowLoyaltyPopup(false)}
+      />
+
+      {/* MODAL 4: Gift Card Modal */}
+      <GiftCardModal
+        isOpen={showGiftCardModal}
+        onClose={() => setShowGiftCardModal(false)}
       />
 
     </div>

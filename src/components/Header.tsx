@@ -29,7 +29,8 @@ import {
   RotateCw,
   Eye,
   Sliders,
-  Megaphone
+  Megaphone,
+  Radio
 } from 'lucide-react';
 import { getStatusMeta } from '../services/orderStatus';
 
@@ -404,7 +405,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
             </button>
           )}
 
-          {/* Live Volgscherm Button */}
+          {/* OrderRadar (Live Volgscherm) Button */}
           <button
             type="button"
             onClick={() => {
@@ -424,10 +425,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 animate-pulse' 
                 : 'text-slate-300 hover:bg-slate-800'
             }`}
-            title="Open het live volgscherm voor jouw bestelling"
+            title="Open de OrderRadar live status voor jouw bestelling"
           >
-            <Eye className="w-4 h-4 text-amber-400" />
-            <span>Live Volgscherm</span>
+            <Radio className="w-4 h-4 text-amber-400 animate-spin" />
+            <span>📡 OrderRadar</span>
             {activeUserOrders.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full font-black text-[10px] bg-amber-400 text-slate-950">
                 #{activeUserOrders[0].no}

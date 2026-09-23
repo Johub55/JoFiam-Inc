@@ -7,6 +7,7 @@ import type {
   Product,
   CartItem,
   Order,
+  OrderItem,
   OrderStatus,
   OrderItemStage,
   InventoryItem,
@@ -44,6 +45,8 @@ import {
   recordDeletedOrder, 
   pendingOrderMutations 
 } from '../services/syncHelpers';
+import { calculateDiscount } from '../services/discountService';
+import { redeemVoucherAnyCustomer, addCoinsToCustomer } from '../services/loyalty';
 
 const getMajorityStatus = (items: any[]): OrderStatus => {
   if (!items || items.length === 0) return 'wachten';
@@ -1210,12 +1213,37 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const applyCouponCode = (code: string) => {
     const cleanCode = code.trim().toUpperCase();
-    const c = coupons.find(x => x.code === cleanCode && x.is_active);
-    if (!c) {
-      return { success: false, message: 'Onbekende of verlopen couponcode!' };
+    if (!cleanCode) {
+      return { success: false, message: 'Voer een geldige kortingscode of vouchercode in.' };
     }
 
     const rawTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const orderItems: OrderItem[] = cart.map(x => ({
+      name: x.name,
+      qty: x.qty,
+      price: x.price,
+      cat: x.cat
+    }));
+
+    // Check with advanced discount service (supports promo codes, category rules, & customer vouchers)
+    const calc = calculateDiscount(cleanCode, orderItems, rawTotal);
+
+    if (calc.valid) {
+      setAppliedDiscount({
+        type: 'fixed',
+        val: calc.discountAmount,
+        code: calc.code,
+        label: calc.description
+      });
+      return { success: true, message: `${calc.description} succesvol toegepast! (-€${calc.discountAmount.toFixed(2)})` };
+    }
+
+    // Fallback to legacy coupon state if present
+    const c = coupons.find(x => x.code === cleanCode && x.is_active);
+    if (!c) {
+      return { success: false, message: calc.error || 'Onbekende, ongeldige of verlopen kortingscode/voucher!' };
+    }
+
     if (c.discount_type === 'threshold' && rawTotal < (c.min_subtotal || 0)) {
       return {
         success: false,
@@ -1533,6 +1561,17 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
     // 4. Deduct inventory & empty cart
     deductInventoryForItems(cart);
+    
+    // If a discount voucher was applied, mark it used in loyalty system
+    if (appliedDiscount.code) {
+      redeemVoucherAnyCustomer(appliedDiscount.code, newOrder.no);
+    }
+
+    // Award loyalty coins to customer if linked
+    if (paymentMeta?.loyaltyPhone) {
+      addCoinsToCustomer(paymentMeta.loyaltyPhone, finalTotal);
+    }
+
     emptyCart();
 
     // 5. Audio chime & print receipt

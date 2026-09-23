@@ -175,7 +175,7 @@ INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
 VALUES ('default', FALSE, FALSE)
 ON CONFLICT (id) DO NOTHING;
 
--- 1.13 WerkLoyalty Klanten & WerkCoins Punten
+-- 1.13 WerkLoyalty Klanten & WerkCoins Punten (Inclusief Sephora-style Maandtarget & 2-Mnd Downgrade)
 CREATE TABLE IF NOT EXISTS public.loyalty_customers (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -184,6 +184,15 @@ CREATE TABLE IF NOT EXISTS public.loyalty_customers (
   total_spent NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
   orders_count INT NOT NULL DEFAULT 0,
   tier TEXT NOT NULL DEFAULT 'Brons',
+  current_month_spent NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  last_month_spent NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  current_month_key TEXT DEFAULT '',
+  months_below_target INT NOT NULL DEFAULT 0,
+  vip_subscription_active BOOLEAN NOT NULL DEFAULT FALSE,
+  vip_subscription_expires DATE,
+  vouchers JSONB NOT NULL DEFAULT '[]'::jsonb,
+  last_spin_date TEXT,
+  orders_today_count INT NOT NULL DEFAULT 0,
   joined_date TEXT DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -196,6 +205,16 @@ ALTER TABLE public.products ADD COLUMN IF NOT EXISTS on_sale BOOLEAN DEFAULT FAL
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS cat TEXT NOT NULL DEFAULT 'Burgers & Wraps';
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS emoji TEXT DEFAULT '🍔';
 ALTER TABLE public.products ADD COLUMN IF NOT EXISTS in_stock BOOLEAN DEFAULT TRUE;
+
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS current_month_spent NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS last_month_spent NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS current_month_key TEXT DEFAULT '';
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS months_below_target INT DEFAULT 0;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS vip_subscription_active BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS vip_subscription_expires DATE;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS vouchers JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS last_spin_date TEXT;
+ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS orders_today_count INT DEFAULT 0;
 
 ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS pin_code TEXT NOT NULL DEFAULT '1234';
 ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;

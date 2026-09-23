@@ -19,7 +19,10 @@ import {
   CreditCard,
   ArrowLeft,
   RefreshCw,
-  ShoppingBag
+  ShoppingBag,
+  Radio,
+  Zap,
+  CheckCircle2
 } from 'lucide-react';
 
 export const OrderTrackingScreen: React.FC = () => {
@@ -72,9 +75,12 @@ export const OrderTrackingScreen: React.FC = () => {
             🍔
           </div>
           <div>
-            <h2 className="text-xl font-black text-white">Geen Bestelling Geselecteerd</h2>
+            <h2 className="text-xl font-black text-white flex items-center justify-center gap-2">
+              <Radio className="w-5 h-5 text-amber-400 animate-spin" />
+              <span>OrderRadar: Geen Bestelling</span>
+            </h2>
             <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-              Er is momenteel geen actieve bestelling geselecteerd om te volgen. Plaats een bestelling via de kassa of kies een bestelnummer.
+              Er is momenteel geen actieve bestelling op de radar. Plaats een bestelling via de kassa of selecteer een bestelnummer hieronder.
             </p>
           </div>
 
@@ -150,14 +156,17 @@ export const OrderTrackingScreen: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-black text-white flex items-center gap-2">
-                <span>📡 Volgscherm Bestelling</span>
+                <span className="p-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Radio className="w-5 h-5 animate-pulse" />
+                </span>
+                <span>📡 WERKDONALDS ORDER-RADAR</span>
               </h1>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-black border border-amber-500/40">
                 #{order.no}
               </span>
             </div>
             <p className="text-xs text-slate-400">
-              Live status van je bestelling. Het scherm werkt direct realtime bij zodra de keuken vordert.
+              Live radar monitoring van je bestelling. Synchroniseert real-time met de keuken en de KDS schermen.
             </p>
           </div>
         </div>

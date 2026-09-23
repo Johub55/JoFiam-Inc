@@ -59,6 +59,7 @@ export interface OrderItem {
   name: string;
   qty: number;
   price: number;
+  cat?: string;
   itemNote?: string;
   done?: boolean;
   stage?: OrderItemStage;
@@ -131,10 +132,12 @@ export interface InventoryItem {
 export interface Coupon {
   id: number;
   code: string;
-  discount_type: 'percent' | 'fixed' | 'product' | 'threshold';
+  discount_type: 'percent' | 'fixed' | 'product' | 'threshold' | 'free_item';
   discount_val: number;
   min_subtotal?: number;
   target_product_name?: string;
+  target_category?: string;
+  description?: string;
   is_active: boolean;
 }
 
@@ -143,7 +146,30 @@ export interface GiftCard {
   code: string;
   initial_balance: number;
   current_balance: number;
+  sender_name?: string;
+  recipient_name?: string;
+  recipient_phone?: string;
+  message?: string;
   is_active: boolean;
+  created_at?: string;
+}
+
+export interface LoyaltyVoucher {
+  id: string;
+  code: string;
+  title: string;
+  emoji: string;
+  discountType: 'fixed_discount' | 'percent_discount' | 'free_item';
+  discountVal: number;
+  freeItemName?: string;
+  minOrderAmount?: number;
+  applicableCategory?: string;
+  customerPhone: string;
+  createdAt: string;
+  expiresAt: string;
+  status: 'active' | 'used' | 'expired';
+  usedAt?: string;
+  usedInOrderNo?: number;
 }
 
 export interface PosUser {

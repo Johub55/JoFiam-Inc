@@ -20,17 +20,32 @@ import {
   MapPin,
   Settings,
   Lock,
-  KeyRound
+  KeyRound,
+  Ticket,
+  Copy,
+  Check,
+  Globe,
+  Tag,
+  Flame,
+  ArrowLeft
 } from 'lucide-react';
 import { 
   getLoyaltyCustomers, 
   findLoyaltyCustomerByPhoneOrName, 
   registerLoyaltyCustomer, 
   deductCoinsFromCustomer, 
+  redeemRewardForCustomer,
   LOYALTY_REWARDS, 
   LoyaltyCustomer, 
-  LoyaltyReward 
+  LoyaltyReward,
+  LoyaltyVoucher,
+  getTierInfo,
+  OPENBARE_DAGDEALS,
+  OpenbareDagdeal,
+  createGuestVoucher
 } from '../../services/loyalty';
+import { LoyaltyFortuneWheel } from './LoyaltyFortuneWheel';
+import { LoyaltyLevelCard } from './LoyaltyLevelCard';
 import { AudioFX } from '../../services/audio';
 import { euro, INITIAL_POS_USERS } from '../../services/store';
 import { broadcastSync } from '../../services/syncHelpers';
@@ -64,6 +79,15 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   const [hidePhoneNumpad, setHidePhoneNumpad] = useState<boolean>(() => {
     return localStorage.getItem('wd_hide_phone_numpad') === 'true';
   });
+  const [loyaltySubTab, setLoyaltySubTab] = useState<'rewards' | 'wheel' | 'level' | 'vouchers'>('rewards');
+  const [copiedVoucher, setCopiedVoucher] = useState<string | null>(null);
+
+  const handleCopyVoucher = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedVoucher(code);
+    showToast(`Code ${code} gekopieerd naar klembord!`, 'info');
+    setTimeout(() => setCopiedVoucher(null), 2000);
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -131,6 +155,17 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   
   // Redeemed voucher success modal
   const [redeemedReward, setRedeemedReward] = useState<{ reward: LoyaltyReward; voucherCode: string } | null>(null);
+
+  // Openbaar / Zonder Account Gast Modus
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(false);
+  const [claimedGuestVoucher, setClaimedGuestVoucher] = useState<LoyaltyVoucher | null>(null);
+
+  const handleClaimGuestDeal = (deal: OpenbareDagdeal) => {
+    const vch = createGuestVoucher(deal);
+    setClaimedGuestVoucher(vch);
+    AudioFX.chime();
+    showToast(`🎟️ Gastvoucher ${vch.code} gegenereerd! Voer deze code in bij de kassa voor korting.`, 'success');
+  };
 
   const handleSelectPaal = (id: string) => {
     const found = PAAL_OPTIONS.find(p => p.id === id);
@@ -240,18 +275,19 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     if (!activeCustomer) return;
     resetIdleTimer();
 
-    if (activeCustomer.coins < reward.coinsCost) {
-      showToast(`Je hebt ${reward.coinsCost - activeCustomer.coins} WerkCoins te weinig voor deze beloning! Spaar door te meebestellen aan de kassa.`, 'warning');
+    const result = redeemRewardForCustomer(activeCustomer.phone, reward);
+    if (result.error || !result.customer) {
+      showToast(result.error || 'Kon beloning niet inwisselen', 'warning');
       return;
     }
 
-    const updated = deductCoinsFromCustomer(activeCustomer.phone, reward.coinsCost);
-    if (updated) {
-      setActiveCustomer(updated);
-      const voucher = `WL-${Math.floor(1000 + Math.random() * 9000)}`;
-      setRedeemedReward({ reward, voucherCode: voucher });
-      AudioFX.chime();
+    setActiveCustomer(result.customer);
+    setCustomers(getLoyaltyCustomers());
+    if (result.voucher) {
+      setRedeemedReward({ reward, voucherCode: result.voucher.code });
     }
+    AudioFX.chime();
+    showToast(`🎉 ${reward.title} ingewisseld! Voucher ${result.voucher?.code || ''} opgeslagen.`, 'success');
   };
 
   const handleLogout = () => {
@@ -392,86 +428,431 @@ export const LoyaltyTerminalScreen: React.FC = () => {
               </div>
             </div>
 
-            {/* Rewards Catalog Heading */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
-                  <Gift className="w-5 h-5 text-amber-400" />
-                  Kies &amp; Wissel Je Beloning In
-                </h3>
-                <p className="text-xs text-slate-400">
-                  Tik op een beloning om hem direct in te wisselen voor een tegoedbon voor de kassa!
-                </p>
+            {/* Navigation Sub-Tabs */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-1.5 rounded-2xl bg-slate-900 border border-slate-800">
+              <button
+                onClick={() => setLoyaltySubTab('rewards')}
+                className={`py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition ${
+                  loyaltySubTab === 'rewards'
+                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Gift className="w-4 h-4" />
+                <span>Beloningen</span>
+              </button>
+
+              <button
+                onClick={() => setLoyaltySubTab('wheel')}
+                className={`py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition ${
+                  loyaltySubTab === 'wheel'
+                    ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 shadow-md shadow-amber-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>🎡 Rad van Fortuin</span>
+              </button>
+
+              <button
+                onClick={() => setLoyaltySubTab('vouchers')}
+                className={`py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition ${
+                  loyaltySubTab === 'vouchers'
+                    ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Ticket className="w-4 h-4" />
+                <span>🎟️ Vouchers ({activeCustomer.vouchers?.filter(v => v.status === 'active').length || 0})</span>
+              </button>
+
+              <button
+                onClick={() => setLoyaltySubTab('level')}
+                className={`py-2.5 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition ${
+                  loyaltySubTab === 'level'
+                    ? 'bg-cyan-400 text-slate-950 shadow-md shadow-cyan-400/20'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                }`}
+              >
+                <Award className="w-4 h-4" />
+                <span>👑 Level &amp; VIP</span>
+              </button>
+            </div>
+
+            {/* SUBTAB 1: REWARDS CATALOG */}
+            {loyaltySubTab === 'rewards' && (
+              <div className="space-y-4 animate-fadeIn">
+                {/* Rewards Catalog Heading */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      <Gift className="w-5 h-5 text-amber-400" />
+                      Kies &amp; Wissel Je Beloning In
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Tik op een beloning om hem direct in te wisselen voor een tegoedbon voor de kassa!
+                    </p>
+                  </div>
+
+                  <div className="text-xs text-amber-300/80 font-bold bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
+                    €1,- besteld = +10 WerkCoins sparen!
+                  </div>
+                </div>
+
+                {/* Grid of Loyalty Rewards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {LOYALTY_REWARDS.map(rew => {
+                    const canAfford = activeCustomer.coins >= rew.coinsCost;
+                    return (
+                      <div 
+                        key={rew.id}
+                        onClick={() => canAfford && handleRedeemReward(rew)}
+                        className={`p-5 rounded-3xl border-2 transition-all flex flex-col justify-between gap-4 relative overflow-hidden ${
+                          canAfford 
+                            ? 'bg-slate-900/90 border-emerald-500/60 hover:border-emerald-400 hover:shadow-xl hover:shadow-emerald-500/10 cursor-pointer active:scale-[0.98]' 
+                            : 'bg-slate-950/60 border-slate-800 opacity-60'
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <span className="text-4xl">{rew.emoji}</span>
+                            <div className={`px-3 py-1 rounded-xl text-xs font-black font-mono border ${
+                              canAfford 
+                                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-400/20' 
+                                : 'bg-slate-800 text-slate-400 border-slate-700'
+                            }`}>
+                              {rew.coinsCost} Coins
+                            </div>
+                          </div>
+
+                          <h4 className="font-black text-white text-base">
+                            {rew.title}
+                          </h4>
+                          <p className="text-xs text-slate-400 mt-1">
+                            {rew.description}
+                          </p>
+                        </div>
+
+                        <button
+                          disabled={!canAfford}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (canAfford) handleRedeemReward(rew);
+                          }}
+                          className={`w-full py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition ${
+                            canAfford
+                              ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
+                              : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          }`}
+                        >
+                          {canAfford ? (
+                            <>
+                              <Sparkles className="w-4 h-4" />
+                              <span>Direct Inwisselen!</span>
+                            </>
+                          ) : (
+                            <span>Nog {rew.coinsCost - activeCustomer.coins} Coins Nodig</span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* SUBTAB 2: RAD VAN FORTUIN */}
+            {loyaltySubTab === 'wheel' && (
+              <div className="animate-fadeIn">
+                <LoyaltyFortuneWheel
+                  customer={activeCustomer}
+                  onCustomerUpdated={(updated) => {
+                    setActiveCustomer(updated);
+                    setCustomers(getLoyaltyCustomers());
+                  }}
+                />
+              </div>
+            )}
+
+            {/* SUBTAB 3: MIJN VOUCHERS */}
+            {loyaltySubTab === 'vouchers' && (
+              <div className="space-y-4 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
+                      <Ticket className="w-5 h-5 text-purple-400" />
+                      Mijn Actieve Vouchers &amp; Kortingsbonnen
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Gewonnen bij het Rad van Fortuin of ingewisseld met je WerkCoins
+                    </p>
+                  </div>
+                </div>
+
+                {(!activeCustomer.vouchers || activeCustomer.vouchers.length === 0) ? (
+                  <div className="p-12 rounded-3xl bg-slate-900 border border-slate-800 text-center space-y-3">
+                    <span className="text-4xl">🎟️</span>
+                    <h4 className="text-base font-black text-white">Nog Geen Vouchers</h4>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                      Draai aan het Rad van Fortuin of wissel je WerkCoins in om direct tegoedbonnen en gratis snacks te claimen!
+                    </p>
+                    <button
+                      onClick={() => setLoyaltySubTab('wheel')}
+                      className="px-5 py-2.5 rounded-xl bg-amber-400 text-slate-950 font-black text-xs uppercase"
+                    >
+                      Draai Het Rad
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {activeCustomer.vouchers.map(v => {
+                      const isActive = v.status === 'active';
+                      return (
+                        <div
+                          key={v.id}
+                          className={`p-5 rounded-3xl border-2 transition-all flex flex-col justify-between gap-4 ${
+                            isActive
+                              ? 'bg-slate-900 border-purple-500/60 shadow-lg shadow-purple-500/10'
+                              : 'bg-slate-950 border-slate-800 opacity-50'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="text-3xl">{v.emoji || '🎟️'}</span>
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                                isActive ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {isActive ? 'Geldig' : v.status === 'used' ? 'Gebruikt' : 'Verlopen'}
+                              </span>
+                            </div>
+
+                            <h4 className="font-black text-white text-base mt-2">
+                              {v.title}
+                            </h4>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {v.freeItemName ? `Gratis ${v.freeItemName}` : `Waarde: ${euro(v.discountVal)}`}
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                              <div className="font-mono text-xs font-black text-amber-300 tracking-wider">
+                                {v.code}
+                              </div>
+                              <button
+                                onClick={() => handleCopyVoucher(v.code)}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                                title="Kopieer code"
+                              >
+                                {copiedVoucher === v.code ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </div>
+
+                            <div className="text-[10px] text-slate-500 flex justify-between">
+                              <span>Geldig tot: {new Date(v.expiresAt).toLocaleDateString('nl-NL')}</span>
+                              <span>Toon aan kassa</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUBTAB 4: LEVEL & VIP STATUS */}
+            {loyaltySubTab === 'level' && (
+              <div className="animate-fadeIn">
+                <LoyaltyLevelCard 
+                  customer={activeCustomer} 
+                  onCustomerUpdated={(updated) => {
+                    setActiveCustomer(updated);
+                    setCustomers(getLoyaltyCustomers());
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        ) : isGuestMode ? (
+
+          /* STATE 2: PUBLIC / GUEST MODE (ZONDER ACCOUNT) */
+          <div className="space-y-8 animate-fadeIn">
+            
+            {/* Guest Banner */}
+            <div className="p-6 rounded-3xl bg-gradient-to-r from-purple-950/80 via-slate-900 to-indigo-950/80 border-2 border-purple-500/50 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-4 text-center md:text-left">
+                <div className="w-16 h-16 rounded-2xl bg-purple-600/30 border border-purple-400/40 text-purple-300 flex items-center justify-center text-3xl shrink-0 shadow-lg">
+                  🌐
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 justify-center md:justify-start">
+                    <h2 className="text-xl font-black text-white uppercase tracking-tight">
+                      Openbaar Gasten Portaal (Zonder Account)
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono font-bold text-[10px] border border-purple-500/30">
+                      Gast-Modus Actief
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-1">
+                    Iedereen is welkom! Claim direct openbare dagdeals &amp; gastvouchers voor aan de kassa zonder verplichte registratie.
+                  </p>
+                </div>
               </div>
 
-              <div className="text-xs text-amber-300/80 font-bold bg-amber-500/10 px-3 py-1.5 rounded-xl border border-amber-500/20">
-                €1,- besteld = +10 WerkCoins sparen!
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowRegisterModal(true)}
+                  className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-400/20 active:scale-95 transition flex items-center gap-2 shrink-0"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>Maak Toch Account (+50 Coins)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsGuestMode(false);
+                    setClaimedGuestVoucher(null);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs uppercase tracking-wider active:scale-95 transition flex items-center gap-1.5 shrink-0"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Terug naar Inloggen</span>
+                </button>
               </div>
             </div>
 
-            {/* Grid of Loyalty Rewards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {LOYALTY_REWARDS.map(rew => {
-                const canAfford = activeCustomer.coins >= rew.coinsCost;
-                return (
-                  <div 
-                    key={rew.id}
-                    onClick={() => canAfford && handleRedeemReward(rew)}
-                    className={`p-5 rounded-3xl border-2 transition-all flex flex-col justify-between gap-4 relative overflow-hidden ${
-                      canAfford 
-                        ? 'bg-slate-900/90 border-emerald-500/60 hover:border-emerald-400 hover:shadow-xl hover:shadow-emerald-500/10 cursor-pointer active:scale-[0.98]' 
-                        : 'bg-slate-950/60 border-slate-800 opacity-60'
-                    }`}
-                  >
+            {/* Claimed Guest Voucher Modal/Card */}
+            {claimedGuestVoucher && (
+              <div className="p-6 rounded-3xl bg-emerald-950/70 border-2 border-emerald-400/70 shadow-2xl space-y-4 animate-scaleUp">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{claimedGuestVoucher.emoji}</span>
                     <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-4xl">{rew.emoji}</span>
-                        <div className={`px-3 py-1 rounded-xl text-xs font-black font-mono border ${
-                          canAfford 
-                            ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md shadow-amber-400/20' 
-                            : 'bg-slate-800 text-slate-400 border-slate-700'
-                        }`}>
-                          {rew.coinsCost} Coins
-                        </div>
+                      <div className="text-xs font-mono font-bold text-emerald-400 uppercase">
+                        ✓ Gastvoucher Succesvol Gegenereerd!
                       </div>
-
-                      <h4 className="font-black text-white text-base">
-                        {rew.title}
-                      </h4>
-                      <p className="text-xs text-slate-400 mt-1">
-                        {rew.description}
-                      </p>
+                      <h3 className="text-lg font-black text-white">{claimedGuestVoucher.title}</h3>
                     </div>
+                  </div>
+                  <button
+                    onClick={() => setClaimedGuestVoucher(null)}
+                    className="text-xs text-slate-400 hover:text-white px-3 py-1 rounded-xl bg-slate-900 border border-slate-700"
+                  >
+                    Sluiten ✕
+                  </button>
+                </div>
 
+                {/* Ticket Display */}
+                <div className="p-6 rounded-2xl bg-slate-950 border-2 border-dashed border-emerald-500/60 flex flex-col sm:flex-row items-center justify-between gap-6 shadow-inner">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">
+                      Toon of toets deze code in bij de kassa:
+                    </span>
+                    <span className="text-3xl font-black font-mono text-emerald-300 tracking-widest block mt-1">
+                      {claimedGuestVoucher.code}
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      Geldig voor directe korting bij de kassa of bestelzuil
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3">
                     <button
-                      disabled={!canAfford}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (canAfford) handleRedeemReward(rew);
-                      }}
-                      className={`w-full py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition ${
-                        canAfford
-                          ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30'
-                          : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      }`}
+                      onClick={() => handleCopyVoucher(claimedGuestVoucher.code)}
+                      className="px-5 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-emerald-500/20 active:scale-95 transition"
                     >
-                      {canAfford ? (
+                      {copiedVoucher === claimedGuestVoucher.code ? (
                         <>
-                          <Sparkles className="w-4 h-4" />
-                          <span>Direct Inwisselen!</span>
+                          <Check className="w-4 h-4" />
+                          <span>Gekopieerd!</span>
                         </>
                       ) : (
-                        <span>Nog {rew.coinsCost - activeCustomer.coins} Coins Nodig</span>
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Kopieer Code</span>
+                        </>
                       )}
                     </button>
                   </div>
-                );
-              })}
+                </div>
+              </div>
+            )}
+
+            {/* Public Deals Grid */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-white font-black text-lg uppercase tracking-tight">
+                <Flame className="w-5 h-5 text-amber-400" />
+                <span>Openbare Dagdeals &amp; Directe Vouchers (Voor Iedereen)</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {OPENBARE_DAGDEALS.map(deal => (
+                  <div
+                    key={deal.id}
+                    className="p-6 rounded-3xl bg-slate-900/90 border-2 border-purple-500/30 hover:border-purple-400 shadow-xl flex flex-col justify-between space-y-4 transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-3xl">{deal.emoji}</span>
+                        <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                          {deal.badge}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-black text-white mt-3">{deal.title}</h3>
+                      <p className="text-xs text-slate-400 mt-1">{deal.description}</p>
+                      {deal.minSpend && (
+                        <div className="mt-2 text-[11px] text-amber-300 font-bold">
+                          Min. besteding: {euro(deal.minSpend)}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => handleClaimGuestDeal(deal)}
+                      className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 active:scale-95 transition"
+                    >
+                      <Ticket className="w-4 h-4" />
+                      <span>🎟️ Claim Directe Voucher</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
+
+            {/* Public Fortune Wheel Card */}
+            <div className="p-6 rounded-3xl bg-slate-900 border-2 border-amber-500/40 shadow-2xl space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🎡</span>
+                <div>
+                  <h3 className="text-base font-black text-white uppercase tracking-tight">
+                    Rad van Fortuin (Dagelijks Na Betaling)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Elke betalende klant mag 1x per dag draaien op de spaarpaal om gratis snacks of kortingen te winnen!
+                  </p>
+                </div>
+              </div>
+              <LoyaltyFortuneWheel 
+                customer={{
+                  id: 'c_gast_sample',
+                  name: 'Winkelbezoeker',
+                  phone: 'GAST',
+                  coins: 0,
+                  totalSpent: 0,
+                  ordersCount: 0,
+                  tier: 'Brons',
+                  joinedDate: '2026-09-23'
+                }}
+                onRewardWon={(rewardTitle, voucher) => {
+                  showToast(`🎉 Gefeliciteerd! Je hebt '${rewardTitle}' gedraaid! Bewaar je prijs door een gratis account aan te maken.`, 'success');
+                }}
+              />
+            </div>
+
           </div>
         ) : (
           
-          /* STATE 2: NO ACTIVE CUSTOMER -> TOUCHSCREEN NUMPAD & LOOKUP */
+          /* STATE 3: NO ACTIVE CUSTOMER -> TOUCHSCREEN NUMPAD & LOOKUP */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             
             {/* Left Column: Visual Welcome Card */}
@@ -592,6 +973,23 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                 >
                   <span>Inloggen / Bekijk Saldo</span>
                   <ArrowRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Public Guest Access Button */}
+              <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-slate-400">
+                  Winkelklant zonder account of anoniem bestellen?
+                </span>
+                <button
+                  onClick={() => {
+                    setIsGuestMode(true);
+                    AudioFX.pop();
+                  }}
+                  className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 active:scale-95 transition"
+                >
+                  <Globe className="w-4 h-4 text-purple-200" />
+                  <span>🌐 Openbaar / Zonder Account</span>
                 </button>
               </div>
             </div>
