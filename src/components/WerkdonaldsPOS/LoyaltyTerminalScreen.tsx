@@ -8,6 +8,7 @@ import {
   CheckCircle2, 
   ArrowRight, 
   RotateCcw, 
+  RotateCw,
   Gift, 
   Star, 
   QrCode, 
@@ -60,9 +61,18 @@ export const PAAL_OPTIONS = [
 ];
 
 export const LoyaltyTerminalScreen: React.FC = () => {
-  const { currentPosUser, logoutPos } = useApp();
+  const { currentPosUser, logoutPos, forceSyncNow, isOnline, syncStatus, isRealtimeActive, posClient } = useApp();
   const [customers, setCustomers] = useState<LoyaltyCustomer[]>(getLoyaltyCustomers());
   const [activeCustomer, setActiveCustomer] = useState<LoyaltyCustomer | null>(null);
+  
+  // Auto sync from cloud on terminal mount
+  useEffect(() => {
+    if (forceSyncNow) {
+      forceSyncNow().then(() => {
+        setCustomers(getLoyaltyCustomers());
+      }).catch(() => {});
+    }
+  }, [forceSyncNow]);
   
   // Paal Koppeling State
   const [selectedPaalId, setSelectedPaalId] = useState<string>(() => {
@@ -209,6 +219,68 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     };
   }, [phoneInput, activeCustomer, showRegisterModal, redeemedReward]);
 
+  const executeSearch = async (query: string) => {
+    resetIdleTimer();
+    const cleanQuery = query.trim();
+    if (!cleanQuery) return;
+
+    // 1. Try local list first
+    const found = findLoyaltyCustomerByPhoneOrName(cleanQuery);
+    if (found) {
+      setActiveCustomer(found);
+      AudioFX.success();
+      setSearchError('');
+      return;
+    }
+
+    // 2. Try direct live lookup in Supabase cloud
+    if (posClient) {
+      try {
+        const { data, error } = await posClient
+          .from('loyalty_customers')
+          .select('*')
+          .or(`phone.ilike.%${cleanQuery}%,name.ilike.%${cleanQuery}%`)
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const row = data[0];
+          const remoteCust: LoyaltyCustomer = {
+            id: String(row.id),
+            name: String(row.name || 'Vaste Klant'),
+            phone: String(row.phone || ''),
+            coins: Number(row.coins || 0),
+            totalSpent: Number(row.total_spent || 0),
+            ordersCount: Number(row.orders_count || 0),
+            tier: (row.tier as any) || 'Brons',
+            currentMonthSpent: Number(row.current_month_spent || 0),
+            lastMonthSpent: Number(row.last_month_spent || 0),
+            currentMonthKey: row.current_month_key || '',
+            monthsBelowTarget: Number(row.months_below_target || 0),
+            vipSubscriptionActive: Boolean(row.vip_subscription_active),
+            vipSubscriptionExpires: row.vip_subscription_expires || undefined,
+            vouchers: Array.isArray(row.vouchers) ? row.vouchers : (typeof row.vouchers === 'string' ? JSON.parse(row.vouchers) : []),
+            lastSpinDate: row.last_spin_date || undefined,
+            ordersTodayCount: Number(row.orders_today_count || 0),
+            joinedDate: row.joined_date || new Date().toISOString().split('T')[0]
+          };
+          const localList = getLoyaltyCustomers();
+          const updatedList = [remoteCust, ...localList.filter(c => c.id !== remoteCust.id)];
+          localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(updatedList));
+          localStorage.setItem('wd_loyalty_ts', Date.now().toString());
+          window.dispatchEvent(new Event('wd_loyalty_updated'));
+          setActiveCustomer(remoteCust);
+          AudioFX.success();
+          setSearchError('');
+          return;
+        }
+      } catch (err) {
+        console.warn('Live cloud search error:', err);
+      }
+    }
+
+    setSearchError('Geen account gevonden voor dit nummer. Registreer gratis in 1 tik!');
+  };
+
   const handleNumpadPress = (digit: string) => {
     AudioFX.click();
     resetIdleTimer();
@@ -219,13 +291,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
       
       // Auto-lookup if 10 digits reached
       if (next.length === 10) {
-        const found = findLoyaltyCustomerByPhoneOrName(next);
-        if (found) {
-          setActiveCustomer(found);
-          AudioFX.success();
-        } else {
-          setSearchError('Geen account gevonden voor dit nummer. Registreer gratis in 1 tik!');
-        }
+        executeSearch(next);
       }
     }
   };
@@ -247,15 +313,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!phoneInput.trim()) return;
-    resetIdleTimer();
-    const found = findLoyaltyCustomerByPhoneOrName(phoneInput);
-    if (found) {
-      setActiveCustomer(found);
-      AudioFX.success();
-      setSearchError('');
-    } else {
-      setSearchError('Nummer niet bekend. Maak direct gratis een WerkLoyalty account aan!');
-    }
+    executeSearch(phoneInput);
   };
 
   const handleOpenRegisterModal = (overridePhone?: string) => {
@@ -349,6 +407,25 @@ export const LoyaltyTerminalScreen: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Live Online Supabase Indicator */}
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-slate-950/80 border-slate-800">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            <span className="text-slate-300">{isOnline ? 'Cloud Supabase Online' : 'Lokale Opslag'}</span>
+            <button
+              onClick={async () => {
+                if (forceSyncNow) {
+                  await forceSyncNow();
+                  setCustomers(getLoyaltyCustomers());
+                  showToast('⚡ Live cloud data ververst vanuit Supabase!', 'success');
+                }
+              }}
+              className="p-1 hover:text-white text-slate-400 transition ml-0.5"
+              title="Nu handmatig met Supabase synchroniseren"
+            >
+              <RotateCw className={`w-3 h-3 ${syncStatus === 'syncing' ? 'animate-spin text-cyan-400' : ''}`} />
+            </button>
+          </div>
+
           {activeCustomer && (
             <button
               onClick={handleLogout}

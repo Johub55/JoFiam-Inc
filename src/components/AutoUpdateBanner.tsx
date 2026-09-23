@@ -8,9 +8,7 @@ export const AutoUpdateBanner: React.FC = () => {
   const [isManuallyChecking, setIsManuallyChecking] = useState<boolean>(false);
 
   const getVersionUrl = () => {
-    const path = window.location.pathname;
-    const dir = path.endsWith('/') ? path : path.substring(0, path.lastIndexOf('/') + 1);
-    return `${window.location.origin}${dir}version.json?t=${Date.now()}`;
+    return `./version.json?t=${Date.now()}`;
   };
 
   // Fetch initial version on mount
@@ -19,14 +17,14 @@ export const AutoUpdateBanner: React.FC = () => {
     const fetchInitialVersion = async () => {
       try {
         const res = await fetch(getVersionUrl(), { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data.buildTime) {
+        if (res.ok && res.status === 200) {
+          const data = await res.json().catch(() => null);
+          if (isMounted && data && data.buildTime) {
             setInitialBuildTime(data.buildTime);
           }
         }
       } catch (err) {
-        // Ignore fetch errors during initial load
+        // Silently ignore 404 / network error for dev environment
       }
     };
 
