@@ -152,6 +152,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
   // Registration flow for new customers
   const [showRegisterModal, setShowRegisterModal] = useState<boolean>(false);
   const [newCustName, setNewCustName] = useState<string>('');
+  const [newCustPhone, setNewCustPhone] = useState<string>('');
   
   // Redeemed voucher success modal
   const [redeemedReward, setRedeemedReward] = useState<{ reward: LoyaltyReward; voucherCode: string } | null>(null);
@@ -257,18 +258,29 @@ export const LoyaltyTerminalScreen: React.FC = () => {
     }
   };
 
+  const handleOpenRegisterModal = (overridePhone?: string) => {
+    setNewCustPhone(overridePhone || phoneInput || '');
+    setShowRegisterModal(true);
+  };
+
   const handleRegisterNew = () => {
-    if (!phoneInput) {
-      showToast('Voer eerst je mobiele telefoonnummer in op de numpad.', 'warning');
+    const finalPhone = (newCustPhone.trim() || phoneInput.trim());
+    if (!finalPhone) {
+      showToast('Voer een mobiel telefoonnummer in (bijv. 0612345678).', 'warning');
       return;
     }
     const nameToUse = newCustName.trim() || 'Vaste Klant';
-    const newCust = registerLoyaltyCustomer(nameToUse, phoneInput);
+    const newCust = registerLoyaltyCustomer(nameToUse, finalPhone);
     setActiveCustomer(newCust);
+    setCustomers(getLoyaltyCustomers());
     setShowRegisterModal(false);
     setNewCustName('');
+    setNewCustPhone('');
+    setPhoneInput(newCust.phone);
+    setSearchError('');
     AudioFX.success();
     AudioFX.chime();
+    showToast(`🎉 Welkom ${newCust.name}! Je hebt 50 Welkomst-WerkCoins ontvangen!`, 'success');
   };
 
   const handleRedeemReward = (reward: LoyaltyReward) => {
@@ -909,7 +921,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
                   <div className="mt-3 p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-between gap-2">
                     <span>{searchError}</span>
                     <button
-                      onClick={() => setShowRegisterModal(true)}
+                      onClick={() => handleOpenRegisterModal()}
                       className="px-3 py-1 rounded-lg bg-rose-600 text-white font-black text-xs uppercase"
                     >
                       Registreer
@@ -955,7 +967,7 @@ export const LoyaltyTerminalScreen: React.FC = () => {
               {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={() => setShowRegisterModal(true)}
+                  onClick={() => handleOpenRegisterModal()}
                   className="flex-1 py-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition border border-slate-700"
                 >
                   <UserPlus className="w-4 h-4 text-amber-400" />
@@ -1017,14 +1029,16 @@ export const LoyaltyTerminalScreen: React.FC = () => {
 
             <div className="space-y-4">
               <div>
-                <label className="text-xs text-slate-400 font-bold block mb-1">
-                  Mobiel Nummer
+                <label className="text-xs text-slate-300 font-bold block mb-1 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-amber-400" />
+                  Mobiel Telefoonnummer
                 </label>
                 <input
-                  type="text"
-                  readOnly
-                  value={phoneInput || '06........'}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-sm font-mono font-bold text-amber-400 text-center"
+                  type="tel"
+                  value={newCustPhone}
+                  onChange={e => setNewCustPhone(e.target.value)}
+                  placeholder="Bijv. 0612345678"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono font-bold text-amber-400 text-center focus:outline-none focus:border-amber-400"
                 />
               </div>
 

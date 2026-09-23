@@ -753,33 +753,38 @@ export function getMonthlyTierStatus(customer: LoyaltyCustomer): MonthlyTierStat
   };
 }
 
-async function syncLoyaltyToSupabase(list: LoyaltyCustomer[]) {
+export async function syncLoyaltyToSupabase(list: LoyaltyCustomer[], customClient?: any) {
   try {
-    const sb = getSupabaseClient();
+    const sb = customClient || getSupabaseClient();
     if (!sb) return;
     const rows = list.map(c => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      coins: c.coins,
-      total_spent: c.totalSpent,
-      orders_count: c.ordersCount,
-      tier: c.tier,
-      current_month_spent: c.currentMonthSpent || 0,
-      last_month_spent: c.lastMonthSpent || 0,
-      current_month_key: c.currentMonthKey || getCurrentMonthKey(),
-      months_below_target: c.monthsBelowTarget || 0,
-      vip_subscription_active: c.vipSubscriptionActive || false,
-      vip_subscription_expires: c.vipSubscriptionExpires || null,
-      vouchers: c.vouchers || [],
-      last_spin_date: c.lastSpinDate || null,
-      orders_today_count: c.ordersTodayCount || 0,
-      joined_date: c.joinedDate,
+      id: String(c.id),
+      name: String(c.name || '').trim(),
+      phone: String(c.phone || '').trim(),
+      coins: Number(c.coins || 0),
+      total_spent: Number(c.totalSpent || 0),
+      orders_count: Number(c.ordersCount || 0),
+      tier: String(c.tier || 'Brons'),
+      current_month_spent: Number(c.currentMonthSpent || 0),
+      last_month_spent: Number(c.lastMonthSpent || 0),
+      current_month_key: String(c.currentMonthKey || getCurrentMonthKey()),
+      months_below_target: Number(c.monthsBelowTarget || 0),
+      vip_subscription_active: Boolean(c.vipSubscriptionActive),
+      vip_subscription_expires: c.vipSubscriptionExpires ? String(c.vipSubscriptionExpires) : null,
+      vouchers: Array.isArray(c.vouchers) ? c.vouchers : [],
+      last_spin_date: c.lastSpinDate ? String(c.lastSpinDate) : null,
+      orders_today_count: Number(c.ordersTodayCount || 0),
+      joined_date: String(c.joinedDate || new Date().toISOString().split('T')[0]),
       updated_at: new Date().toISOString()
     }));
-    await sb.from('loyalty_customers').upsert(rows, { onConflict: 'id' });
+    const { error } = await sb.from('loyalty_customers').upsert(rows, { onConflict: 'id' });
+    if (error) {
+      console.warn('⚠️ Supabase loyalty_customers upsert error:', error.message || error);
+    } else {
+      console.log('✅ Loyalty customers synced to Supabase successfully:', rows.length);
+    }
   } catch (err) {
-    // Ignore if table doesn't exist
+    console.warn('⚠️ Supabase loyalty sync exception:', err);
   }
 }
 
@@ -805,21 +810,53 @@ if (typeof window !== 'undefined') {
   } catch {}
 }
 
+export function normalizePhone(raw: string): string {
+  if (!raw) return '';
+  let cleaned = raw.trim().replace(/[\s\-\(\)\.]/g, '');
+  if (cleaned.startsWith('+31')) {
+    cleaned = '0' + cleaned.slice(3);
+  } else if (cleaned.startsWith('0031')) {
+    cleaned = '0' + cleaned.slice(4);
+  }
+  return cleaned;
+}
+
 export function findLoyaltyCustomerByPhoneOrName(query: string): LoyaltyCustomer | null {
   const clean = query.trim().toLowerCase();
-  if (!clean) return null;
+  const cleanPhone = normalizePhone(query);
+  if (!clean && !cleanPhone) return null;
   const customers = getLoyaltyCustomers();
-  return customers.find(c => c.phone.replace(/\s+/g, '').includes(clean) || c.name.toLowerCase().includes(clean)) || null;
+  return customers.find(c => {
+    const cPhoneClean = normalizePhone(c.phone);
+    if (cleanPhone && cPhoneClean.includes(cleanPhone)) return true;
+    if (c.phone.toLowerCase().includes(clean)) return true;
+    if (c.name.toLowerCase().includes(clean)) return true;
+    return false;
+  }) || null;
 }
 
 export function registerLoyaltyCustomer(name: string, phone: string): LoyaltyCustomer {
   const customers = getLoyaltyCustomers();
-  const cleanPhone = phone.trim().replace(/\s+/g, '') || `06${Math.floor(10000000 + Math.random() * 90000000)}`;
-  const existing = customers.find(c => c.phone === cleanPhone);
-  if (existing) return existing;
+  let cleanPhone = normalizePhone(phone);
+  if (!cleanPhone || cleanPhone.length < 6) {
+    cleanPhone = `06${Math.floor(10000000 + Math.random() * 90000000)}`;
+  }
+
+  // Check if customer already exists with this phone number
+  const existingIdx = customers.findIndex(c => normalizePhone(c.phone) === cleanPhone || c.phone === cleanPhone);
+  if (existingIdx !== -1) {
+    const existing = customers[existingIdx];
+    // If name is provided and different, update name
+    if (name.trim() && existing.name !== name.trim() && name.trim() !== 'Vaste Klant') {
+      customers[existingIdx] = { ...existing, name: name.trim() };
+      saveLoyaltyCustomers(customers);
+      return customers[existingIdx];
+    }
+    return existing;
+  }
 
   const newCust: LoyaltyCustomer = {
-    id: `c_${cleanPhone}`,
+    id: `c_${cleanPhone}_${Date.now()}`,
     name: name.trim() || 'Vaste Klant',
     phone: cleanPhone,
     coins: 50, // 50 Welcome bonus WerkCoins!

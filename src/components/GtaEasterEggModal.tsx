@@ -111,6 +111,14 @@ interface Building {
 const MAP_WIDTH = 3600;
 const MAP_HEIGHT = 2700;
 
+// Helper for seamless infinite toroidal map wrapping calculations
+const getWrappedDelta = (from: number, to: number, max: number) => {
+  let d = to - from;
+  while (d > max / 2) d -= max;
+  while (d < -max / 2) d += max;
+  return d;
+};
+
 // Static Constants declared outside the component to prevent Temporal Dead Zone (TDZ)
 const BUILDINGS: Building[] = [
   // ROW 1: y = 100
@@ -733,25 +741,19 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       player.x += Math.sin(player.angle) * player.speed;
       player.y -= Math.cos(player.angle) * player.speed;
 
-      // Map Edge Collisions
-      if (player.x <= 20 || player.x >= MAP_WIDTH - 20 || player.y <= 20 || player.y >= MAP_HEIGHT - 20) {
-        if (Math.abs(player.speed) > 2.5 && invulnerableTimer <= 0) {
-          playRetroTone(130, 'sawtooth', 0.2, 0.15);
-          localHealth = Math.max(0, localHealth - 8);
-          setHealth(localHealth);
-          screenShake = 6;
-        }
-        player.speed *= -0.4;
-      }
-      player.x = Math.max(20, Math.min(MAP_WIDTH - 20, player.x));
-      player.y = Math.max(20, Math.min(MAP_HEIGHT - 20, player.y));
+      // Infinite Toroidal Map Wrapping (Drive Endless in all directions)
+      if (player.x < 0) player.x += MAP_WIDTH;
+      if (player.x >= MAP_WIDTH) player.x -= MAP_WIDTH;
+      if (player.y < 0) player.y += MAP_HEIGHT;
+      if (player.y >= MAP_HEIGHT) player.y -= MAP_HEIGHT;
 
-      // BUILDINGS Collisions
+      // Local wrapped player position for grid collision tests
+      const localPx = ((player.x % MAP_WIDTH) + MAP_WIDTH) % MAP_WIDTH;
+      const localPy = ((player.y % MAP_HEIGHT) + MAP_HEIGHT) % MAP_HEIGHT;
+
+      // BUILDINGS Collisions (using local relative position inside building tile grid)
       BUILDINGS.forEach(b => {
-        // Player hitbox bounding box estimation
-        const px = player.x;
-        const py = player.y;
-        if (px >= b.x - 12 && px <= b.x + b.width + 12 && py >= b.y - 12 && py <= b.y + b.height + 12) {
+        if (localPx >= b.x - 12 && localPx <= b.x + b.width + 12 && localPy >= b.y - 12 && localPy <= b.y + b.height + 12) {
           // Smash building! Push out player
           if (Math.abs(player.speed) > 2.0 && invulnerableTimer <= 0) {
             playRetroTone(140, 'sawtooth', 0.25, 0.18);
@@ -762,21 +764,23 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           }
           player.speed *= -0.5;
           // Shove player away from building edges
-          const distL = Math.abs(px - (b.x - 12));
-          const distR = Math.abs(px - (b.x + b.width + 12));
-          const distT = Math.abs(py - (b.y - 12));
-          const distB = Math.abs(py - (b.y + b.height + 12));
+          const distL = Math.abs(localPx - (b.x - 12));
+          const distR = Math.abs(localPx - (b.x + b.width + 12));
+          const distT = Math.abs(localPy - (b.y - 12));
+          const distB = Math.abs(localPy - (b.y + b.height + 12));
           const minDist = Math.min(distL, distR, distT, distB);
-          if (minDist === distL) player.x = b.x - 14;
-          else if (minDist === distR) player.x = b.x + b.width + 14;
-          else if (minDist === distT) player.y = b.y - 14;
-          else if (minDist === distB) player.y = b.y + b.height + 14;
+          if (minDist === distL) player.x -= (localPx - (b.x - 14));
+          else if (minDist === distR) player.x += (b.x + b.width + 14 - localPx);
+          else if (minDist === distT) player.y -= (localPy - (b.y - 14));
+          else if (minDist === distB) player.y += (b.y + b.height + 14 - localPy);
         }
       });
 
       // Tree Collisions
       trees.forEach(tr => {
-        const dist = Math.hypot(player.x - tr.x, player.y - tr.y);
+        const tdx = getWrappedDelta(tr.x, localPx, MAP_WIDTH);
+        const tdy = getWrappedDelta(tr.y, localPy, MAP_HEIGHT);
+        const dist = Math.hypot(tdx, tdy);
         if (dist < tr.radius + 12) {
           if (Math.abs(player.speed) > 2.5 && invulnerableTimer <= 0) {
             playRetroTone(120, 'triangle', 0.2, 0.12);
@@ -787,16 +791,15 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           }
           player.speed *= -0.4;
           // Push back
-          const angle = Math.atan2(player.y - tr.y, player.x - tr.x);
-          player.x = tr.x + Math.cos(angle) * (tr.radius + 14);
-          player.y = tr.y + Math.sin(angle) * (tr.radius + 14);
+          const angle = Math.atan2(tdy, tdx);
+          player.x += Math.cos(angle) * (tr.radius + 14 - dist);
+          player.y += Math.sin(angle) * (tr.radius + 14 - dist);
         }
       });
 
       // 3. MULTI-COP AI & ATTACK LOGIC (Based on Wanted Level)
-      // Wanted Level stars trigger more cops
       const targetCopCount = localWanted >= 5 ? 3 : (localWanted >= 3 ? 2 : 1);
-      if (cdx_stub_dummy_check() && cops.length < targetCopCount) {
+      if (cops.length < targetCopCount) {
         cops.push({
           id: Date.now() + Math.random(),
           x: 100,
@@ -814,10 +817,6 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         });
       }
 
-      function cdx_stub_dummy_check() {
-        return true;
-      }
-
       cops.forEach(cop => {
         if (!cop.active) {
           cop.respawnTimer--;
@@ -827,8 +826,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           return;
         }
 
-        const cdx = player.x - cop.x;
-        const cdy = player.y - cop.y;
+        const cdx = getWrappedDelta(cop.x, player.x, MAP_WIDTH);
+        const cdy = getWrappedDelta(cop.y, player.y, MAP_HEIGHT);
         const distToPlayer = Math.hypot(cdx, cdy);
         cop.angle = Math.atan2(cdy, cdx) + Math.PI / 2;
 
@@ -836,6 +835,11 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           // Cops chase the player!
           cop.x += (cdx / distToPlayer) * cop.speed;
           cop.y += (cdy / distToPlayer) * cop.speed;
+
+          if (cop.x < 0) cop.x += MAP_WIDTH;
+          if (cop.x >= MAP_WIDTH) cop.x -= MAP_WIDTH;
+          if (cop.y < 0) cop.y += MAP_HEIGHT;
+          if (cop.y >= MAP_HEIGHT) cop.y -= MAP_HEIGHT;
         }
 
         // Cop Ram player collision
@@ -961,8 +965,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         }
       }
 
-      // 5. TARGET ZONE CHECK
-      const distToTarget = Math.hypot(player.x - target.x, player.y - target.y);
+      // 5. TARGET ZONE CHECK (Infinite Wrapped Delta)
+      const tdxTarget = getWrappedDelta(player.x, target.x, MAP_WIDTH);
+      const tdyTarget = getWrappedDelta(player.y, target.y, MAP_HEIGHT);
+      const distToTarget = Math.hypot(tdxTarget, tdyTarget);
       if (distToTarget < target.radius) {
         playRetroTone(580, 'sine', 0.15);
         setTimeout(() => playRetroTone(880, 'sine', 0.2), 100);
@@ -1043,7 +1049,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         }
       });
 
-      // 8. RENDER SCREEN WITH SMOOTH CAMERA SCROLLING
+      // 8. RENDER SCREEN WITH SMOOTH CAMERA SCROLLING (INFINITE MULTI-TILE GRID)
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
@@ -1052,48 +1058,100 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         screenShake = Math.max(0, screenShake - 0.5);
       }
 
-      // Align camera smoothly focused on player car
-      let camX = player.x - canvas.width / 2;
-      let camY = player.y - canvas.height / 2;
-      camX = Math.max(0, Math.min(MAP_WIDTH - canvas.width, camX));
-      camY = Math.max(0, Math.min(MAP_HEIGHT - canvas.height, camY));
+      // Align camera centered directly on player car
+      const camX = player.x - canvas.width / 2;
+      const camY = player.y - canvas.height / 2;
 
       ctx.translate(-camX, -camY);
 
-      // Grass Background Grid
-      ctx.fillStyle = '#065f46'; // dark forest green
-      ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+      // Determine visible tile grid range around viewport
+      const minTileX = Math.floor(camX / MAP_WIDTH);
+      const maxTileX = Math.floor((camX + canvas.width) / MAP_WIDTH);
+      const minTileY = Math.floor(camY / MAP_HEIGHT);
+      const maxTileY = Math.floor((camY + canvas.height) / MAP_HEIGHT);
 
-      ctx.fillStyle = '#047857'; // lighter spots
-      for (let x = 0; x < MAP_WIDTH; x += 120) {
-        for (let y = 0; y < MAP_HEIGHT; y += 120) {
-          if ((x + y) % 240 === 0) {
-            ctx.fillRect(x, y, 60, 60);
+      // Render seamless infinite grid tiles
+      for (let tx = minTileX; tx <= maxTileX; tx++) {
+        for (let ty = minTileY; ty <= maxTileY; ty++) {
+          const ox = tx * MAP_WIDTH;
+          const oy = ty * MAP_HEIGHT;
+
+          // Grass Background Grid
+          ctx.fillStyle = '#065f46'; // dark forest green
+          ctx.fillRect(ox, oy, MAP_WIDTH, MAP_HEIGHT);
+
+          ctx.fillStyle = '#047857'; // lighter spots
+          for (let x = 0; x < MAP_WIDTH; x += 120) {
+            for (let y = 0; y < MAP_HEIGHT; y += 120) {
+              if ((x + y) % 240 === 0) {
+                ctx.fillRect(ox + x, oy + y, 60, 60);
+              }
+            }
           }
+
+          // Draw Roads Grid on tile
+          ROADS.forEach(r => {
+            ctx.fillStyle = '#1e293b'; // Slate asphalt
+            ctx.fillRect(ox + r.x, oy + r.y, r.w, r.h);
+
+            // Center dash lines
+            ctx.save();
+            ctx.strokeStyle = '#fbbf24'; // Yellow
+            ctx.lineWidth = 3;
+            ctx.setLineDash([15, 15]);
+            ctx.beginPath();
+            if (r.w === MAP_WIDTH) {
+              ctx.moveTo(ox + r.x, oy + r.y + r.h / 2);
+              ctx.lineTo(ox + r.x + r.w, oy + r.y + r.h / 2);
+            } else {
+              ctx.moveTo(ox + r.x + r.w / 2, oy + r.y);
+              ctx.lineTo(ox + r.x + r.w / 2, oy + r.y + r.h);
+            }
+            ctx.stroke();
+            ctx.restore();
+          });
+
+          // Draw BUILDINGS on tile
+          BUILDINGS.forEach(b => {
+            ctx.fillStyle = b.color;
+            ctx.fillRect(ox + b.x, oy + b.y, b.width, b.height);
+
+            // Border / Wall shadow
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(ox + b.x, oy + b.y, b.width, b.height);
+
+            // Building Label
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 11px font-mono, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(b.name, ox + b.x + b.width / 2, oy + b.y + b.height / 2);
+          });
+
+          // Draw Trees on tile
+          trees.forEach(tr => {
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.beginPath();
+            ctx.arc(ox + tr.x + 4, oy + tr.y + 4, tr.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#78350f';
+            ctx.beginPath();
+            ctx.arc(ox + tr.x, oy + tr.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#15803d';
+            ctx.beginPath();
+            ctx.arc(ox + tr.x, oy + tr.y - 2, tr.radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(ox + tr.x - 3, oy + tr.y - 5, tr.radius * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+          });
         }
       }
-
-      // Draw Roads Grid
-      ROADS.forEach(r => {
-        ctx.fillStyle = '#1e293b'; // Slate asphalt
-        ctx.fillRect(r.x, r.y, r.w, r.h);
-
-        // Center dash lines
-        ctx.save();
-        ctx.strokeStyle = '#fbbf24'; // Yellow
-        ctx.lineWidth = 3;
-        ctx.setLineDash([15, 15]);
-        ctx.beginPath();
-        if (r.w === MAP_WIDTH) {
-          ctx.moveTo(r.x, r.y + r.h / 2);
-          ctx.lineTo(r.x + r.w, r.y + r.h / 2);
-        } else {
-          ctx.moveTo(r.x + r.w / 2, r.y);
-          ctx.lineTo(r.x + r.w / 2, r.y + r.h);
-        }
-        ctx.stroke();
-        ctx.restore();
-      });
 
       // Draw Skid Marks
       skidMarks.forEach(sm => {
@@ -1105,50 +1163,6 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         ctx.fillRect(6, -12, 4, 24);
         ctx.restore();
         sm.life -= 0.0015;
-      });
-
-      // Draw BUILDINGS
-      BUILDINGS.forEach(b => {
-        ctx.fillStyle = b.color;
-        ctx.fillRect(b.x, b.y, b.width, b.height);
-
-        // Border / Wall shadow
-        ctx.strokeStyle = '#475569';
-        ctx.lineWidth = 4;
-        ctx.strokeRect(b.x, b.y, b.width, b.height);
-
-        // Building Label
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = 'bold 11px font-mono, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(b.name, b.x + b.width / 2, b.y + b.height / 2);
-      });
-
-      // Draw Trees
-      trees.forEach(tr => {
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath();
-        ctx.arc(tr.x + 4, tr.y + 4, tr.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Trunk
-        ctx.fillStyle = '#78350f';
-        ctx.beginPath();
-        ctx.arc(tr.x, tr.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Leaves
-        ctx.fillStyle = '#15803d';
-        ctx.beginPath();
-        ctx.arc(tr.x, tr.y - 2, tr.radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // High leaf spot
-        ctx.fillStyle = '#22c55e';
-        ctx.beginPath();
-        ctx.arc(tr.x - 3, tr.y - 5, tr.radius * 0.7, 0, Math.PI * 2);
-        ctx.fill();
       });
 
       // Draw Pedestrians
@@ -1167,7 +1181,6 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         ctx.save();
         ctx.translate(pu.x, pu.y);
         const floatOffset = Math.sin(Date.now() / 180) * 5;
-        // glowing circle background
         ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
         ctx.beginPath();
         ctx.arc(0, floatOffset, 18, 0, Math.PI * 2);
@@ -1180,11 +1193,16 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         ctx.restore();
       });
 
-      // Draw Delivery Target Zone Ring
+      // Draw Delivery Target Zone Ring (at closest wrapped position)
+      const tdxTargetDraw = getWrappedDelta(player.x, target.x, MAP_WIDTH);
+      const tdyTargetDraw = getWrappedDelta(player.y, target.y, MAP_HEIGHT);
+      const targetDrawX = player.x + tdxTargetDraw;
+      const targetDrawY = player.y + tdyTargetDraw;
+
       const pulseRadius = target.radius + Math.sin(Date.now() / 120) * 6;
       ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
       ctx.beginPath();
-      ctx.arc(target.x, target.y, pulseRadius, 0, Math.PI * 2);
+      ctx.arc(targetDrawX, targetDrawY, pulseRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#10b981';
       ctx.lineWidth = 4;
@@ -1194,10 +1212,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       ctx.fillStyle = '#ffffff';
       ctx.font = 'black 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(`📍 ${target.name}`, target.x, target.y - 15);
+      ctx.fillText(`📍 ${target.name}`, targetDrawX, targetDrawY - 15);
       ctx.fillStyle = '#4ade80';
       ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('BESTEL ADRES', target.x, target.y + 15);
+      ctx.fillText('BESTEL ADRES', targetDrawX, targetDrawY + 15);
 
       // Draw Bullets
       bullets.forEach(bul => {
@@ -1206,7 +1224,6 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         ctx.arc(bul.x, bul.y, 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Fire particle trail
         particles.push({
           x: bul.x,
           y: bul.y,
@@ -1294,8 +1311,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         ctx.restore();
       }
 
-      // Draw Navigation pointer towards current target
-      const navAngle = Math.atan2(target.y - player.y, target.x - player.x);
+      // Draw Navigation pointer towards current target (wrapped direction)
+      const navAngle = Math.atan2(tdyTargetDraw, tdxTargetDraw);
       ctx.save();
       ctx.translate(player.x, player.y);
       ctx.rotate(navAngle);
@@ -1344,7 +1361,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
       ctx.restore(); // end camera transformation shake
 
-      // 9. DRAW GORGEOUS MINI-MAP IN BOTTOM-RIGHT
+      // 9. DRAW GORGEOUS MINI-MAP IN BOTTOM-RIGHT (WITH TOROIDAL RADAR)
       const mmRadius = 60; // Slightly larger for better readability
       const mmX = canvas.width - mmRadius - 20;
       const mmY = canvas.height - mmRadius - 20;
@@ -1364,8 +1381,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       // ROADS on minimap
       ctx.fillStyle = '#334155'; // Clean asphalt gray
       ROADS.forEach(r => {
-        const rx = mmX + (r.x - player.x) * mmZoom;
-        const ry = mmY + (r.y - player.y) * mmZoom;
+        const rdx = getWrappedDelta(player.x, r.x, MAP_WIDTH);
+        const rdy = getWrappedDelta(player.y, r.y, MAP_HEIGHT);
+        const rx = mmX + rdx * mmZoom;
+        const ry = mmY + rdy * mmZoom;
         const rw = r.w * mmZoom;
         const rh = r.h * mmZoom;
         ctx.fillRect(rx, ry, Math.max(1.5, rw), Math.max(1.5, rh));
@@ -1373,11 +1392,13 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
       // Draw BUILDINGS on local radar
       BUILDINGS.forEach(b => {
-        const bx = mmX + (b.x - player.x) * mmZoom;
-        const by = mmY + (b.y - player.y) * mmZoom;
+        const bdx = getWrappedDelta(player.x, b.x, MAP_WIDTH);
+        const bdy = getWrappedDelta(player.y, b.y, MAP_HEIGHT);
+        const bx = mmX + bdx * mmZoom;
+        const by = mmY + bdy * mmZoom;
         const bw = b.width * mmZoom;
         const bh = b.height * mmZoom;
-        ctx.fillStyle = b.color === '#dc2626' ? '#991b1b' : '#1e293b'; // Red buildings darker on map, rest slate
+        ctx.fillStyle = b.color === '#dc2626' ? '#991b1b' : '#1e293b';
         ctx.fillRect(bx, by, bw, bh);
         ctx.strokeStyle = '#475569';
         ctx.lineWidth = 0.5;
@@ -1385,15 +1406,15 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       });
 
       // Target on minimap
-      const tdx = (target.x - player.x) * mmZoom;
-      const tdy = (target.y - player.y) * mmZoom;
-      const tDist = Math.hypot(tdx, tdy);
-      let tmx = mmX + tdx;
-      let tmy = mmY + tdy;
+      const tdxMm = getWrappedDelta(player.x, target.x, MAP_WIDTH) * mmZoom;
+      const tdyMm = getWrappedDelta(player.y, target.y, MAP_HEIGHT) * mmZoom;
+      const tDist = Math.hypot(tdxMm, tdyMm);
+      let tmx = mmX + tdxMm;
+      let tmy = mmY + tdyMm;
       if (tDist > mmRadius - 5) {
         // Clamp to edge
-        tmx = mmX + (tdx / tDist) * (mmRadius - 5);
-        tmy = mmY + (tdy / tDist) * (mmRadius - 5);
+        tmx = mmX + (tdxMm / tDist) * (mmRadius - 5);
+        tmy = mmY + (tdyMm / tDist) * (mmRadius - 5);
       }
       const isPulse = Math.floor(Date.now() / 150) % 2 === 0;
       ctx.fillStyle = isPulse ? '#10b981' : '#059669';
@@ -1407,15 +1428,15 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       // Cop(s) on minimap
       cops.forEach(cop => {
         if (!cop.active) return;
-        const cdx = (cop.x - player.x) * mmZoom;
-        const cdy = (cop.y - player.y) * mmZoom;
-        const cDist = Math.hypot(cdx, cdy);
-        let cmx = mmX + cdx;
-        let cmy = mmY + cdy;
+        const cdxMm = getWrappedDelta(player.x, cop.x, MAP_WIDTH) * mmZoom;
+        const cdyMm = getWrappedDelta(player.y, cop.y, MAP_HEIGHT) * mmZoom;
+        const cDist = Math.hypot(cdxMm, cdyMm);
+        let cmx = mmX + cdxMm;
+        let cmy = mmY + cdyMm;
         if (cDist > mmRadius - 4) {
           // Clamp to edge
-          cmx = mmX + (cdx / cDist) * (mmRadius - 4);
-          cmy = mmY + (cdy / cDist) * (mmRadius - 4);
+          cmx = mmX + (cdxMm / cDist) * (mmRadius - 4);
+          cmy = mmY + (cdyMm / cDist) * (mmRadius - 4);
         }
         ctx.fillStyle = '#ef4444';
         ctx.beginPath();
@@ -1521,8 +1542,11 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
                 <h2 className="font-black text-lg text-white uppercase tracking-tight">
                   GTA: Werkdonalds City Shootout 🍔💥
                 </h2>
+                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30 animate-pulse flex items-center gap-1">
+                  ♾️ ONEINDIGE MAP
+                </span>
                 <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px] font-mono font-bold border border-rose-500/30">
-                  VERSION 2.5
+                  VERSION 3.0
                 </span>
               </div>
               <p className="text-xs text-slate-400">

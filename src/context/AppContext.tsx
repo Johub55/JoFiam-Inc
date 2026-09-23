@@ -702,13 +702,22 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         .select('*');
       if (!loyaltyErr && dbLoyalty && dbLoyalty.length > 0) {
         const parsedLoyalty = dbLoyalty.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          phone: c.phone,
+          id: String(c.id),
+          name: String(c.name || ''),
+          phone: String(c.phone || ''),
           coins: Number(c.coins || 0),
           totalSpent: Number(c.total_spent || 0),
           ordersCount: Number(c.orders_count || 0),
-          tier: c.tier || 'Brons',
+          tier: (c.tier as any) || 'Brons',
+          currentMonthSpent: Number(c.current_month_spent || 0),
+          lastMonthSpent: Number(c.last_month_spent || 0),
+          currentMonthKey: c.current_month_key || '',
+          monthsBelowTarget: Number(c.months_below_target || 0),
+          vipSubscriptionActive: Boolean(c.vip_subscription_active),
+          vipSubscriptionExpires: c.vip_subscription_expires || undefined,
+          vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
+          lastSpinDate: c.last_spin_date || undefined,
+          ordersTodayCount: Number(c.orders_today_count || 0),
           joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
         }));
         localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(parsedLoyalty));

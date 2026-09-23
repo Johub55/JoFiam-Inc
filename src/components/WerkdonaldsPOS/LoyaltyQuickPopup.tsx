@@ -38,6 +38,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
   // Register flow
   const [showRegister, setShowRegister] = useState<boolean>(false);
   const [newName, setNewName] = useState<string>('');
+  const [newPhone, setNewPhone] = useState<string>('');
 
   // Paal name
   const paalName = localStorage.getItem('wd_loyalty_paal_name') || '📍 Paal 1 (Hoofdingang)';
@@ -81,16 +82,25 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
     }
   };
 
+  const handleOpenRegister = () => {
+    setNewPhone(phoneInput || '');
+    setShowRegister(true);
+  };
+
   const handleRegisterNew = () => {
-    if (!phoneInput) {
-      showToast('Voer eerst het telefoonnummer in.', 'warning');
+    const p = newPhone.trim() || phoneInput.trim();
+    if (!p) {
+      showToast('Voer eerst het mobiele telefoonnummer in.', 'warning');
       return;
     }
     const nameToUse = newName.trim() || 'Kassa Klant';
-    const newCust = registerLoyaltyCustomer(nameToUse, phoneInput);
+    const newCust = registerLoyaltyCustomer(nameToUse, p);
     setActiveCustomer(newCust);
+    setPhoneInput(newCust.phone);
     setShowRegister(false);
     setNewName('');
+    setNewPhone('');
+    showToast(`🎉 Welkom ${newCust.name}! 50 Welkomst-Coins toegevoegd.`, 'success');
     AudioFX.success();
   };
 
@@ -285,7 +295,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
               {/* Action buttons */}
               <div className="flex gap-2 pt-1">
                 <button
-                  onClick={() => setShowRegister(true)}
+                  onClick={handleOpenRegister}
                   className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1 border border-slate-700"
                 >
                   <UserPlus className="w-3.5 h-3.5 text-amber-400" />
@@ -312,13 +322,30 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
           {showRegister && (
             <div className="p-3 bg-slate-950 rounded-2xl border border-amber-500/50 space-y-2.5 text-xs">
               <span className="font-bold text-amber-300 block">Nieuwe WerkLoyalty Klant</span>
-              <input
-                type="text"
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="Naam (bijv. Sanne)"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-bold"
-              />
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  Mobiel Telefoonnummer
+                </label>
+                <input
+                  type="tel"
+                  value={newPhone}
+                  onChange={e => setNewPhone(e.target.value)}
+                  placeholder="Bijv. 0612345678"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-amber-400 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                  Klantnaam
+                </label>
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={e => setNewName(e.target.value)}
+                  placeholder="Naam (bijv. Sanne)"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white font-bold"
+                />
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowRegister(false)}
@@ -328,7 +355,7 @@ export const LoyaltyQuickPopup: React.FC<LoyaltyQuickPopupProps> = ({ isOpen, on
                 </button>
                 <button
                   onClick={handleRegisterNew}
-                  className="flex-1 py-1.5 bg-emerald-500 text-slate-950 font-black rounded-lg"
+                  className="flex-1 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg transition"
                 >
                   Opslaan
                 </button>

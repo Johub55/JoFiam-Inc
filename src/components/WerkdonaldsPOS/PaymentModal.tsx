@@ -1572,12 +1572,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
               <button
                 type="button"
                 onClick={() => {
-                  if (!newCustNameInput.trim() || !newCustPhoneInput.trim()) return;
-                  const newCust = registerLoyaltyCustomer(newCustNameInput.trim(), newCustPhoneInput.trim());
+                  if (!newCustPhoneInput.trim()) {
+                    setErrorMessage('Voer een mobiel telefoonnummer in.');
+                    return;
+                  }
+                  const nameToUse = newCustNameInput.trim() || 'Vaste Klant';
+                  const newCust = registerLoyaltyCustomer(nameToUse, newCustPhoneInput.trim());
                   setActiveLoyaltyCustomer(newCust);
                   setShowCreateLoyaltyModal(false);
                   setNewCustNameInput('');
                   setNewCustPhoneInput('');
+                  setErrorMessage('');
                 }}
                 className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs transition"
               >
