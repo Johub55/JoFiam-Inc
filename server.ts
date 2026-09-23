@@ -84,8 +84,8 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  // Vite middleware for development (runs live unless SERVE_DIST=true)
+  if (process.env.SERVE_DIST !== "true") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
