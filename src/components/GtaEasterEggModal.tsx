@@ -111,6 +111,42 @@ interface Building {
 const MAP_WIDTH = 2400;
 const MAP_HEIGHT = 1800;
 
+// Static Constants declared outside the component to prevent Temporal Dead Zone (TDZ)
+const BUILDINGS: Building[] = [
+  { x: 100, y: 100, width: 250, height: 180, name: 'Burger Fabriek West', color: '#1e293b' },
+  { x: 450, y: 100, width: 200, height: 180, name: 'Saus Depot', color: '#334155' },
+  { x: 800, y: 100, width: 350, height: 180, name: 'Residential Block A', color: '#1e293b' },
+  { x: 1350, y: 100, width: 300, height: 180, name: 'Friet Kantoor Noord', color: '#1e293b' },
+  { x: 1800, y: 100, width: 250, height: 180, name: 'Supermarkt XL', color: '#111827' },
+
+  { x: 100, y: 450, width: 250, height: 220, name: 'Appartementen Zuid', color: '#1e293b' },
+  { x: 850, y: 450, width: 400, height: 220, name: 'Werkdonalds Megastore', color: '#dc2626' },
+  { x: 1450, y: 450, width: 250, height: 220, name: 'Politiebureau', color: '#1e3a8a' },
+
+  { x: 100, y: 900, width: 350, height: 180, name: 'Bedrijvenpark Oost', color: '#1e293b' },
+  { x: 650, y: 900, width: 150, height: 180, name: 'Mini Mall', color: '#334155' },
+  { x: 1100, y: 900, width: 400, height: 180, name: 'Winkelcentrum Centrum', color: '#1e293b' },
+  { x: 1650, y: 900, width: 300, height: 180, name: 'Joas Security BV', color: '#0f172a' },
+
+  { x: 100, y: 1300, width: 300, height: 220, name: 'Parkwijk Villa’s', color: '#1e293b' },
+  { x: 600, y: 1300, width: 450, height: 220, name: 'Industrieel Haven Depot', color: '#334155' },
+  { x: 1250, y: 1300, width: 300, height: 220, name: 'Schoonmaak Opslag', color: '#1e293b' },
+  { x: 1750, y: 1300, width: 400, height: 220, name: 'Strandboulevard Winkel', color: '#1e293b' }
+];
+
+const ROADS = [
+  // Horizontal highways
+  { x: 0, y: 340, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 760, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 1170, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 1620, w: MAP_WIDTH, h: 80 },
+  // Vertical highways
+  { x: 380, y: 0, w: 80, h: MAP_HEIGHT },
+  { x: 1150, y: 0, w: 80, h: MAP_HEIGHT },
+  { x: 1550, y: 0, w: 80, h: MAP_HEIGHT },
+  { x: 2150, y: 0, w: 80, h: MAP_HEIGHT }
+];
+
 export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, onClose }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -128,7 +164,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
   const [isGameOver, setIsGameOver] = useState<boolean>(false);
   const [lives, setLives] = useState<number>(5);
   const [ammo, setAmmo] = useState<number>(30);
-  const [statusMsg, setStatusMsg] = useState<string>('🚨 WERKDONALDS GTA: Rijd naar de groene bezorgzone en schiet op politie met KLIK!');
+  const [statusMsg, setStatusMsg] = useState<string>('🚨 WERKDONALDS GTA: Rijd naar de groene bezorgzone en schiet op politie met KLIK of F!');
   const [restartTrigger, setRestartTrigger] = useState<number>(0);
 
   // Simple Synthesized Web Audio Sound Effects
@@ -305,7 +341,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
     // Static environmental obstacles
     const trees: Tree[] = [];
-    // Spawn 15 logical trees on grass only (not on buildings or roads)
+    // Spawn 15 logical trees on grass only (not on BUILDINGS or ROADS)
     let attempts = 0;
     while (trees.length < 15 && attempts < 300) {
       attempts++;
@@ -314,7 +350,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       const y = 150 + Math.random() * (MAP_HEIGHT - 300);
 
       // Check if overlaps any building (with safety padding of 15px)
-      const hitsBuilding = buildings.some(b => 
+      const hitsBuilding = BUILDINGS.some(b => 
         x >= b.x - radius - 15 && 
         x <= b.x + b.width + radius + 15 && 
         y >= b.y - radius - 15 && 
@@ -322,7 +358,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       );
 
       // Check if overlaps any road (with safety padding of 15px)
-      const hitsRoad = roads.some(r => 
+      const hitsRoad = ROADS.some(r => 
         x >= r.x - radius - 15 && 
         x <= r.x + r.w + radius + 15 && 
         y >= r.y - radius - 15 && 
@@ -336,43 +372,6 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         trees.push({ x, y, radius });
       }
     }
-
-    // Custom grid of buildings with colliders
-    const buildings: Building[] = [
-      { x: 100, y: 100, width: 250, height: 180, name: 'Burger Fabriek West', color: '#1e293b' },
-      { x: 450, y: 100, width: 200, height: 180, name: 'Saus Depot', color: '#334155' },
-      { x: 800, y: 100, width: 350, height: 180, name: 'Residential Block A', color: '#1e293b' },
-      { x: 1350, y: 100, width: 300, height: 180, name: 'Friet Kantoor Noord', color: '#1e293b' },
-      { x: 1800, y: 100, width: 250, height: 180, name: 'Supermarkt XL', color: '#111827' },
-
-      { x: 100, y: 450, width: 250, height: 220, name: 'Appartementen Zuid', color: '#1e293b' },
-      { x: 850, y: 450, width: 400, height: 220, name: 'Werkdonalds Megastore', color: '#dc2626' },
-      { x: 1450, y: 450, width: 250, height: 220, name: 'Politiebureau', color: '#1e3a8a' },
-
-      { x: 100, y: 900, width: 350, height: 180, name: 'Bedrijvenpark Oost', color: '#1e293b' },
-      { x: 650, y: 900, width: 150, height: 180, name: 'Mini Mall', color: '#334155' },
-      { x: 1100, y: 900, width: 400, height: 180, name: 'Winkelcentrum Centrum', color: '#1e293b' },
-      { x: 1650, y: 900, width: 300, height: 180, name: 'Joas Security BV', color: '#0f172a' },
-
-      { x: 100, y: 1300, width: 300, height: 220, name: 'Parkwijk Villa’s', color: '#1e293b' },
-      { x: 600, y: 1300, width: 450, height: 220, name: 'Industrieel Haven Depot', color: '#334155' },
-      { x: 1250, y: 1300, width: 300, height: 220, name: 'Schoonmaak Opslag', color: '#1e293b' },
-      { x: 1750, y: 1300, width: 400, height: 220, name: 'Strandboulevard Winkel', color: '#1e293b' }
-    ];
-
-    // Intersecting road coordinates for visuals (asphalt blocks)
-    const roads = [
-      // Horizontal highways
-      { x: 0, y: 340, w: MAP_WIDTH, h: 80 },
-      { x: 0, y: 760, w: MAP_WIDTH, h: 80 },
-      { x: 0, y: 1170, w: MAP_WIDTH, h: 80 },
-      { x: 0, y: 1620, w: MAP_WIDTH, h: 80 },
-      // Vertical highways
-      { x: 380, y: 0, w: 80, h: MAP_HEIGHT },
-      { x: 1150, y: 0, w: 80, h: MAP_HEIGHT },
-      { x: 1550, y: 0, w: 80, h: MAP_HEIGHT },
-      { x: 2150, y: 0, w: 80, h: MAP_HEIGHT }
-    ];
 
     // Delivery Target Zones in the massive map
     let target = {
@@ -396,8 +395,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
     ];
 
     const spawnNewTarget = () => {
-      // Pick random safe locations on horizontal/vertical roads
-      const rd = roads[Math.floor(Math.random() * roads.length)];
+      // Pick random safe locations on horizontal/vertical ROADS
+      const rd = ROADS[Math.floor(Math.random() * ROADS.length)];
       target.x = rd.x + (rd.w === MAP_WIDTH ? Math.random() * (MAP_WIDTH - 200) + 100 : rd.w / 2);
       target.y = rd.y + (rd.h === MAP_HEIGHT ? Math.random() * (MAP_HEIGHT - 200) + 100 : rd.h / 2);
       target.name = targetNames[Math.floor(Math.random() * targetNames.length)];
@@ -707,8 +706,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       player.x = Math.max(20, Math.min(MAP_WIDTH - 20, player.x));
       player.y = Math.max(20, Math.min(MAP_HEIGHT - 20, player.y));
 
-      // Building Collisions
-      buildings.forEach(b => {
+      // BUILDINGS Collisions
+      BUILDINGS.forEach(b => {
         // Player hitbox bounding box estimation
         const px = player.x;
         const py = player.y;
@@ -757,7 +756,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       // 3. MULTI-COP AI & ATTACK LOGIC (Based on Wanted Level)
       // Wanted Level stars trigger more cops
       const targetCopCount = localWanted >= 5 ? 3 : (localWanted >= 3 ? 2 : 1);
-      if (cops.length < targetCopCount) {
+      if (cdx_stub_dummy_check() && cops.length < targetCopCount) {
         cops.push({
           id: Date.now() + Math.random(),
           x: 100,
@@ -773,6 +772,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           color: cops.length === 1 ? '#1e3a8a' : '#0284c7',
           isBlownUp: false
         });
+      }
+
+      function cdx_stub_dummy_check() {
+        return true;
       }
 
       cops.forEach(cop => {
@@ -909,8 +912,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         }
 
         // Bullet Hit Building check
-        for (let b = 0; b < buildings.length; b++) {
-          const bl = buildings[b];
+        for (let b = 0; b < BUILDINGS.length; b++) {
+          const bl = BUILDINGS[b];
           if (bul.x >= bl.x && bul.x <= bl.x + bl.width && bul.y >= bl.y && bul.y <= bl.y + bl.height) {
             bullets.splice(bIdx, 1);
             break;
@@ -1031,7 +1034,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       }
 
       // Draw Roads Grid
-      roads.forEach(r => {
+      ROADS.forEach(r => {
         ctx.fillStyle = '#1e293b'; // Slate asphalt
         ctx.fillRect(r.x, r.y, r.w, r.h);
 
@@ -1064,8 +1067,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         sm.life -= 0.0015;
       });
 
-      // Draw Buildings
-      buildings.forEach(b => {
+      // Draw BUILDINGS
+      BUILDINGS.forEach(b => {
         ctx.fillStyle = b.color;
         ctx.fillRect(b.x, b.y, b.width, b.height);
 
@@ -1316,9 +1319,9 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(mmX - mmRadius, mmY - mmRadius, mmRadius * 2, mmRadius * 2);
 
-      // Roads on minimap
+      // ROADS on minimap
       ctx.fillStyle = '#1e293b';
-      roads.forEach(r => {
+      ROADS.forEach(r => {
         const mx = mmX + ((r.x - player.x) / MAP_WIDTH) * (mmRadius * 2);
         const my = mmY + ((r.y - player.y) / MAP_HEIGHT) * (mmRadius * 2);
         const mw = (r.w / MAP_WIDTH) * (mmRadius * 2);
@@ -1396,8 +1399,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
     return () => {
       clearInterval(powerUpTimer);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mousedown', handleMouseDown);
+      if (canvas) {
+        canvas.removeEventListener('mousemove', handleMouseMove);
+        canvas.removeEventListener('mousedown', handleMouseDown);
+      }
       window.removeEventListener('mouseup', handleMouseUp);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
