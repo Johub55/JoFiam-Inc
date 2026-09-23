@@ -108,30 +108,62 @@ interface Building {
 }
 
 // Map Dimensions
-const MAP_WIDTH = 2400;
-const MAP_HEIGHT = 1800;
+const MAP_WIDTH = 3600;
+const MAP_HEIGHT = 2700;
 
 // Static Constants declared outside the component to prevent Temporal Dead Zone (TDZ)
 const BUILDINGS: Building[] = [
+  // ROW 1: y = 100
   { x: 100, y: 100, width: 250, height: 180, name: 'Burger Fabriek West', color: '#1e293b' },
   { x: 450, y: 100, width: 200, height: 180, name: 'Saus Depot', color: '#334155' },
   { x: 800, y: 100, width: 350, height: 180, name: 'Residential Block A', color: '#1e293b' },
   { x: 1350, y: 100, width: 300, height: 180, name: 'Friet Kantoor Noord', color: '#1e293b' },
   { x: 1800, y: 100, width: 250, height: 180, name: 'Supermarkt XL', color: '#111827' },
+  { x: 2200, y: 100, width: 300, height: 180, name: 'Snelweg Tolpoort', color: '#1e293b' },
+  { x: 2650, y: 100, width: 400, height: 180, name: 'De Koekploeg Bakkerij 🍪', color: '#7c2d12' },
+  { x: 3150, y: 100, width: 300, height: 180, name: 'Logistiek Centrum', color: '#1e293b' },
 
+  // ROW 2: y = 450
   { x: 100, y: 450, width: 250, height: 220, name: 'Appartementen Zuid', color: '#1e293b' },
-  { x: 850, y: 450, width: 400, height: 220, name: 'Werkdonalds Megastore', color: '#dc2626' },
-  { x: 1450, y: 450, width: 250, height: 220, name: 'Politiebureau', color: '#1e3a8a' },
+  { x: 850, y: 450, width: 400, height: 220, name: 'Werkdonalds Megastore 🍔', color: '#dc2626' },
+  { x: 1450, y: 450, width: 250, height: 220, name: 'Politiebureau Centrum 🚨', color: '#1e3a8a' },
+  { x: 1800, y: 450, width: 300, height: 220, name: 'Joas Security Mansion 🏰', color: '#111827' },
+  { x: 2300, y: 450, width: 450, height: 220, name: 'Winkelboulevard Noord', color: '#1e293b' },
+  { x: 2900, y: 450, width: 350, height: 220, name: 'Saus Distributie', color: '#334155' },
 
+  // ROW 3: y = 900
   { x: 100, y: 900, width: 350, height: 180, name: 'Bedrijvenpark Oost', color: '#1e293b' },
   { x: 650, y: 900, width: 150, height: 180, name: 'Mini Mall', color: '#334155' },
   { x: 1100, y: 900, width: 400, height: 180, name: 'Winkelcentrum Centrum', color: '#1e293b' },
-  { x: 1650, y: 900, width: 300, height: 180, name: 'Joas Security BV', color: '#0f172a' },
+  { x: 1650, y: 900, width: 300, height: 180, name: 'WerkPay Bank HQ 💰', color: '#0f172a' },
+  { x: 2100, y: 900, width: 400, height: 180, name: 'City Hall / Stadhuis', color: '#1e3a8a' },
+  { x: 2650, y: 900, width: 350, height: 180, name: 'Stadspark Paviljoen 🌳', color: '#064e3b' },
+  { x: 3150, y: 900, width: 300, height: 180, name: 'Gym & Sports Arena', color: '#1e293b' },
 
-  { x: 100, y: 1300, width: 300, height: 220, name: 'Parkwijk Villa’s', color: '#1e293b' },
-  { x: 600, y: 1300, width: 450, height: 220, name: 'Industrieel Haven Depot', color: '#334155' },
-  { x: 1250, y: 1300, width: 300, height: 220, name: 'Schoonmaak Opslag', color: '#1e293b' },
-  { x: 1750, y: 1300, width: 400, height: 220, name: 'Strandboulevard Winkel', color: '#1e293b' }
+  // ROW 4: y = 1350
+  { x: 100, y: 1350, width: 300, height: 220, name: 'Parkwijk Villa’s', color: '#1e293b' },
+  { x: 600, y: 1350, width: 450, height: 220, name: 'Industrieel Haven Depot', color: '#334155' },
+  { x: 1250, y: 1350, width: 300, height: 220, name: 'Schoonmaak Opslag', color: '#1e293b' },
+  { x: 1750, y: 1350, width: 400, height: 220, name: 'Strandboulevard Winkel', color: '#1e293b' },
+  { x: 2300, y: 1350, width: 250, height: 220, name: 'McDonalds Rivalen', color: '#7f1d1d' },
+  { x: 2700, y: 1350, width: 400, height: 220, name: 'Werkdonalds Haven Terminal', color: '#dc2626' },
+  { x: 3200, y: 1350, width: 250, height: 220, name: 'Vuurtoren Kwartier', color: '#1e293b' },
+
+  // ROW 5: y = 1800
+  { x: 150, y: 1800, width: 400, height: 180, name: 'Nieuwbouwwijk West', color: '#1e293b' },
+  { x: 750, y: 1800, width: 300, height: 180, name: 'Saus Silo complex', color: '#334155' },
+  { x: 1200, y: 1800, width: 350, height: 180, name: 'Appartementen Oost', color: '#1e293b' },
+  { x: 1700, y: 1800, width: 450, height: 180, name: 'Mega Bioscoop', color: '#111827' },
+  { x: 2300, y: 1800, width: 300, height: 180, name: 'WerkPay Cloud Server farm', color: '#0f172a' },
+  { x: 2800, y: 1800, width: 350, height: 180, name: 'Friet Snijderij', color: '#1e293b' },
+
+  // ROW 6: y = 2250
+  { x: 200, y: 2250, width: 350, height: 250, name: 'Suburban Residential B', color: '#1e293b' },
+  { x: 700, y: 2250, width: 300, height: 250, name: 'Afvalverwerking Stad', color: '#334155' },
+  { x: 1150, y: 2250, width: 500, height: 250, name: 'Winkelcentrum Zuid', color: '#1e293b' },
+  { x: 1850, y: 2250, width: 300, height: 250, name: 'Werkdonalds Training Center 🎓', color: '#dc2626' },
+  { x: 2350, y: 2250, width: 450, height: 250, name: 'Haven Containeroverslag', color: '#334155' },
+  { x: 2950, y: 2250, width: 400, height: 250, name: 'Jachthaven Clubhuis ⛵', color: '#0f172a' }
 ];
 
 const ROADS = [
@@ -139,12 +171,16 @@ const ROADS = [
   { x: 0, y: 340, w: MAP_WIDTH, h: 80 },
   { x: 0, y: 760, w: MAP_WIDTH, h: 80 },
   { x: 0, y: 1170, w: MAP_WIDTH, h: 80 },
-  { x: 0, y: 1620, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 1650, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 2060, w: MAP_WIDTH, h: 80 },
+  { x: 0, y: 2560, w: MAP_WIDTH, h: 80 },
   // Vertical highways
   { x: 380, y: 0, w: 80, h: MAP_HEIGHT },
   { x: 1150, y: 0, w: 80, h: MAP_HEIGHT },
   { x: 1550, y: 0, w: 80, h: MAP_HEIGHT },
-  { x: 2150, y: 0, w: 80, h: MAP_HEIGHT }
+  { x: 2150, y: 0, w: 80, h: MAP_HEIGHT },
+  { x: 2780, y: 0, w: 80, h: MAP_HEIGHT },
+  { x: 3380, y: 0, w: 80, h: MAP_HEIGHT }
 ];
 
 export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, onClose }) => {
@@ -292,10 +328,10 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
     let invulnerableTimer = 0;
     let shootCooldown = 0;
 
-    // Player starts at center of the large 2400x1800 map
+    // Player starts at center of the massive 3600x2700 map
     const player = {
-      x: 1200,
-      y: 900,
+      x: 1800,
+      y: 1350,
       angle: 0,
       speed: 0,
       maxSpeed: 4.8,
@@ -341,9 +377,9 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
     // Static environmental obstacles
     const trees: Tree[] = [];
-    // Spawn 15 logical trees on grass only (not on BUILDINGS or ROADS)
+    // Spawn 35 logical trees on grass only (not on BUILDINGS or ROADS)
     let attempts = 0;
-    while (trees.length < 15 && attempts < 300) {
+    while (trees.length < 35 && attempts < 800) {
       attempts++;
       const radius = 12 + Math.random() * 8;
       const x = 150 + Math.random() * (MAP_WIDTH - 300);
@@ -365,8 +401,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
         y <= r.y + r.h + radius + 15
       );
 
-      // Ensure not too close to the starting point (1200, 900)
-      const nearCenter = Math.hypot(x - 1200, y - 900) < 180;
+      // Ensure not too close to the starting point (1800, 1350)
+      const nearCenter = Math.hypot(x - 1800, y - 1350) < 180;
 
       if (!hitsBuilding && !hitsRoad && !nearCenter) {
         trees.push({ x, y, radius });
@@ -375,23 +411,27 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
     // Delivery Target Zones in the massive map
     let target = {
-      x: 1190,
-      y: 800,
+      x: 1750,
+      y: 1250,
       radius: 40,
-      name: 'Werkdonalds Drive-In'
+      name: 'Werkdonalds Megastore Drive-In 🍔'
     };
 
     const targetNames = [
       'Fam. De Vries (Kantoor Noord)', 
-      'Joas (Skyscraper Suite)', 
+      'Joas (Skyscraper Suite) 🏢', 
       'Bouwplaats Oost', 
-      'Havenkade Bezorging', 
-      'Klant Centraal Station', 
-      'Strandvilla VIP',
-      'Politiebureau Nachtdienst',
-      'Appartementenblok C',
-      'Saus Depot Medewerker',
-      'Winkelcentrum VIP'
+      'Havenkade Bezorging 🚢', 
+      'Klant Centraal Station 🚉', 
+      'Strandvilla VIP 🏝️',
+      'Politiebureau Nachtdienst 👮',
+      'Appartementenblok C 🏠',
+      'Saus Depot Medewerker 🍅',
+      'Winkelcentrum VIP 🛍️',
+      'De Koekploeg Bakkerij 🍪',
+      'Stadhuis Burgemeester 🏛️',
+      'Jachthaven Clubhuis ⛵',
+      'Vuurtoren Kwartier 🗼'
     ];
 
     const spawnNewTarget = () => {
@@ -546,8 +586,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
           }
 
           // Move player to map center
-          player.x = 1200;
-          player.y = 900;
+          player.x = 1800;
+          player.y = 1350;
           player.speed = 0;
           player.angle = 0;
 
@@ -558,7 +598,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
             cop.health = 100;
           });
 
-          addFloatingText(1200, 850, '💥 AUTO CRASH! -1 LEVEN', '#ef4444');
+          addFloatingText(1800, 1300, '💥 AUTO CRASH! -1 LEVEN', '#ef4444');
           setStatusMsg(`💥 Je auto is gecrasht! Gelukkig heb je nog ${localLives} auto's over. Respawned in de Drive-In!`);
           screenShake = 15;
         } else {
@@ -1305,7 +1345,7 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       ctx.restore(); // end camera transformation shake
 
       // 9. DRAW GORGEOUS MINI-MAP IN BOTTOM-RIGHT
-      const mmRadius = 55;
+      const mmRadius = 60; // Slightly larger for better readability
       const mmX = canvas.width - mmRadius - 20;
       const mmY = canvas.height - mmRadius - 20;
 
@@ -1315,46 +1355,75 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
       ctx.arc(mmX, mmY, mmRadius, 0, Math.PI * 2);
       ctx.clip();
 
-      // Mini map background
-      ctx.fillStyle = '#0f172a';
+      // Mini map background (grass green)
+      ctx.fillStyle = '#14532d'; // Dark forest green for offroad grass areas
       ctx.fillRect(mmX - mmRadius, mmY - mmRadius, mmRadius * 2, mmRadius * 2);
 
+      const mmZoom = 0.08; // Radar zoom factor for local immersion
+
       // ROADS on minimap
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = '#334155'; // Clean asphalt gray
       ROADS.forEach(r => {
-        const mx = mmX + ((r.x - player.x) / MAP_WIDTH) * (mmRadius * 2);
-        const my = mmY + ((r.y - player.y) / MAP_HEIGHT) * (mmRadius * 2);
-        const mw = (r.w / MAP_WIDTH) * (mmRadius * 2);
-        const mh = (r.h / MAP_HEIGHT) * (mmRadius * 2);
-        ctx.fillRect(mx, my, Math.max(2, mw), Math.max(2, mh));
+        const rx = mmX + (r.x - player.x) * mmZoom;
+        const ry = mmY + (r.y - player.y) * mmZoom;
+        const rw = r.w * mmZoom;
+        const rh = r.h * mmZoom;
+        ctx.fillRect(rx, ry, Math.max(1.5, rw), Math.max(1.5, rh));
+      });
+
+      // Draw BUILDINGS on local radar
+      BUILDINGS.forEach(b => {
+        const bx = mmX + (b.x - player.x) * mmZoom;
+        const by = mmY + (b.y - player.y) * mmZoom;
+        const bw = b.width * mmZoom;
+        const bh = b.height * mmZoom;
+        ctx.fillStyle = b.color === '#dc2626' ? '#991b1b' : '#1e293b'; // Red buildings darker on map, rest slate
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(bx, by, bw, bh);
       });
 
       // Target on minimap
-      const tmx = mmX + ((target.x - player.x) / MAP_WIDTH) * (mmRadius * 3);
-      const tmy = mmY + ((target.y - player.y) / MAP_HEIGHT) * (mmRadius * 3);
+      const tdx = (target.x - player.x) * mmZoom;
+      const tdy = (target.y - player.y) * mmZoom;
+      const tDist = Math.hypot(tdx, tdy);
+      let tmx = mmX + tdx;
+      let tmy = mmY + tdy;
+      if (tDist > mmRadius - 5) {
+        // Clamp to edge
+        tmx = mmX + (tdx / tDist) * (mmRadius - 5);
+        tmy = mmY + (tdy / tDist) * (mmRadius - 5);
+      }
       const isPulse = Math.floor(Date.now() / 150) % 2 === 0;
       ctx.fillStyle = isPulse ? '#10b981' : '#059669';
       ctx.beginPath();
-      ctx.arc(
-        Math.max(mmX - mmRadius + 4, Math.min(mmX + mmRadius - 4, tmx)),
-        Math.max(mmY - mmRadius + 4, Math.min(mmY + mmRadius - 4, tmy)),
-        5, 0, Math.PI * 2
-      );
+      ctx.arc(tmx, tmy, 5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
 
       // Cop(s) on minimap
       cops.forEach(cop => {
         if (!cop.active) return;
-        const cmx = mmX + ((cop.x - player.x) / MAP_WIDTH) * (mmRadius * 3);
-        const cmy = mmY + ((cop.y - player.y) / MAP_HEIGHT) * (mmRadius * 3);
+        const cdx = (cop.x - player.x) * mmZoom;
+        const cdy = (cop.y - player.y) * mmZoom;
+        const cDist = Math.hypot(cdx, cdy);
+        let cmx = mmX + cdx;
+        let cmy = mmY + cdy;
+        if (cDist > mmRadius - 4) {
+          // Clamp to edge
+          cmx = mmX + (cdx / cDist) * (mmRadius - 4);
+          cmy = mmY + (cdy / cDist) * (mmRadius - 4);
+        }
         ctx.fillStyle = '#ef4444';
         ctx.beginPath();
-        ctx.arc(
-          Math.max(mmX - mmRadius + 3, Math.min(mmX + mmRadius - 3, cmx)),
-          Math.max(mmY - mmRadius + 3, Math.min(mmY + mmRadius - 3, cmy)),
-          4, 0, Math.PI * 2
-        );
+        ctx.arc(cmx, cmy, 4, 0, Math.PI * 2);
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
       });
 
       // Player in the absolute center
