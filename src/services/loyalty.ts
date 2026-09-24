@@ -294,10 +294,16 @@ export function claimWheelSpin(phone: string, prize: WheelPrize): { customer: Lo
 
 export function subscribeVipClub(
   phone: string, 
-  plan: 'vip_monthly_499' | 'vip_monthly_999' = 'vip_monthly_499'
+  plan: 'vip_monthly_499' | 'vip_monthly_999' = 'vip_monthly_499',
+  customClient?: any
 ): LoyaltyCustomer | null {
   const customers = getLoyaltyCustomers();
-  const idx = customers.findIndex(c => c.phone === phone);
+  const cleanPhone = normalizePhone(phone);
+  const idx = customers.findIndex(c => 
+    (cleanPhone && normalizePhone(c.phone) === cleanPhone) || 
+    c.phone === phone || 
+    c.id === phone
+  );
   if (idx === -1) return null;
 
   const expiry = new Date();
@@ -320,7 +326,7 @@ export function subscribeVipClub(
     discountVal: 4.50,
     freeItemName: 'Warme Stroopwafel of Milkshake',
     applicableCategory: 'all',
-    customerPhone: phone,
+    customerPhone: updatedCust.phone,
     createdAt: new Date().toISOString(),
     expiresAt: expiry.toISOString(),
     status: 'active'
@@ -329,7 +335,7 @@ export function subscribeVipClub(
   updatedCust.vouchers = [vipVoucher, ...(updatedCust.vouchers || [])];
 
   customers[idx] = updatedCust;
-  saveLoyaltyCustomers(customers);
+  saveLoyaltyCustomers(customers, customClient);
   return updatedCust;
 }
 
