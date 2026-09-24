@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { euro } from '../../services/store';
 import { Product, Coupon, GiftCard, PosUser } from '../../types';
 import { DiyTerminalModal } from './DiyTerminalModal';
+import { VipWerkPaySubscriptionModal } from './VipWerkPaySubscriptionModal';
 import { showToast } from '../../services/appToast';
 import { 
   getLoyaltyCustomers, 
@@ -104,6 +105,7 @@ export const ManagerScreen: React.FC = () => {
   const [loyaltySearch, setLoyaltySearch] = useState<string>('');
   const [newLoyaltyName, setNewLoyaltyName] = useState<string>('');
   const [newLoyaltyPhone, setNewLoyaltyPhone] = useState<string>('');
+  const [vipModalCustomer, setVipModalCustomer] = useState<{ phone: string; name: string } | null>(null);
 
   useEffect(() => {
     const refreshLoyalty = () => {
@@ -1224,13 +1226,12 @@ export const ManagerScreen: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                subscribeVipClub(cust.phone, 'vip_monthly_499');
-                                setLoyaltyCustomers(getLoyaltyCustomers());
-                                showToast(`${cust.name} geabonneerd op VIP Club!`, 'success');
+                                setVipModalCustomer({ phone: cust.phone, name: cust.name });
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow"
+                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow flex items-center gap-1"
                             >
-                              👑 VIP Activeren
+                              <Crown className="w-3 h-3" />
+                              <span>👑 VIP Activeren (WerkPay)</span>
                             </button>
                           ) : (
                             <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
@@ -2051,6 +2052,18 @@ export const ManagerScreen: React.FC = () => {
 
       {showDiyTerminalModal && (
         <DiyTerminalModal onClose={() => setShowDiyTerminalModal(false)} />
+      )}
+
+      {vipModalCustomer && (
+        <VipWerkPaySubscriptionModal
+          customerPhone={vipModalCustomer.phone}
+          customerName={vipModalCustomer.name}
+          onClose={() => setVipModalCustomer(null)}
+          onSuccess={() => {
+            setLoyaltyCustomers(getLoyaltyCustomers());
+            setVipModalCustomer(null);
+          }}
+        />
       )}
 
     </div>

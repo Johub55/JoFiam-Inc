@@ -16,11 +16,12 @@ import {
   Clock,
   Info
 } from 'lucide-react';
-import { LoyaltyCustomer, TIER_LEVELS, getTierInfo, subscribeVipClub, getMonthlyTierStatus } from '../../services/loyalty';
+import { LoyaltyCustomer, TIER_LEVELS, getTierInfo, subscribeVipClub, getMonthlyTierStatus, getLoyaltyCustomers } from '../../services/loyalty';
 import { euro } from '../../services/store';
 import { showToast } from '../../services/appToast';
 import { AudioFX } from '../../services/audio';
 import { useApp } from '../../context/AppContext';
+import { VipWerkPaySubscriptionModal } from './VipWerkPaySubscriptionModal';
 
 interface LoyaltyLevelCardProps {
   customer: LoyaltyCustomer;
@@ -32,6 +33,7 @@ export const LoyaltyLevelCard: React.FC<LoyaltyLevelCardProps> = ({ customer, on
   const currentTier = getTierInfo(customer.tier || customer.totalSpent, customer.vipSubscriptionActive);
   const currentLevel = currentTier.level;
   const [subscribing, setSubscribing] = useState<boolean>(false);
+  const [showWerkPayVipModal, setShowWerkPayVipModal] = useState<boolean>(false);
 
   const monthlyStatus = getMonthlyTierStatus(customer);
 
@@ -198,11 +200,11 @@ export const LoyaltyLevelCard: React.FC<LoyaltyLevelCardProps> = ({ customer, on
         {!customer.vipSubscriptionActive ? (
           <button
             disabled={subscribing}
-            onClick={() => handleSubscribeVip('vip_monthly_499')}
+            onClick={() => setShowWerkPayVipModal(true)}
             className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-400 to-yellow-300 hover:from-amber-300 hover:to-yellow-200 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-amber-400/20 active:scale-95 transition shrink-0 flex items-center gap-2"
           >
             <Crown className="w-4 h-4" />
-            <span>Word VIP Lid (€ 4,99/mnd)</span>
+            <span>Word VIP Lid (€ 4,95/mnd)</span>
           </button>
         ) : (
           <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold text-center">
@@ -326,6 +328,22 @@ export const LoyaltyLevelCard: React.FC<LoyaltyLevelCardProps> = ({ customer, on
           );
         })}
       </div>
+
+      {showWerkPayVipModal && (
+        <VipWerkPaySubscriptionModal
+          customerPhone={customer.phone}
+          customerName={customer.name}
+          onClose={() => setShowWerkPayVipModal(false)}
+          onSuccess={() => {
+            setShowWerkPayVipModal(false);
+            const allCusts = getLoyaltyCustomers();
+            const updated = allCusts.find(c => c.phone === customer.phone || c.id === customer.id);
+            if (updated && onCustomerUpdated) {
+              onCustomerUpdated(updated);
+            }
+          }}
+        />
+      )}
 
     </div>
   );
