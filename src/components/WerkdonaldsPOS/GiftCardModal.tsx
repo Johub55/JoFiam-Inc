@@ -114,26 +114,36 @@ export const GiftCardModal: React.FC<GiftCardModalProps> = ({ isOpen, onClose })
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800 text-xs font-bold">
+        <div className="flex bg-slate-950 p-1 rounded-2xl border border-slate-800 text-xs font-bold gap-1">
           <button
             type="button"
             onClick={() => { setActiveTab('order'); setCreatedCard(null); }}
-            className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition ${
               activeTab === 'order' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Plus className="w-4 h-4" />
-            <span>Cadeaukaart Bestellen</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>Bestellen</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('check')}
-            className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1.5 transition ${
+            className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition ${
               activeTab === 'check' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Search className="w-4 h-4" />
-            <span>Saldo Checken</span>
+            <Search className="w-3.5 h-3.5" />
+            <span>Check Saldo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            className={`flex-1 py-2 rounded-xl flex items-center justify-center gap-1 transition ${
+              activeTab === 'all' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Receipt className="w-3.5 h-3.5" />
+            <span>Alle Cards &amp; Privé ({giftCards.length})</span>
           </button>
         </div>
 
@@ -349,6 +359,68 @@ export const GiftCardModal: React.FC<GiftCardModalProps> = ({ isOpen, onClose })
                 <p>Vul de code van de cadeaukaart in om het actuele saldo te controleren.</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* 4. ALLE CARDS & PRIVÉ TAB */}
+        {activeTab === 'all' && (
+          <div className="space-y-3 animate-fadeIn">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-slate-300">Overzicht Huidige Cadeaukaarten</span>
+              <span className="text-slate-400 font-mono text-[11px]">{giftCards.length} Kaarten Totaal</span>
+            </div>
+
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {giftCards.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500 bg-slate-950 rounded-2xl border border-slate-800">
+                  Nog geen cadeaukaarten aanwezig. Maak er een aan via 'Bestellen'.
+                </div>
+              ) : (
+                giftCards.map(card => {
+                  const isPriv = card.is_private || card.notes?.includes('Privé') || card.code.startsWith('PRV');
+                  return (
+                    <div key={card.id} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-amber-300 text-sm">{card.code}</span>
+                          {isPriv && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              🔒 Privé Card
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(card.code)}
+                            className="text-[10px] text-slate-400 hover:text-white underline font-mono"
+                          >
+                            [Kopieer Code]
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Huidig Saldo: <strong className="text-emerald-400 font-extrabold">{euro(card.current_balance)}</strong> (Start: {euro(card.initial_balance)})
+                        </div>
+                        {(card.recipient_name || card.sender_name) && (
+                          <div className="text-[10px] text-slate-500 italic">
+                            Aan: {card.recipient_name || 'Klant'} {card.sender_name ? `• Van: ${card.sender_name}` : ''}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => topUpGiftCard(card.id, 10)}
+                          className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-xs"
+                          title="Saldo +€10"
+                        >
+                          +€10
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
 

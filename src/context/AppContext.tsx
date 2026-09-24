@@ -46,7 +46,7 @@ import {
   pendingOrderMutations 
 } from '../services/syncHelpers';
 import { calculateDiscount } from '../services/discountService';
-import { redeemVoucherAnyCustomer, addCoinsToCustomer } from '../services/loyalty';
+import { redeemVoucherAnyCustomer, addCoinsToCustomer, isVipSubscriberPhone, issueVoucherForCustomer } from '../services/loyalty';
 
 const getMajorityStatus = (items: any[]): OrderStatus => {
   if (!items || items.length === 0) return 'wachten';
@@ -701,25 +701,33 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         .from('loyalty_customers')
         .select('*');
       if (!loyaltyErr && dbLoyalty && dbLoyalty.length > 0) {
-        const parsedLoyalty = dbLoyalty.map((c: any) => ({
-          id: String(c.id),
-          name: String(c.name || ''),
-          phone: String(c.phone || ''),
-          coins: Number(c.coins || 0),
-          totalSpent: Number(c.total_spent || 0),
-          ordersCount: Number(c.orders_count || 0),
-          tier: (c.tier as any) || 'Brons',
-          currentMonthSpent: Number(c.current_month_spent || 0),
-          lastMonthSpent: Number(c.last_month_spent || 0),
-          currentMonthKey: c.current_month_key || '',
-          monthsBelowTarget: Number(c.months_below_target || 0),
-          vipSubscriptionActive: Boolean(c.vip_subscription_active),
-          vipSubscriptionExpires: c.vip_subscription_expires || undefined,
-          vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
-          lastSpinDate: c.last_spin_date || undefined,
-          ordersTodayCount: Number(c.orders_today_count || 0),
-          joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
-        }));
+        const parsedLoyalty = dbLoyalty.map((c: any) => {
+          const phone = String(c.phone || '');
+          const activeVipRec = isVipSubscriberPhone(phone);
+          const isVip = Boolean(c.vip_subscription_active || activeVipRec);
+
+          return {
+            id: String(c.id),
+            name: String(c.name || ''),
+            phone,
+            coins: Number(c.coins || 0),
+            totalSpent: Number(c.total_spent || 0),
+            ordersCount: Number(c.orders_count || 0),
+            tier: isVip ? 'VIP Diamant' : ((c.tier as any) || 'Brons'),
+            level: isVip ? 4 : undefined,
+            currentMonthSpent: Number(c.current_month_spent || 0),
+            lastMonthSpent: Number(c.last_month_spent || 0),
+            currentMonthKey: c.current_month_key || '',
+            monthsBelowTarget: Number(c.months_below_target || 0),
+            vipSubscriptionActive: isVip,
+            vipSubscriptionExpires: activeVipRec?.expiresAt || c.vip_subscription_expires || undefined,
+            vipPlan: activeVipRec?.plan || c.vip_plan || undefined,
+            vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
+            lastSpinDate: c.last_spin_date || undefined,
+            ordersTodayCount: Number(c.orders_today_count || 0),
+            joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
+          };
+        });
         localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(parsedLoyalty));
         localStorage.setItem('wd_loyalty_ts', Date.now().toString());
         window.dispatchEvent(new Event('wd_loyalty_updated'));
@@ -2697,16 +2705,33 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   };
 
   // Coupons & Gift Cards
-  const createGiftCard = async (code: string, amount: number) => {
+  const createGiftCard = async (
+    code: string, 
+    amount: number, 
+    sender_name?: string, 
+    recipient_name?: string, 
+    recipient_phone?: string, 
+    notes?: string
+  ) => {
     const cleanCode = code.toUpperCase();
+    const isPrivate = Boolean(notes?.includes('Privé') || cleanCode.startsWith('PRV'));
     const newGc: GiftCard = {
       id: Date.now(),
       code: cleanCode,
       initial_balance: amount,
       current_balance: amount,
-      is_active: true
+      sender_name,
+      recipient_name,
+      recipient_phone,
+      message: notes,
+      is_active: true,
+      is_private: isPrivate,
+      notes,
+      created_at: new Date().toISOString()
     };
     setGiftCards(prev => [...prev, newGc]);
+    localStorage.setItem('wd_gift_cards', JSON.stringify([...giftCards, newGc]));
+
     if (posClient) {
       try {
         await posClient.from('gift_cards').insert({
@@ -2714,10 +2739,29 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           code: newGc.code,
           initial_balance: newGc.initial_balance,
           current_balance: newGc.current_balance,
-          is_active: newGc.is_active
+          is_active: newGc.is_active,
+          sender_name: newGc.sender_name || null,
+          recipient_name: newGc.recipient_name || null,
+          recipient_phone: newGc.recipient_phone || null,
+          notes: newGc.notes || null
         });
       } catch (err) {
         console.error('Error creating gift card in DB:', err);
+      }
+    }
+
+    // Link card to existing WerkLoyalty account if phone is provided
+    if (recipient_phone) {
+      try {
+        issueVoucherForCustomer(recipient_phone, {
+          title: `🎁 Cadeaukaart / Vrijkaart € ${amount.toFixed(2)} (${cleanCode})`,
+          emoji: isPrivate ? '🔒' : '💳',
+          discountType: 'fixed_discount',
+          discountVal: amount,
+          daysValid: 365
+        });
+      } catch (err) {
+        console.warn('Error linking gift card voucher to customer:', err);
       }
     }
   };

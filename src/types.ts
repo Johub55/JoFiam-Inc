@@ -19,6 +19,13 @@ export type PosScreenType = 'kassa' | 'keuken' | 'afhaal' | 'pickup_control' | '
 
 export type WerkPayScreenType = 'wallet' | 'overboeken' | 'accounts';
 
+export interface ProductRecipeItem {
+  inventoryItemId: number;
+  itemName: string;
+  qtyNeeded: number;
+  unit: string;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -28,6 +35,8 @@ export interface Product {
   cat: string;
   emoji: string;
   inStock: boolean;
+  recipe?: ProductRecipeItem[];
+  recipeDescription?: string;
 }
 
 export interface CartItem {
@@ -151,6 +160,8 @@ export interface GiftCard {
   recipient_phone?: string;
   message?: string;
   is_active: boolean;
+  is_private?: boolean;
+  notes?: string;
   created_at?: string;
 }
 

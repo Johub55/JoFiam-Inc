@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { euro } from '../../services/store';
 import { Product, Coupon, GiftCard, PosUser } from '../../types';
 import { DiyTerminalModal } from './DiyTerminalModal';
 import { showToast } from '../../services/appToast';
+import { 
+  getLoyaltyCustomers, 
+  saveLoyaltyCustomers, 
+  registerLoyaltyCustomer, 
+  subscribeVipClub, 
+  issueVoucherForCustomer, 
+  LoyaltyCustomer 
+} from '../../services/loyalty';
 import { 
   BarChart3, 
   FileText, 
@@ -26,7 +34,12 @@ import {
   Sliders,
   AlertCircle,
   Database,
-  Cpu
+  Cpu,
+  Crown,
+  UserCheck,
+  Coins,
+  Link2,
+  Sparkles
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -80,6 +93,26 @@ export const ManagerScreen: React.FC = () => {
   // New Gift Card State
   const [newGiftCode, setNewGiftCode] = useState<string>('');
   const [newGiftAmount, setNewGiftAmount] = useState<string>('');
+  const [newGiftRecipient, setNewGiftRecipient] = useState<string>('');
+  const [newGiftRecipientPhone, setNewGiftRecipientPhone] = useState<string>('');
+  const [newGiftIsPrivate, setNewGiftIsPrivate] = useState<boolean>(false);
+  const [giftCardSearch, setGiftCardSearch] = useState<string>('');
+  const [giftCardFilter, setGiftCardFilter] = useState<'all' | 'private' | 'active'>('all');
+
+  // WerkLoyalty Accounts Manager State
+  const [loyaltyCustomers, setLoyaltyCustomers] = useState<LoyaltyCustomer[]>([]);
+  const [loyaltySearch, setLoyaltySearch] = useState<string>('');
+  const [newLoyaltyName, setNewLoyaltyName] = useState<string>('');
+  const [newLoyaltyPhone, setNewLoyaltyPhone] = useState<string>('');
+
+  useEffect(() => {
+    const refreshLoyalty = () => {
+      setLoyaltyCustomers(getLoyaltyCustomers());
+    };
+    refreshLoyalty();
+    window.addEventListener('wd_loyalty_updated', refreshLoyalty);
+    return () => window.removeEventListener('wd_loyalty_updated', refreshLoyalty);
+  }, []);
 
   // New Coupon State
   const [newCouponCode, setNewCouponCode] = useState<string>('');
@@ -224,9 +257,33 @@ export const ManagerScreen: React.FC = () => {
       showToast('Vul een geldige code en bedrag in.', 'warning');
       return;
     }
-    createGiftCard(newGiftCode.trim(), amt);
+    createGiftCard(
+      newGiftCode.trim().toUpperCase(),
+      amt,
+      currentPosUser?.name || 'Manager Ops',
+      newGiftRecipient.trim() || undefined,
+      newGiftRecipientPhone.trim() || undefined,
+      newGiftIsPrivate ? '🔒 Privé Card / Personeelsvrijkaart' : undefined
+    );
     setNewGiftCode('');
     setNewGiftAmount('');
+    setNewGiftRecipient('');
+    setNewGiftRecipientPhone('');
+    setNewGiftIsPrivate(false);
+    showToast(`Cadeaubon ${newGiftCode.toUpperCase()} (${euro(amt)}) aangemaakt!`, 'success');
+  };
+
+  const handleCreateLoyaltyCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLoyaltyName.trim() || !newLoyaltyPhone.trim()) {
+      showToast('Vul een naam en telefoonnummer in.', 'warning');
+      return;
+    }
+    const created = registerLoyaltyCustomer(newLoyaltyName.trim(), newLoyaltyPhone.trim());
+    setNewLoyaltyName('');
+    setNewLoyaltyPhone('');
+    setLoyaltyCustomers(getLoyaltyCustomers());
+    showToast(`WerkLoyalty account '${created.name}' (${created.phone}) aangemaakt!`, 'success');
   };
 
   const handleCreateCoupon = (e: React.FormEvent) => {
@@ -829,68 +886,418 @@ export const ManagerScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Cadeaubonnen Beheer */}
+      {/* Cadeaubonnen & Privé Cards Beheer */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-sm text-white flex items-center gap-2">
-            <Gift className="w-4 h-4 text-purple-400" />
-            <span>💳 Cadeaubonnen Beheer</span>
-          </h2>
-          <span className="text-xs text-slate-400">Klanten kunnen hiermee betalen aan de kassa</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2 overflow-y-auto max-h-48 pr-1">
-            {giftCards.map(card => (
-              <div key={card.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold font-mono text-purple-300">{card.code}</span>
-                  <div className="text-[11px] text-slate-400">
-                    Huidig: <strong className="text-emerald-400">{euro(card.current_balance)}</strong> (Start: {euro(card.initial_balance)})
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => topUpGiftCard(card.id, 10)}
-                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
-                  >
-                    + €10
-                  </button>
-                  <button
-                    onClick={() => deleteGiftCard(card.id)}
-                    className="p-1 rounded text-slate-500 hover:text-rose-400"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="font-bold text-sm text-white flex items-center gap-2">
+              <Gift className="w-4 h-4 text-purple-400" />
+              <span>💳 Alle Cadeaukaarten &amp; Privé Cards ({giftCards.length})</span>
+            </h2>
+            <p className="text-xs text-slate-400">Bekijk alle huidige cadeaukaarten, ook privé/personeelskaarten en vouchers</p>
           </div>
 
-          <form onSubmit={handleCreateGiftCard} className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 space-y-2.5 text-xs">
-            <h3 className="font-bold text-slate-300">+ Nieuwe Cadeaubon Aanmaken</h3>
+          {/* Filter Toggles */}
+          <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setGiftCardFilter('all')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition ${giftCardFilter === 'all' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Alle ({giftCards.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setGiftCardFilter('private')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition ${giftCardFilter === 'private' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              🔒 Privé
+            </button>
+            <button
+              type="button"
+              onClick={() => setGiftCardFilter('active')}
+              className={`px-2.5 py-1 rounded-lg font-bold transition ${giftCardFilter === 'active' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              🟢 Actief Saldo
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* List / Search View */}
+          <div className="lg:col-span-7 space-y-2.5">
+            <input
+              type="text"
+              value={giftCardSearch}
+              onChange={e => setGiftCardSearch(e.target.value)}
+              placeholder="🔍 Zoek code, ontvanger, afzender of opmerking..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-purple-500 outline-none"
+            />
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {giftCards
+                .filter(card => {
+                  if (giftCardFilter === 'private' && !card.is_private && !card.notes?.includes('Privé') && !card.code.includes('PRV')) return false;
+                  if (giftCardFilter === 'active' && card.current_balance <= 0) return false;
+                  if (giftCardSearch) {
+                    const q = giftCardSearch.toLowerCase();
+                    return card.code.toLowerCase().includes(q) ||
+                           (card.recipient_name && card.recipient_name.toLowerCase().includes(q)) ||
+                           (card.sender_name && card.sender_name.toLowerCase().includes(q)) ||
+                           (card.notes && card.notes.toLowerCase().includes(q));
+                  }
+                  return true;
+                })
+                .map(card => {
+                  const isPrivate = card.is_private || card.notes?.includes('Privé') || card.code.startsWith('PRV');
+                  return (
+                    <div key={card.id} className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs hover:border-slate-700 transition">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold font-mono text-purple-300 text-sm">{card.code}</span>
+                          {isPrivate && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-black bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              🔒 Privé Card
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              try {
+                                navigator.clipboard.writeText(card.code);
+                                showToast(`Code ${card.code} gekopieerd!`, 'success');
+                              } catch {
+                                showToast(`Code: ${card.code}`, 'info');
+                              }
+                            }}
+                            className="text-[10px] text-slate-400 hover:text-white underline font-mono"
+                            title="Kopieer Code"
+                          >
+                            [Kopieer]
+                          </button>
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          Saldo: <strong className="text-emerald-400 font-bold">{euro(card.current_balance)}</strong> / Start: {euro(card.initial_balance)}
+                        </div>
+                        {(card.recipient_name || card.sender_name) && (
+                          <div className="text-[10px] text-slate-500 italic">
+                            Voor: {card.recipient_name || 'Anoniem'} {card.sender_name ? `(Van: ${card.sender_name})` : ''}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => topUpGiftCard(card.id, 5)}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px]"
+                          title="Saldo ophogen met €5"
+                        >
+                          +€5
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => topUpGiftCard(card.id, 10)}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px]"
+                          title="Saldo ophogen met €10"
+                        >
+                          +€10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => topUpGiftCard(card.id, 25)}
+                          className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-[11px]"
+                          title="Saldo ophogen met €25"
+                        >
+                          +€25
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteGiftCard(card.id)}
+                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20"
+                          title="Cadeaukaart Verwijderen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Create Form */}
+          <form onSubmit={handleCreateGiftCard} className="lg:col-span-5 bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3 text-xs">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-200">+ Nieuwe Cadeaukaart / Vrijkaart</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  const rand = 'WD' + Math.floor(100000 + Math.random() * 900000);
+                  setNewGiftCode(rand);
+                }}
+                className="text-[10px] text-purple-400 hover:underline font-bold"
+              >
+                Genereer Code
+              </button>
+            </div>
+
             <input
               type="text"
               required
               value={newGiftCode}
               onChange={e => setNewGiftCode(e.target.value.toUpperCase())}
-              placeholder="Cadeauboncode"
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white uppercase font-mono"
+              placeholder="Cadeauboncode (bijv. CADEAU50 of PRV99)"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white uppercase font-mono"
             />
+
             <input
               type="number"
               required
               step="1"
               value={newGiftAmount}
               onChange={e => setNewGiftAmount(e.target.value)}
-              placeholder="Saldo in euro (€)"
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white"
+              placeholder="Startsaldo in euro (€)"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white"
             />
+
+            {/* Koppel aan Bestaand WerkLoyalty Account */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                <Link2 className="w-3 h-3" />
+                <span>Koppel aan WerkLoyalty Account:</span>
+              </label>
+              <select
+                value={newGiftRecipientPhone}
+                onChange={e => {
+                  const selectedPhone = e.target.value;
+                  setNewGiftRecipientPhone(selectedPhone);
+                  const found = loyaltyCustomers.find(c => c.phone === selectedPhone);
+                  if (found) {
+                    setNewGiftRecipient(found.name);
+                  }
+                }}
+                className="w-full bg-slate-900 border border-amber-500/30 rounded-lg px-3 py-2 text-white focus:border-amber-400 outline-none"
+              >
+                <option value="">-- Geen Koppeling (Losse Card) --</option>
+                {loyaltyCustomers.map(cust => (
+                  <option key={cust.id} value={cust.phone}>
+                    {cust.name} ({cust.phone}) • {cust.tier} {cust.vipSubscriptionActive ? '👑 VIP' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <input
+              type="text"
+              value={newGiftRecipient}
+              onChange={e => setNewGiftRecipient(e.target.value)}
+              placeholder="Ontvanger naam (bijv. Jan de Vries)"
+              className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-white"
+            />
+
+            <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900 border border-slate-800 cursor-pointer text-slate-300">
+              <input
+                type="checkbox"
+                checked={newGiftIsPrivate}
+                onChange={e => setNewGiftIsPrivate(e.target.checked)}
+                className="rounded border-slate-700 bg-slate-950 text-purple-500"
+              />
+              <span className="font-bold">🔒 Markeer als Privé Card (Exclusief)</span>
+            </label>
+
             <button
               type="submit"
-              className="w-full py-2 rounded-lg font-bold bg-purple-600 hover:bg-purple-500 text-white"
+              className="w-full py-2.5 rounded-lg font-extrabold bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20"
             >
-              + Cadeaubon Aanmaken
+              + Cadeaukaart Opslaan
+            </button>
+          </form>
+        </div>
+      </div>
+
+      {/* 👑 WerkLoyalty Klantaccounts & VIP Leden Beheer */}
+      <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 shadow space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div>
+            <h2 className="font-black text-base text-white flex items-center gap-2">
+              <Crown className="w-5 h-5 text-amber-400" />
+              <span>👑 WerkLoyalty Klantaccounts &amp; VIP Leden ({loyaltyCustomers.length})</span>
+            </h2>
+            <p className="text-xs text-slate-400">
+              Beheer alle klantedatabase accounts, geef WerkCoins, activeer VIP abonnementen en bekijk gekoppelde cadeaukaarten.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-bold font-mono">
+              ⚡ Live Supabase Sync
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Account List / Search */}
+          <div className="lg:col-span-8 space-y-3">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={loyaltySearch}
+                onChange={e => setLoyaltySearch(e.target.value)}
+                placeholder="🔍 Zoek klant op naam, telefoonnummer of tier..."
+                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-none"
+              />
+            </div>
+
+            <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+              {loyaltyCustomers
+                .filter(cust => {
+                  if (!loyaltySearch) return true;
+                  const q = loyaltySearch.toLowerCase();
+                  return cust.name.toLowerCase().includes(q) ||
+                         cust.phone.toLowerCase().includes(q) ||
+                         cust.tier.toLowerCase().includes(q);
+                })
+                .map(cust => {
+                  const isVip = cust.vipSubscriptionActive || cust.tier.includes('VIP');
+                  return (
+                    <div key={cust.id} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 hover:border-slate-700 transition">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base">{isVip ? '💎' : cust.tier === 'Goud' ? '🥇' : cust.tier === 'Zilver' ? '🥈' : '🥉'}</span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-white text-sm">{cust.name}</span>
+                              <span className="font-mono text-xs text-slate-400">({cust.phone})</span>
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              Lid sinds: {cust.joinedDate || '2026'} • Total spent: <strong className="text-emerald-400">{euro(cust.totalSpent)}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Tier & VIP Badge */}
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+                            isVip ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40' :
+                            cust.tier === 'Goud' ? 'bg-amber-950 text-amber-300 border-amber-500/40' :
+                            cust.tier === 'Zilver' ? 'bg-slate-800 text-slate-300 border-slate-600' :
+                            'bg-amber-950/40 text-amber-600 border-amber-800/40'
+                          }`}>
+                            {cust.tier}
+                          </span>
+
+                          {isVip && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-400 text-slate-950 flex items-center gap-1">
+                              <Sparkles className="w-3 h-3" /> VIP Club
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stats & Quick Actions Bar */}
+                      <div className="flex flex-wrap items-center justify-between pt-2 border-t border-slate-900 gap-2 text-xs">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-amber-400 flex items-center gap-1">
+                            🪙 {cust.coins} Coins
+                          </span>
+                          <span className="text-slate-400 text-[11px]">
+                            🎟️ {cust.vouchers?.length || 0} Vouchers
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = loyaltyCustomers.map(c => c.id === cust.id ? { ...c, coins: c.coins + 50 } : c);
+                              saveLoyaltyCustomers(updated);
+                              setLoyaltyCustomers(getLoyaltyCustomers());
+                              showToast(`+50 Coins gegeven aan ${cust.name}!`, 'success');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold border border-amber-500/20 text-[11px]"
+                          >
+                            +50 Coins
+                          </button>
+
+                          {!isVip ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                subscribeVipClub(cust.phone, 'vip_monthly_499');
+                                setLoyaltyCustomers(getLoyaltyCustomers());
+                                showToast(`${cust.name} geabonneerd op VIP Club!`, 'success');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] shadow"
+                            >
+                              👑 VIP Activeren
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-emerald-400 font-bold flex items-center gap-1">
+                              <Check className="w-3 h-3" /> VIP Actief
+                            </span>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewGiftRecipientPhone(cust.phone);
+                              setNewGiftRecipient(cust.name);
+                              setNewGiftIsPrivate(true);
+                              showToast(`Geselecteerd: Koppel cadeaukaart aan ${cust.name}`, 'info');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] flex items-center gap-1"
+                          >
+                            <Link2 className="w-3 h-3" />
+                            <span>Koppel Card</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Create Account Form */}
+          <form onSubmit={handleCreateLoyaltyCustomer} className="lg:col-span-4 bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+            <h3 className="font-extrabold text-white text-sm flex items-center gap-1.5">
+              <UserCheck className="w-4 h-4 text-emerald-400" />
+              <span>+ Nieuw WerkLoyalty Account</span>
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              Meld een nieuwe vaste klant handmatig aan vanuit het kassasysteem. Ontvangt direct 50 Welkomstmunten!
+            </p>
+
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-300 font-bold block">Klantnaam:</label>
+              <input
+                type="text"
+                required
+                value={newLoyaltyName}
+                onChange={e => setNewLoyaltyName(e.target.value)}
+                placeholder="Bijv. Mark de Jong"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] text-slate-300 font-bold block">Telefoonnummer:</label>
+              <input
+                type="tel"
+                required
+                value={newLoyaltyPhone}
+                onChange={e => setNewLoyaltyPhone(e.target.value)}
+                placeholder="0612345678"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono outline-none focus:border-amber-400"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2.5 rounded-xl font-black bg-amber-400 hover:bg-amber-300 text-slate-950 shadow-lg shadow-amber-400/20"
+            >
+              + Klant Account Aanmaken &amp; Syncen
             </button>
           </form>
         </div>
@@ -1522,6 +1929,23 @@ export const ManagerScreen: React.FC = () => {
                 />
                 <span className="font-bold text-slate-300">🔥 Actieprijs Activeren</span>
               </label>
+
+              {/* Recept & Ingrediënten Aanpassen */}
+              <div className="space-y-1.5 pt-1 border-t border-slate-800">
+                <label className="text-amber-400 font-extrabold block text-xs flex items-center gap-1">
+                  <span>👨‍🍳 Recept &amp; Benodigde Ingrediënten</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={editingProduct.recipeDescription || ''}
+                  onChange={e => setEditingProduct({ ...editingProduct, recipeDescription: e.target.value })}
+                  placeholder="Bijv. 1x Sesam Bunge, 2x Rundvlees Patty, 1x Cheddar Kaas, Augurk & Speciaalsaus"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white placeholder-slate-600 focus:border-amber-400 outline-none"
+                />
+                <p className="text-[10px] text-slate-500 italic">
+                  Hiermee weet de keuken precies welke ingrediënten en hoeveelheden nodig zijn voor dit product.
+                </p>
+              </div>
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"

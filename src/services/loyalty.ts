@@ -292,6 +292,45 @@ export function claimWheelSpin(phone: string, prize: WheelPrize): { customer: Lo
   return { customer: updatedCust, voucher: generatedVoucher };
 }
 
+const VIP_MAP_KEY = 'wd_vip_subscribers_db';
+
+export interface VipSubscriberRecord {
+  phone: string;
+  plan: 'vip_monthly_499' | 'vip_monthly_999';
+  subscribedAt: string;
+  expiresAt: string;
+}
+
+export function getVipSubscribers(): Record<string, VipSubscriberRecord> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(VIP_MAP_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveVipSubscriberRecord(rec: VipSubscriberRecord) {
+  if (typeof window === 'undefined') return;
+  const map = getVipSubscribers();
+  const cleanPhone = normalizePhone(rec.phone) || rec.phone;
+  map[cleanPhone] = rec;
+  map[rec.phone] = rec;
+  localStorage.setItem(VIP_MAP_KEY, JSON.stringify(map));
+}
+
+export function isVipSubscriberPhone(phone: string): VipSubscriberRecord | null {
+  if (!phone) return null;
+  const map = getVipSubscribers();
+  const cleanPhone = normalizePhone(phone) || phone;
+  const found = map[cleanPhone] || map[phone];
+  if (!found) return null;
+  const exp = new Date(found.expiresAt);
+  if (exp < new Date()) return null;
+  return found;
+}
+
 export function subscribeVipClub(
   phone: string, 
   plan: 'vip_monthly_499' | 'vip_monthly_999' = 'vip_monthly_499',
@@ -308,10 +347,18 @@ export function subscribeVipClub(
 
   const expiry = new Date();
   expiry.setDate(expiry.getDate() + 30);
+  const expiryStr = expiry.toISOString().split('T')[0];
+
+  saveVipSubscriberRecord({
+    phone: customers[idx].phone || phone,
+    plan,
+    subscribedAt: new Date().toISOString(),
+    expiresAt: expiryStr
+  });
 
   const updatedCust = { ...customers[idx] };
   updatedCust.vipSubscriptionActive = true;
-  updatedCust.vipSubscriptionExpires = expiry.toISOString().split('T')[0];
+  updatedCust.vipSubscriptionExpires = expiryStr;
   updatedCust.vipPlan = plan;
   updatedCust.tier = 'VIP Diamant';
   updatedCust.level = 4;
@@ -491,25 +538,33 @@ export async function fetchLoyaltyFromSupabase(customClient?: any): Promise<Loya
     }
 
     if (data && Array.isArray(data)) {
-      const parsed: LoyaltyCustomer[] = data.map((c: any) => ({
-        id: String(c.id),
-        name: String(c.name || 'Vaste Klant'),
-        phone: String(c.phone || ''),
-        coins: Number(c.coins || 0),
-        totalSpent: Number(c.total_spent || 0),
-        ordersCount: Number(c.orders_count || 0),
-        tier: (c.tier as any) || 'Brons',
-        currentMonthSpent: Number(c.current_month_spent || 0),
-        lastMonthSpent: Number(c.last_month_spent || 0),
-        currentMonthKey: c.current_month_key || '',
-        monthsBelowTarget: Number(c.months_below_target || 0),
-        vipSubscriptionActive: Boolean(c.vip_subscription_active),
-        vipSubscriptionExpires: c.vip_subscription_expires || undefined,
-        vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
-        lastSpinDate: c.last_spin_date || undefined,
-        ordersTodayCount: Number(c.orders_today_count || 0),
-        joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
-      }));
+      const parsed: LoyaltyCustomer[] = data.map((c: any) => {
+        const phone = String(c.phone || '');
+        const activeVipRec = isVipSubscriberPhone(phone);
+        const isVip = Boolean(c.vip_subscription_active || activeVipRec);
+
+        return {
+          id: String(c.id),
+          name: String(c.name || 'Vaste Klant'),
+          phone,
+          coins: Number(c.coins || 0),
+          totalSpent: Number(c.total_spent || 0),
+          ordersCount: Number(c.orders_count || 0),
+          tier: isVip ? 'VIP Diamant' : ((c.tier as any) || 'Brons'),
+          level: isVip ? 4 : undefined,
+          currentMonthSpent: Number(c.current_month_spent || 0),
+          lastMonthSpent: Number(c.last_month_spent || 0),
+          currentMonthKey: c.current_month_key || '',
+          monthsBelowTarget: Number(c.months_below_target || 0),
+          vipSubscriptionActive: isVip,
+          vipSubscriptionExpires: activeVipRec?.expiresAt || c.vip_subscription_expires || undefined,
+          vipPlan: activeVipRec?.plan || c.vip_plan || undefined,
+          vouchers: Array.isArray(c.vouchers) ? c.vouchers : (typeof c.vouchers === 'string' ? JSON.parse(c.vouchers) : []),
+          lastSpinDate: c.last_spin_date || undefined,
+          ordersTodayCount: Number(c.orders_today_count || 0),
+          joinedDate: c.joined_date || new Date().toISOString().split('T')[0]
+        };
+      });
 
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
@@ -662,12 +717,21 @@ export function getCurrentMonthKey(): string {
  */
 export function evaluateCustomerTierRetention(customer: LoyaltyCustomer): LoyaltyCustomer {
   const currentKey = getCurrentMonthKey();
-  const isVipSub = !!(customer.vipSubscriptionActive && (!customer.vipSubscriptionExpires || new Date(customer.vipSubscriptionExpires) >= new Date()));
+  const activeVipRec = isVipSubscriberPhone(customer.phone);
+  const isVipSub = !!(
+    (customer.vipSubscriptionActive && (!customer.vipSubscriptionExpires || new Date(customer.vipSubscriptionExpires) >= new Date())) ||
+    activeVipRec
+  );
   
   if (isVipSub) {
     // Paid VIP subscription overrides downgrade
+    customer.vipSubscriptionActive = true;
     customer.tier = 'VIP Diamant';
     customer.level = 4;
+    if (activeVipRec) {
+      customer.vipSubscriptionExpires = activeVipRec.expiresAt;
+      customer.vipPlan = activeVipRec.plan;
+    }
     return customer;
   }
 

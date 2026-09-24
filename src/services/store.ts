@@ -116,6 +116,22 @@ export function formatCardUid(uid?: string): string {
 
 let _supabaseClient: SupabaseClient | null = null;
 export function getSupabaseClient(): SupabaseClient | null {
+  if (typeof window !== 'undefined') {
+    try {
+      const cfgRaw = localStorage.getItem('wd_sb_cfg');
+      if (cfgRaw) {
+        const cfg = JSON.parse(cfgRaw);
+        const url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
+        const key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
+        if (url && key) {
+          return createClient(url, key);
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
   if (!_supabaseClient && DEFAULT_SUPABASE_POS_URL && DEFAULT_SUPABASE_POS_KEY) {
     try {
       _supabaseClient = createClient(DEFAULT_SUPABASE_POS_URL, DEFAULT_SUPABASE_POS_KEY);
