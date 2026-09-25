@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
+import { ShieldAlert, Lock } from 'lucide-react';
 import { Header } from './components/Header';
 import { PosScreen } from './components/WerkdonaldsPOS/PosScreen';
 import { KitchenScreen } from './components/WerkdonaldsPOS/KitchenScreen';
@@ -26,11 +27,54 @@ const MainLayout: React.FC = () => {
     appMode, 
     setAppMode, 
     posScreen, 
-    werkpayScreen 
+    werkpayScreen,
+    isBlocked,
+    blockedReason,
+    clientIp,
+    deviceId
   } = useApp();
 
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false);
   const [showPaymentModal, setShowPaymentModal] = useState<boolean>(false);
+
+  if (isBlocked) {
+    return (
+      <div className="fixed inset-0 bg-slate-950 flex items-center justify-center p-6 text-center z-[999999]">
+        <div className="max-w-md w-full bg-slate-900 border-2 border-rose-500/50 rounded-3xl p-8 space-y-6 shadow-2xl shadow-rose-950/50 animate-fadeIn">
+          <div className="w-20 h-20 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center mx-auto animate-pulse">
+            <ShieldAlert className="w-10 h-10 text-rose-500" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-rose-500 uppercase tracking-tight mb-2">
+              🚫 Toegang Geblokkeerd
+            </h1>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Dit apparaat of IP-adres is door de beheerder op de zwarte lijst geplaatst en kan momenteel geen acties of bestellingen uitvoeren.
+            </p>
+          </div>
+
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-left font-mono text-[11px] space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500">IP-adres:</span>
+              <span className="text-amber-300 font-bold">{clientIp || 'Detecteren...'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Apparaat ID:</span>
+              <span className="text-cyan-300 font-bold">{deviceId}</span>
+            </div>
+            <div className="pt-2 border-t border-slate-800 text-rose-400">
+              <span className="text-slate-500 block mb-0.5">Reden van blokkade:</span>
+              <span>{blockedReason}</span>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-slate-500">
+            Neem contact op met de beheerder of kassaverantwoordelijke als je denkt dat dit een vergissing is.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans select-none antialiased">

@@ -162,18 +162,20 @@ CREATE TABLE IF NOT EXISTS public.phone_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 1.12 Systeembesturing & Stops (Bestelstop, Afhaalscherm sluiten, TV & Nieuwsbalk Regie)
+-- 1.12 Systeembesturing & Stops (Bestelstop, Afhaalscherm sluiten, TV & Nieuwsbalk Regie, Apparaat/IP Blokkades)
 CREATE TABLE IF NOT EXISTS public.pos_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
   order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
   pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
   news_config JSONB DEFAULT '{}'::jsonb,
   custom_news_items JSONB DEFAULT '[]'::jsonb,
+  blocked_devices JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS news_config JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS custom_news_items JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
 
 -- Zorg dat er altijd een default rij bestaat voor instellingen
 INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
@@ -201,6 +203,17 @@ CREATE TABLE IF NOT EXISTS public.loyalty_customers (
   joined_date TEXT DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 1.14 Actieve Apparaten & Live Sessies (Voor Manager Ops & Apparaat Blokkades)
+CREATE TABLE IF NOT EXISTS public.pos_sessions (
+  device_id TEXT PRIMARY KEY,
+  ip_address TEXT,
+  user_name TEXT,
+  app_mode TEXT,
+  pos_screen TEXT,
+  user_agent TEXT,
+  last_seen TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. INDEXEN & KOLOM MIGRATIES
@@ -499,6 +512,7 @@ ALTER TABLE public.pos_audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.phone_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pos_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.loyalty_customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pos_sessions ENABLE ROW LEVEL SECURITY;
 
 DO $$
 BEGIN
@@ -540,6 +554,9 @@ BEGIN
 
   DROP POLICY IF EXISTS "Public full access loyalty_customers" ON public.loyalty_customers;
   CREATE POLICY "Public full access loyalty_customers" ON public.loyalty_customers FOR ALL USING (true) WITH CHECK (true);
+
+  DROP POLICY IF EXISTS "Public full access pos_sessions" ON public.pos_sessions;
+  CREATE POLICY "Public full access pos_sessions" ON public.pos_sessions FOR ALL USING (true) WITH CHECK (true);
 END $$;
 
 GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
@@ -565,6 +582,7 @@ ALTER TABLE public.coupons REPLICA IDENTITY FULL;
 ALTER TABLE public.gift_cards REPLICA IDENTITY FULL;
 ALTER TABLE public.pos_settings REPLICA IDENTITY FULL;
 ALTER TABLE public.loyalty_customers REPLICA IDENTITY FULL;
+ALTER TABLE public.pos_sessions REPLICA IDENTITY FULL;
 
 DO $$
 BEGIN
@@ -580,6 +598,7 @@ BEGIN
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.gift_cards; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_settings; EXCEPTION WHEN OTHERS THEN NULL; END;
   BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.loyalty_customers; EXCEPTION WHEN OTHERS THEN NULL; END;
+  BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.pos_sessions; EXCEPTION WHEN OTHERS THEN NULL; END;
 END $$;
 `;
 

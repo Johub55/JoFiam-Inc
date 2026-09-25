@@ -40,7 +40,11 @@ import {
   UserCheck,
   Coins,
   Link2,
-  Sparkles
+  Sparkles,
+  ShieldAlert,
+  Laptop,
+  Smartphone,
+  Unlock
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -69,8 +73,20 @@ export const ManagerScreen: React.FC = () => {
     createPosUser,
     updatePosUser,
     deletePosUser,
-    canAccess
+    canAccess,
+    blockedDevices,
+    blockDeviceOrIp,
+    unblockDeviceOrIp,
+    blockAllOtherDevices,
+    activeSessions,
+    clientIp,
+    deviceId
   } = useApp();
+
+  // Device & IP Block Form State
+  const [blockType, setBlockType] = useState<'ip' | 'device'>('ip');
+  const [blockValue, setBlockValue] = useState<string>('');
+  const [blockReasonInput, setBlockReasonInput] = useState<string>('');
 
   // Active Manager Tab: 'dashboard' (General/Finance/Products/Coupons) | 'ops' (Manager Operations & Controls)
   const [activeTab, setActiveTab] = useState<'dashboard' | 'ops'>('dashboard');
@@ -554,6 +570,274 @@ export const ManagerScreen: React.FC = () => {
                 <Cpu className="w-4 h-4" />
                 <span>Open Pinapparaat Terminal</span>
               </button>
+            </div>
+          </div>
+
+          {/* Live Ingelogde Apparaten List (Realtime Presence) */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                  <Laptop className="w-5 h-5 text-cyan-400" />
+                  <span>📱 Live Ingelogde Apparaten ({activeSessions.length} Actief Online)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Realtime overzicht van alle actieve schermen, telefoons &amp; kiosks. Klik op <strong>Blokkeer</strong> om een apparaat of IP direct live uit te sluiten (geen herlaad nodig).
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (confirm('Weet je zeker dat je ALLE overige ingelogde apparaten direct wilt blokkeren?')) {
+                      const res = await blockAllOtherDevices();
+                      showToast(res.message, res.success ? 'success' : 'warning');
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition shadow flex items-center gap-1.5"
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>🚨 Noodknop: Blokkeer Alle Overige Apparaten</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Active Connected Sessions Table */}
+            <div className="space-y-2.5">
+              {activeSessions.length === 0 ? (
+                <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center text-xs text-slate-500 space-y-1">
+                  <p className="font-bold text-slate-400">Verbinding maken met actieve apparaten...</p>
+                  <p className="text-[11px]">Huidige apparaat ID: <code className="text-cyan-300">{deviceId}</code> ({clientIp || 'Lokaal'})</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2.5">
+                  {activeSessions.map((s) => {
+                    const isCurrentDevice = s.device_id === deviceId;
+                    const isBlockedDevice = blockedDevices.some(b => b.value.toLowerCase() === s.device_id.toLowerCase() || (b.type === 'ip' && b.value === s.ip_address));
+
+                    return (
+                      <div
+                        key={s.device_id}
+                        className={`p-3.5 rounded-xl border transition flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs ${
+                          isCurrentDevice
+                            ? 'bg-slate-950 border-cyan-500/40 shadow-sm shadow-cyan-950/30'
+                            : isBlockedDevice
+                            ? 'bg-rose-950/20 border-rose-500/40'
+                            : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold ${
+                            isCurrentDevice ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-slate-900 text-slate-400 border border-slate-800'
+                          }`}>
+                            {s.user_agent.toLowerCase().includes('mobiel') ? (
+                              <Smartphone className="w-5 h-5 text-cyan-400" />
+                            ) : (
+                              <Laptop className="w-5 h-5 text-cyan-400" />
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-white text-sm">{s.user_name}</span>
+                              {isCurrentDevice && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  ⚡ Dit Is Jouw Huidige Apparaat
+                                </span>
+                              )}
+                              {isBlockedDevice && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                                  🚫 Live Geblokkeerd
+                                </span>
+                              )}
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400 font-mono">
+                                {s.user_agent}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono flex-wrap">
+                              <span>IP: <strong className="text-amber-300">{s.ip_address}</strong></span>
+                              <span>•</span>
+                              <span>ID: <strong className="text-cyan-300">{s.device_id}</strong></span>
+                              <span>•</span>
+                              <span>Scherm: <span className="text-purple-300 uppercase font-bold">{s.app_mode} / {s.pos_screen}</span></span>
+                              <span>•</span>
+                              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block" />
+                                🟢 Live Nu
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        {!isCurrentDevice && (
+                          <div className="flex items-center gap-2 flex-wrap pt-2 md:pt-0 border-t md:border-t-0 border-slate-800">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await blockDeviceOrIp('device', s.device_id, `Blokkade via Ops Menu op ${s.user_name}`);
+                                showToast(res.message, res.success ? 'success' : 'error');
+                              }}
+                              className="px-3 py-1.5 rounded-xl font-bold bg-rose-600 hover:bg-rose-500 text-white text-[11px] shadow transition flex items-center gap-1"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Blokkeer Apparaat</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await blockDeviceOrIp('ip', s.ip_address, `IP Blokkade via Ops Menu op ${s.user_name}`);
+                                showToast(res.message, res.success ? 'success' : 'error');
+                              }}
+                              className="px-3 py-1.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white text-[11px] shadow transition flex items-center gap-1"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Blokkeer IP ({s.ip_address})</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Blacklist Control Form & List */}
+            <div className="pt-3 border-t border-slate-800 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h4 className="font-extrabold text-rose-400 text-xs flex items-center gap-1.5">
+                    <Lock className="w-4 h-4 text-rose-500" />
+                    <span>🛡️ Zwarte Lijst Beheer ({blockedDevices.length} Actieve Blokkades)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    Handmatige IP-adressen of apparaten toevoegen of bestaande blokkades weer deblokkeren.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 text-xs">
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!blockValue) return;
+                    const res = await blockDeviceOrIp(blockType, blockValue, blockReasonInput);
+                    showToast(res.message, res.success ? 'success' : 'error');
+                    if (res.success) {
+                      setBlockValue('');
+                      setBlockReasonInput('');
+                    }
+                  }}
+                  className="lg:col-span-5 bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2.5"
+                >
+                  <div className="font-bold text-slate-300 text-[11px]">
+                    + Handmatige Blokkade Toevoegen
+                  </div>
+                  <div className="flex gap-2">
+                    <select
+                      value={blockType}
+                      onChange={e => setBlockType(e.target.value as 'ip' | 'device')}
+                      className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-white outline-none font-bold"
+                    >
+                      <option value="ip">IP-adres</option>
+                      <option value="device">Apparaat ID</option>
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      value={blockValue}
+                      onChange={e => setBlockValue(e.target.value)}
+                      placeholder={blockType === 'ip' ? 'Bijv. 123.45.67.89' : 'Bijv. dev_x7a9k2'}
+                      className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white font-mono placeholder-slate-600 outline-none focus:border-rose-500"
+                    />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={blockReasonInput}
+                    onChange={e => setBlockReasonInput(e.target.value)}
+                    placeholder="Reden (bijv. Misbruik / Verdacht gedrag)"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-white placeholder-slate-600 outline-none"
+                  />
+
+                  <div className="flex gap-2 pt-1">
+                    {clientIp && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBlockType('ip');
+                          setBlockValue(clientIp);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold"
+                      >
+                        Mijn IP
+                      </button>
+                    )}
+                    {deviceId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBlockType('device');
+                          setBlockValue(deviceId);
+                        }}
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold"
+                      >
+                        Mijn Apparaat ID
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      className="flex-1 py-1.5 rounded-lg font-bold bg-rose-600 hover:bg-rose-500 text-white shadow"
+                    >
+                      Blokkeer Live
+                    </button>
+                  </div>
+                </form>
+
+                <div className="lg:col-span-7 bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-2 max-h-56 overflow-y-auto">
+                  <div className="font-bold text-slate-400 text-[11px] flex justify-between">
+                    <span>Actieve Zwarte Lijst ({blockedDevices.length})</span>
+                    <span className="text-[10px] text-emerald-400">🟢 Realtime Sync</span>
+                  </div>
+
+                  {blockedDevices.length === 0 ? (
+                    <p className="text-[11px] text-slate-500 py-4 text-center">Er zijn momenteel geen apparaten of IP's geblokkeerd.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {blockedDevices.map(b => (
+                        <div key={b.id || b.value} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between text-[11px]">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase ${b.type === 'ip' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'}`}>
+                                {b.type.toUpperCase()}
+                              </span>
+                              <span className="font-mono font-bold text-white">{b.value}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 italic mt-0.5">
+                              {b.reason || 'Geen reden opgegeven'}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const res = await unblockDeviceOrIp(b.value);
+                              showToast(res.message, res.success ? 'success' : 'error');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-[10px] transition"
+                          >
+                            🔓 Deblokkeer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

@@ -197,8 +197,7 @@ export const VipWerkPaySubscriptionModal: React.FC<VipWerkPaySubscriptionModalPr
         phone: normalizePhone(phone) || phone,
         plan: selectedPlan,
         subscribedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        werkpayAccount: targetAccount.username
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
       });
 
       AudioFX.chime();

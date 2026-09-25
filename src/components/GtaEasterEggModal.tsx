@@ -1,4 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useApp } from '../context/AppContext';
+import { euro } from '../services/store';
+import { showToast } from '../services/appToast';
+import { BankTransaction } from '../types';
 import { 
   X, 
   Trophy, 
@@ -15,7 +19,10 @@ import {
   Heart,
   Crosshair,
   MapPin,
-  Compass
+  Compass,
+  CreditCard,
+  CheckCircle2,
+  Wallet
 } from 'lucide-react';
 import { AudioFX } from '../services/audio';
 
@@ -192,6 +199,7 @@ const ROADS = [
 ];
 
 export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, onClose }) => {
+  const { currentBankAccount, claimGtaReward } = useApp();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -210,6 +218,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
   const [ammo, setAmmo] = useState<number>(30);
   const [statusMsg, setStatusMsg] = useState<string>('🚨 WERKDONALDS GTA: Rijd naar de groene bezorgzone en schiet op politie met KLIK of F!');
   const [restartTrigger, setRestartTrigger] = useState<number>(0);
+  const [hasClaimedReward, setHasClaimedReward] = useState<boolean>(false);
+  const [claimStatus, setClaimStatus] = useState<string>('');
 
   // Simple Synthesized Web Audio Sound Effects
   const playRetroTone = (freq: number, type: OscillatorType, duration: number, vol = 0.15) => {
@@ -1521,6 +1531,8 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
     setCombo(1);
     setLives(5);
     setAmmo(30);
+    setHasClaimedReward(false);
+    setClaimStatus('');
     setRestartTrigger(prev => prev + 1); // trigger useEffect fully refresh
     setStatusMsg('🚨 Opnieuw begonnen! Rijd naar de groene bezorgzone en schiet op politie met KLIK of F!');
   };
@@ -1661,22 +1673,66 @@ export const GtaEasterEggModal: React.FC<GtaEasterEggModalProps> = ({ isOpen, on
 
           {/* Game Over Screen */}
           {isGameOver && (
-            <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-5 animate-fadeIn">
-              <span className="text-7xl animate-bounce">💥</span>
+            <div className="absolute inset-0 bg-slate-950/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center space-y-4 animate-fadeIn overflow-y-auto">
+              <span className="text-6xl animate-bounce">💥</span>
               <h3 className="text-3xl font-black text-rose-500 uppercase tracking-tight">
                 WASTED / BUSTED!
               </h3>
-              <p className="text-sm text-slate-300 max-w-md leading-relaxed">
-                Al je bezorgwagens zijn total-loss gereden of in beslag genomen! Je hebt <strong>{burgersDelivered} burgers</strong> geleverd en een omzet behaald van:
+              <p className="text-xs sm:text-sm text-slate-300 max-w-md leading-relaxed">
+                Al je bezorgwagens zijn total-loss gereden of in beslag genomen! Je hebt <strong>{burgersDelivered} burgers</strong> geleverd en een totale arcade omzet behaald van:
               </p>
-              <div className="px-6 py-3 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-2xl font-black font-mono">
+              <div className="px-6 py-2.5 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-2xl font-black font-mono">
                 € {score},00
               </div>
+
+              {/* WerkPay Winst Claim Box */}
+              {score > 0 && (
+                <div className="p-4 rounded-2xl bg-slate-900 border border-emerald-500/40 text-emerald-200 max-w-sm w-full space-y-2 text-xs shadow-xl">
+                  <div className="font-extrabold flex items-center justify-center gap-1.5 text-emerald-400 text-sm">
+                    <Wallet className="w-4 h-4 text-emerald-400" />
+                    <span>Verdiend WerkPay Saldo: € {Math.min(15.00, Math.max(0.25, Math.round((score * 0.01) * 100) / 100)).toFixed(2)}</span>
+                  </div>
+
+                  {currentBankAccount ? (
+                    <div>
+                      {!hasClaimedReward ? (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const res = await claimGtaReward(score);
+                            setHasClaimedReward(res.success);
+                            setClaimStatus(res.message);
+                            if (res.success) {
+                              showToast(res.message, 'success');
+                            } else {
+                              showToast(res.message, 'error');
+                            }
+                          }}
+                          className="w-full py-2.5 rounded-xl font-black bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/20 active:scale-95 transition flex items-center justify-center gap-2 uppercase tracking-wide text-xs"
+                        >
+                          <CreditCard className="w-4 h-4" />
+                          <span>Keer Winst Uit Op WerkPay ({currentBankAccount.account_holder})</span>
+                        </button>
+                      ) : (
+                        <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-300 font-bold text-center border border-emerald-500/30 text-[11px] flex items-center justify-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>{claimStatus || 'Winst overgemaakt op je WerkPay rekening!'}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-amber-300 italic">
+                      💡 Tip: Log in bij WerkPay om je verdiende GTA-winst (€ {Math.min(15.00, Math.max(0.25, Math.round((score * 0.01) * 100) / 100)).toFixed(2)}) direct op je bankrekening te storten!
+                    </p>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={handleRestart}
-                className="px-6 py-3.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-sm uppercase tracking-wider flex items-center gap-2.5 shadow-xl shadow-amber-400/30 active:scale-95 transition"
+                className="px-6 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-xl shadow-amber-400/20 active:scale-95 transition"
               >
-                <RotateCcw className="w-5 h-5" />
+                <RotateCcw className="w-4 h-4" />
                 <span>Opnieuw Spelen</span>
               </button>
             </div>

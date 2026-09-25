@@ -76,6 +76,16 @@ const getMajorityStatus = (items: any[]): OrderStatus => {
   return bestStage;
 };
 
+export interface PosSession {
+  device_id: string;
+  ip_address: string;
+  user_name: string;
+  app_mode: string;
+  pos_screen: string;
+  user_agent: string;
+  last_seen: string;
+}
+
 interface AppContextType {
   // Navigation & Brand
   appMode: AppMode;
@@ -200,6 +210,20 @@ interface AppContextType {
   isUserOrder: (order: Order) => boolean;
   getUserOrders: () => Order[];
   activeUserOrders: Order[];
+
+  // GTA Arcade Reward
+  claimGtaReward: (score: number) => Promise<{ success: boolean; message: string; reward: number }>;
+
+  // Device & IP Blocking (Security & Blacklist & Active Sessions)
+  blockedDevices: Array<{ id: string; type: 'ip' | 'device'; value: string; reason?: string; addedAt: string }>;
+  blockDeviceOrIp: (type: 'ip' | 'device', value: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  unblockDeviceOrIp: (value: string) => Promise<{ success: boolean; message: string }>;
+  blockAllOtherDevices: () => Promise<{ success: boolean; message: string }>;
+  activeSessions: PosSession[];
+  isBlocked: boolean;
+  blockedReason: string;
+  clientIp: string;
+  deviceId: string;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -209,6 +233,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [appMode, setAppMode] = useState<AppMode>('pos');
   const [posScreen, setPosScreen] = useState<PosScreenType>('kassa');
   const [werkpayScreen, setWerkpayScreen] = useState<WerkPayScreenType>('wallet');
+
+  // Device & IP Blocking State
+  const [blockedDevices, setBlockedDevices] = useState<Array<{ id: string; type: 'ip' | 'device'; value: string; reason?: string; addedAt: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('wd_blocked_devices');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [activeSessions, setActiveSessions] = useState<PosSession[]>([]);
+
+  const [clientIp, setClientIp] = useState<string>('');
+  const [deviceId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'dev_server';
+    let id = localStorage.getItem('wd_device_id');
+    if (!id) {
+      id = 'dev_' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem('wd_device_id', id);
+    }
+    return id;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    fetch('https://api.ipify.org?format=json')
+      .then(res => res.json())
+      .then(data => {
+        if (data?.ip) setClientIp(data.ip);
+      })
+      .catch(() => {});
+  }, []);
+
+  const blockedMatch = blockedDevices.find(item => {
+    if (item.type === 'ip' && clientIp && item.value.trim() === clientIp.trim()) return true;
+    if (item.type === 'device' && deviceId && item.value.trim().toLowerCase() === deviceId.trim().toLowerCase()) return true;
+    return false;
+  });
+  const isBlocked = Boolean(blockedMatch);
+  const blockedReason = blockedMatch?.reason || 'Toegang ontzegd door de beheerder.';
 
   // Active Brand ('werkdonalds' | 'koekploeg') - Defaults to 'koekploeg'
   const [activeBrand, setActiveBrandState] = useState<BrandType>(() => {
@@ -698,6 +763,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           localStorage.setItem('wd_pickup_custom_items_v2', JSON.stringify(dbSettings.custom_news_items));
           window.dispatchEvent(new Event('wd_news_config_updated'));
         }
+
+        if (dbSettings.blocked_devices && Array.isArray(dbSettings.blocked_devices)) {
+          setBlockedDevices(dbSettings.blocked_devices);
+          localStorage.setItem('wd_blocked_devices', JSON.stringify(dbSettings.blocked_devices));
+        }
       } else if (!settingsErr && !dbSettings) {
         // Create initial row if missing
         await posClient.from('pos_settings').insert({ id: 'default', order_stop_active: false, pickup_closed: false });
@@ -750,6 +820,29 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         localStorage.setItem('wd_loyalty_customers_db', JSON.stringify(parsedLoyalty));
         localStorage.setItem('wd_loyalty_ts', Date.now().toString());
         window.dispatchEvent(new Event('wd_loyalty_updated'));
+      }
+
+      // 9. Fetch active connected pos_sessions
+      const { data: dbSessions, error: sessErr } = await posClient
+        .from('pos_sessions')
+        .select('*')
+        .order('last_seen', { ascending: false });
+
+      if (!sessErr && dbSessions) {
+        const now = Date.now();
+        const recent = dbSessions.filter((s: any) => {
+          const t = new Date(s.last_seen).getTime();
+          return (now - t) < 60000; // seen within last 60s
+        }).map((s: any) => ({
+          device_id: String(s.device_id),
+          ip_address: String(s.ip_address || 'Onbekend'),
+          user_name: String(s.user_name || 'Gast'),
+          app_mode: String(s.app_mode || 'pos'),
+          pos_screen: String(s.pos_screen || 'kassa'),
+          user_agent: String(s.user_agent || 'Browser'),
+          last_seen: String(s.last_seen)
+        }));
+        setActiveSessions(recent);
       }
 
       setSyncStatus('synced');
@@ -830,6 +923,41 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       window.removeEventListener('focus', onVisibilityOrFocus);
     };
   }, [fetchCloudData, posClient]);
+
+  // Active Device Heartbeat to pos_sessions
+  useEffect(() => {
+    if (!posClient || !deviceId) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        const userLabel = currentPosUser
+          ? `${currentPosUser.name} (@${currentPosUser.username})`
+          : (currentBankAccount ? `WerkPay: ${currentBankAccount.account_holder}` : 'Gast / Kiosk Paal');
+
+        const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        let deviceType = 'Desktop';
+        if (/mobile/i.test(ua)) deviceType = 'Mobiel';
+        if (/tablet|ipad/i.test(ua)) deviceType = 'Tablet';
+        if (currentPosUser?.username === 'rpi') deviceType = 'Raspberry Pi Kiosk';
+
+        await posClient.from('pos_sessions').upsert({
+          device_id: deviceId,
+          ip_address: clientIp || 'Detecteren...',
+          user_name: userLabel,
+          app_mode: appMode,
+          pos_screen: posScreen,
+          user_agent: deviceType,
+          last_seen: new Date().toISOString()
+        });
+      } catch (e) {
+        // silent
+      }
+    };
+
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 5000);
+    return () => clearInterval(interval);
+  }, [posClient, deviceId, clientIp, currentPosUser, currentBankAccount, appMode, posScreen]);
 
   // Live Supabase Realtime WebSocket Subscriptions
   useEffect(() => {
@@ -1088,6 +1216,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
                   localStorage.setItem('wd_pickup_custom_items_v2', JSON.stringify(settings.custom_news_items));
                   window.dispatchEvent(new Event('wd_news_config_updated'));
                 }
+                if (settings.blocked_devices && Array.isArray(settings.blocked_devices)) {
+                  setBlockedDevices(settings.blocked_devices);
+                  localStorage.setItem('wd_blocked_devices', JSON.stringify(settings.blocked_devices));
+                }
               }
             }
           }
@@ -1144,6 +1276,15 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           if (payload && payload.payload) {
             const { text, orderNo, target } = payload.payload;
             AudioFX.playSpeech(text, orderNo, target, true); // fromBroadcast=true
+          }
+        })
+        .on('broadcast', { event: 'wd_device_blocked' }, (payload: any) => {
+          if (!isMounted) return;
+          console.log('📣 Received live device blocked broadcast:', payload);
+          if (payload && payload.payload && Array.isArray(payload.payload.blocked_devices)) {
+            const updated = payload.payload.blocked_devices;
+            setBlockedDevices(updated);
+            localStorage.setItem('wd_blocked_devices', JSON.stringify(updated));
           }
         })
         .subscribe((status: any) => {
@@ -2241,6 +2382,176 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     return { success: true, message: `€ ${amount.toFixed(2)} succesvol bijgeschreven!` };
   };
 
+  const claimGtaReward = async (score: number): Promise<{ success: boolean; message: string; reward: number }> => {
+    if (!currentBankAccount) {
+      return { success: false, message: 'Niet ingelogd bij WerkPay. Log in bij WerkPay om je GTA-winst op te nemen!', reward: 0 };
+    }
+    if (score <= 0) {
+      return { success: false, message: 'Geen omzet score behaald in GTA.', reward: 0 };
+    }
+
+    // Reward: 1% of arcade score, min €0.25, max €15.00 per run
+    const rawReward = Math.round((score * 0.01) * 100) / 100;
+    const reward = Math.min(15.00, Math.max(0.25, rawReward));
+
+    // Saldo cap check (€500 max for non-admin customers)
+    if (!currentBankAccount.is_admin && (currentBankAccount.balance + reward > 500)) {
+      const maxPossible = Math.round((500 - currentBankAccount.balance) * 100) / 100;
+      if (maxPossible <= 0) {
+        return {
+          success: false,
+          message: 'Max. WerkPay saldo van € 500,00 is al bereikt. Maak eerst saldo op.',
+          reward: 0
+        };
+      }
+    }
+
+    const newBal = Math.round((currentBankAccount.balance + reward) * 100) / 100;
+    const updated = { ...currentBankAccount, balance: newBal };
+    setCurrentBankAccount(updated);
+    setBankAccounts(prev => prev.map(a => a.id === updated.id ? updated : a));
+
+    const tx: BankTransaction = {
+      id: Date.now(),
+      from_account: '🎮 GTA Arcade Beloning',
+      to_account: updated.username,
+      amount: reward,
+      label: `GTA Shootout Winst (Score €${score})`,
+      when: new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }),
+      timestamp: Date.now()
+    };
+    setBankTransactions(prev => [tx, ...prev]);
+
+    if (payClient || posClient) {
+      const client = payClient || posClient;
+      try {
+        await client?.from('bank_accounts').update({ balance: newBal }).eq('id', updated.id);
+      } catch {}
+    }
+
+    return {
+      success: true,
+      message: `🎉 € ${reward.toFixed(2)} GTA-winst overgemaakt naar WerkPay saldo van ${updated.account_holder}!`,
+      reward
+    };
+  };
+
+  const blockDeviceOrIp = async (type: 'ip' | 'device', value: string, reason?: string): Promise<{ success: boolean; message: string }> => {
+    const cleanVal = value.trim();
+    if (!cleanVal) return { success: false, message: 'Voer een geldig IP-adres of Apparaat ID in.' };
+
+    const newItem = {
+      id: 'blk_' + Date.now(),
+      type,
+      value: cleanVal,
+      reason: reason || 'Handmatig geblokkeerd door beheerder.',
+      addedAt: new Date().toLocaleString('nl-NL')
+    };
+
+    const nextList = [newItem, ...blockedDevices.filter(b => b.value.toLowerCase() !== cleanVal.toLowerCase())];
+    setBlockedDevices(nextList);
+    localStorage.setItem('wd_blocked_devices', JSON.stringify(nextList));
+
+    if (posClient) {
+      try {
+        await posClient.from('pos_settings').upsert({
+          id: 'default',
+          order_stop_active: orderStopActive,
+          pickup_closed: pickupClosed,
+          blocked_devices: nextList,
+          updated_at: new Date().toISOString()
+        });
+
+        // Broadcast realtime event so all devices block IMMEDIATELY without reload
+        const bc = posClient.channel('global_audio_broadcast');
+        bc.send({
+          type: 'broadcast',
+          event: 'wd_device_blocked',
+          payload: { blocked_devices: nextList, newItem }
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Error saving block:', err);
+      }
+    }
+
+    return { success: true, message: `${type === 'ip' ? 'IP-adres' : 'Apparaat'} "${cleanVal}" direct live geblokkeerd!` };
+  };
+
+  const unblockDeviceOrIp = async (value: string): Promise<{ success: boolean; message: string }> => {
+    const cleanVal = value.trim().toLowerCase();
+    const nextList = blockedDevices.filter(b => b.value.trim().toLowerCase() !== cleanVal);
+    setBlockedDevices(nextList);
+    localStorage.setItem('wd_blocked_devices', JSON.stringify(nextList));
+
+    if (posClient) {
+      try {
+        await posClient.from('pos_settings').upsert({
+          id: 'default',
+          order_stop_active: orderStopActive,
+          pickup_closed: pickupClosed,
+          blocked_devices: nextList,
+          updated_at: new Date().toISOString()
+        });
+
+        const bc = posClient.channel('global_audio_broadcast');
+        bc.send({
+          type: 'broadcast',
+          event: 'wd_device_blocked',
+          payload: { blocked_devices: nextList }
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Error saving unblock:', err);
+      }
+    }
+
+    return { success: true, message: `Blokkade voor "${value}" direct live opgeheven.` };
+  };
+
+  const blockAllOtherDevices = async (): Promise<{ success: boolean; message: string }> => {
+    const otherSessions = activeSessions.filter(s => s.device_id !== deviceId);
+    if (otherSessions.length === 0) {
+      return { success: false, message: 'Er zijn geen overige ingelogde apparaten gedetecteerd om te blokkeren.' };
+    }
+
+    const newBlocks = otherSessions.map((s, idx) => ({
+      id: `blk_${Date.now()}_${idx}`,
+      type: 'device' as const,
+      value: s.device_id,
+      reason: `Noodblokkade alle ingelogde apparaten door @${currentPosUser?.username || 'manager'}`,
+      addedAt: new Date().toLocaleString('nl-NL')
+    }));
+
+    const existingValues = new Set(blockedDevices.map(b => b.value.toLowerCase()));
+    const filteredNew = newBlocks.filter(b => !existingValues.has(b.value.toLowerCase()));
+    const updated = [...filteredNew, ...blockedDevices];
+
+    setBlockedDevices(updated);
+    localStorage.setItem('wd_blocked_devices', JSON.stringify(updated));
+
+    if (posClient) {
+      try {
+        await posClient.from('pos_settings').upsert({
+          id: 'default',
+          order_stop_active: orderStopActive,
+          pickup_closed: pickupClosed,
+          blocked_devices: updated,
+          updated_at: new Date().toISOString()
+        });
+
+        const bc = posClient.channel('global_audio_broadcast');
+        bc.send({
+          type: 'broadcast',
+          event: 'wd_device_blocked',
+          payload: { blocked_devices: updated }
+        }).catch(() => {});
+      } catch (err) {
+        console.error('Error blocking all other devices:', err);
+      }
+    }
+
+    return { success: true, message: `Alle ${filteredNew.length} overige ingelogde apparaten zijn direct live geblokkeerd!` };
+  };
+
   const transferWerkPay = async (
     to: string,
     amount: number,
@@ -3022,7 +3333,17 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         addMyOrderNumber,
         isUserOrder,
         getUserOrders,
-        activeUserOrders
+        activeUserOrders,
+        claimGtaReward,
+        blockedDevices,
+        blockDeviceOrIp,
+        unblockDeviceOrIp,
+        blockAllOtherDevices,
+        activeSessions,
+        isBlocked,
+        blockedReason,
+        clientIp,
+        deviceId
       }}
     >
       {children}
