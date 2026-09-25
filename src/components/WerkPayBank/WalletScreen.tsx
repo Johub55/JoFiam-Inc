@@ -52,7 +52,7 @@ export const WalletScreen: React.FC = () => {
 
   // Top Up State
   const [depositAmount, setDepositAmount] = useState<string>('20.00');
-  const [depositSuccess, setDepositSuccess] = useState<string>('');
+  const [depositMsg, setDepositMsg] = useState<{ success: boolean; text: string } | null>(null);
 
   // Transfer State
   const [transferTarget, setTransferTarget] = useState<string>('');
@@ -105,8 +105,8 @@ export const WalletScreen: React.FC = () => {
     const amt = parseFloat(depositAmount);
     if (isNaN(amt) || amt <= 0) return;
     const res = await topUpWerkPay(amt);
-    setDepositSuccess(res.message);
-    setTimeout(() => setDepositSuccess(''), 3000);
+    setDepositMsg({ success: res.success, text: res.message });
+    setTimeout(() => setDepositMsg(null), 4000);
   };
 
   const handleTransfer = async (e: React.FormEvent) => {
@@ -616,13 +616,9 @@ export const WalletScreen: React.FC = () => {
               </h3>
 
               {currentBankAccount.is_admin ? (
-                <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
-                  ✨ Je hebt <strong>God Mode (oneindig saldo)</strong> ingeschakeld op dit beheerderaccount. Opwaarderen is niet nodig.
-                </div>
-              ) : (
                 <form onSubmit={handleDeposit} className="space-y-3 text-xs">
                   <div>
-                    <label className="text-slate-400 font-bold block mb-1">Kies snelbedrag of typ zelf</label>
+                    <label className="text-slate-400 font-bold block mb-1">Beheerder Test-Opwaardering (Admin)</label>
                     <div className="grid grid-cols-4 gap-2 mb-2">
                       {[5, 10, 20, 50].map(amt => (
                         <button
@@ -650,19 +646,33 @@ export const WalletScreen: React.FC = () => {
                     />
                   </div>
 
-                  {depositSuccess && (
-                    <p className="text-emerald-400 font-bold text-xs bg-emerald-500/10 p-2 rounded-lg">
-                      {depositSuccess}
-                    </p>
+                  {depositMsg && (
+                    <div className={`p-2.5 rounded-xl text-xs font-bold border ${
+                      depositMsg.success 
+                        ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                        : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+                    }`}>
+                      {depositMsg.text}
+                    </div>
                   )}
 
                   <button
                     type="submit"
                     className="w-full py-2.5 rounded-xl font-black text-xs bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/10 transition"
                   >
-                    Direct Opwaarderen
+                    Saldo Bijschrijven (Admin)
                   </button>
                 </form>
+              ) : (
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold">
+                    <ShieldAlert className="w-4 h-4 text-amber-400" />
+                    <span>Opwaarderen uitsluitend via kassa of beheerder</span>
+                  </div>
+                  <p className="text-slate-400 leading-relaxed">
+                    Klanten kunnen niet zelf saldo opwaarderen via dit portaal. Wil je nieuw saldo op je WerkPay kaart zetten? Vraag een medewerker bij de kassa om contant of via PIN saldo bij te schrijven op jouw account.
+                  </p>
+                </div>
               )}
             </div>
 

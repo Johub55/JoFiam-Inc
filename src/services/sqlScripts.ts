@@ -14,7 +14,7 @@ export const SCHEMA_ONLY_SUPABASE_SQL = `-- ====================================
 -- 1. TABELLEN AANMAKEN
 -- ------------------------------------------------------------------------------
 
--- 1.1 WerkPay Bankrekeningen
+-- 1.1 WerkPay Bankrekeningen (Saldo wordt uitsluitend beheerd/opgewaardeerd via kassa of beheerders)
 CREATE TABLE IF NOT EXISTS public.bank_accounts (
   id BIGSERIAL PRIMARY KEY,
   username TEXT UNIQUE NOT NULL,

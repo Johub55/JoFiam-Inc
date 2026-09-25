@@ -178,7 +178,9 @@ interface AppContextType {
   // WerkPay State
   currentBankAccount: BankAccount | null;
   bankAccounts: BankAccount[];
+  setBankAccounts: React.Dispatch<React.SetStateAction<BankAccount[]>>;
   bankTransactions: BankTransaction[];
+  setBankTransactions: React.Dispatch<React.SetStateAction<BankTransaction[]>>;
   loginWerkPay: (username: string, secret: string, mode: 'password' | 'pin') => Promise<{ success: boolean; message: string }>;
   logoutWerkPay: () => void;
   topUpWerkPay: (amount: number) => Promise<{ success: boolean; message: string }>;
@@ -2175,8 +2177,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     if (!currentBankAccount) {
       return { success: false, message: 'Niet ingelogd bij WerkPay.' };
     }
-    if (currentBankAccount.is_admin) {
-      return { success: false, message: 'Beheerders hebben oneindig saldo (God Mode).' };
+    if (!currentBankAccount.is_admin) {
+      return { 
+        success: false, 
+        message: 'Klanten kunnen niet zelf saldo opwaarderen. Opwaarderen kan uitsluitend via de kassa of door een beheerder.' 
+      };
     }
     if (amount <= 0) {
       return { success: false, message: 'Voer een positief bedrag in.' };
@@ -2970,7 +2975,9 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         posUsers,
         currentBankAccount,
         bankAccounts,
+        setBankAccounts,
         bankTransactions,
+        setBankTransactions,
         loginWerkPay,
         logoutWerkPay,
         topUpWerkPay,
