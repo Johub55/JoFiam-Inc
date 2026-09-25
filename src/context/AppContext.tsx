@@ -681,6 +681,23 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       if (!settingsErr && dbSettings) {
         setOrderStopActive(Boolean(dbSettings.order_stop_active));
         setPickupClosed(Boolean(dbSettings.pickup_closed));
+
+        if (dbSettings.news_config && typeof dbSettings.news_config === 'object') {
+          const remoteNewsCfg = dbSettings.news_config;
+          const currentNewsCfgRaw = localStorage.getItem('wd_pickup_news_config_v2');
+          let currentNewsCfg: any = null;
+          try { if (currentNewsCfgRaw) currentNewsCfg = JSON.parse(currentNewsCfgRaw); } catch {}
+
+          if (!currentNewsCfg || !currentNewsCfg.lastUpdated || (remoteNewsCfg.lastUpdated && remoteNewsCfg.lastUpdated > currentNewsCfg.lastUpdated)) {
+            localStorage.setItem('wd_pickup_news_config_v2', JSON.stringify(remoteNewsCfg));
+            window.dispatchEvent(new Event('wd_news_config_updated'));
+          }
+        }
+
+        if (dbSettings.custom_news_items && Array.isArray(dbSettings.custom_news_items)) {
+          localStorage.setItem('wd_pickup_custom_items_v2', JSON.stringify(dbSettings.custom_news_items));
+          window.dispatchEvent(new Event('wd_news_config_updated'));
+        }
       } else if (!settingsErr && !dbSettings) {
         // Create initial row if missing
         await posClient.from('pos_settings').insert({ id: 'default', order_stop_active: false, pickup_closed: false });
@@ -1062,6 +1079,15 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
               if (settings && settings.id === 'default') {
                 setOrderStopActive(Boolean(settings.order_stop_active));
                 setPickupClosed(Boolean(settings.pickup_closed));
+
+                if (settings.news_config && typeof settings.news_config === 'object') {
+                  localStorage.setItem('wd_pickup_news_config_v2', JSON.stringify(settings.news_config));
+                  window.dispatchEvent(new Event('wd_news_config_updated'));
+                }
+                if (settings.custom_news_items && Array.isArray(settings.custom_news_items)) {
+                  localStorage.setItem('wd_pickup_custom_items_v2', JSON.stringify(settings.custom_news_items));
+                  window.dispatchEvent(new Event('wd_news_config_updated'));
+                }
               }
             }
           }
@@ -1464,8 +1490,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         };
       }
 
-      // Debit account
-      const newBal = chargedAccount.is_admin ? chargedAccount.balance : Math.max(0, chargedAccount.balance - finalTotal);
+      // Debit account with strict 2-decimal cent precision
+      const newBal = chargedAccount.is_admin 
+        ? chargedAccount.balance 
+        : Math.max(0, Math.round((chargedAccount.balance - finalTotal) * 100) / 100);
       setBankAccounts(prev => prev.map(a => a.id === chargedAccount!.id ? { ...a, balance: newBal } : a));
       if (currentBankAccount && currentBankAccount.id === chargedAccount.id) {
         setCurrentBankAccount(prev => prev ? { ...prev, balance: newBal } : null);
@@ -2239,12 +2267,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     }
 
     // Debit sender (unless God mode)
-    const senderBal = currentBankAccount.is_admin ? currentBankAccount.balance : currentBankAccount.balance - amount;
+    const senderBal = currentBankAccount.is_admin 
+      ? currentBankAccount.balance 
+      : Math.max(0, Math.round((currentBankAccount.balance - amount) * 100) / 100);
     const updatedSender = { ...currentBankAccount, balance: senderBal };
     setCurrentBankAccount(updatedSender);
 
     // Credit recipient
-    const recipientBal = recipient.balance + amount;
+    const recipientBal = Math.round((recipient.balance + amount) * 100) / 100;
     const updatedRecipient = { ...recipient, balance: recipientBal };
 
     setBankAccounts(prev =>

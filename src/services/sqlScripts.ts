@@ -162,13 +162,18 @@ CREATE TABLE IF NOT EXISTS public.phone_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 1.12 Systeembesturing & Stops (Bestelstop & Afhaalscherm sluiten)
+-- 1.12 Systeembesturing & Stops (Bestelstop, Afhaalscherm sluiten, TV & Nieuwsbalk Regie)
 CREATE TABLE IF NOT EXISTS public.pos_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
   order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
   pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
+  news_config JSONB DEFAULT '{}'::jsonb,
+  custom_news_items JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS news_config JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS custom_news_items JSONB DEFAULT '[]'::jsonb;
 
 -- Zorg dat er altijd een default rij bestaat voor instellingen
 INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)

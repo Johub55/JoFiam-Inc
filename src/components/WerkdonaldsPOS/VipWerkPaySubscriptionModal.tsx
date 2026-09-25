@@ -161,8 +161,8 @@ export const VipWerkPaySubscriptionModal: React.FC<VipWerkPaySubscriptionModalPr
         return;
       }
 
-      // Deduct monthly subscription fee
-      const newBal = Number(targetAccount.balance) - planAmount;
+      // Deduct monthly subscription fee with strict 2-decimal cent precision
+      const newBal = Math.max(0, Math.round((Number(targetAccount.balance) - planAmount) * 100) / 100);
       const updatedAccounts = bankAccounts.map(a => a.id === targetAccount.id ? { ...a, balance: newBal } : a);
       setBankAccounts(updatedAccounts);
       localStorage.setItem('wd_bank_accounts', JSON.stringify(updatedAccounts));

@@ -151,8 +151,8 @@ export const mergeOrders = (
         : (exist.isPrio ?? inc.isPrio ?? false);
 
       result.push({
-        ...inc,
         ...exist,
+        ...inc,
         status: resolvedStatus,
         items: resolvedItems,
         isPrio: resolvedPrio,
