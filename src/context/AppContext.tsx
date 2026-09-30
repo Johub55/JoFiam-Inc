@@ -47,6 +47,7 @@ import {
 } from '../services/syncHelpers';
 import { calculateDiscount } from '../services/discountService';
 import { redeemVoucherAnyCustomer, addCoinsToCustomer, isVipSubscriberPhone, issueVoucherForCustomer } from '../services/loyalty';
+import { verifyTotpCode } from '../services/totp';
 
 const getMajorityStatus = (items: any[]): OrderStatus => {
   if (!items || items.length === 0) return 'wachten';
@@ -224,6 +225,26 @@ interface AppContextType {
   blockedReason: string;
   clientIp: string;
   deviceId: string;
+
+  // Master Security Shield & Tamper-Proof Safeguards
+  masterPin: string;
+  verifyMasterPin: (pin: string) => boolean;
+  updateMasterPin: (newPin: string) => void;
+  banAndSuspendUser: (username: string, reason?: string) => Promise<{ success: boolean; message: string }>;
+  unbanUser: (username: string) => Promise<{ success: boolean; message: string }>;
+  toggleShadowbanUser: (username: string) => Promise<{ success: boolean; message: string }>;
+  enable2FAForUser: (username: string, secret: string, code: string, backupCodes: string[]) => Promise<{ success: boolean; message: string }>;
+  disable2FAForUser: (username: string) => Promise<{ success: boolean; message: string }>;
+  verify2FACodeForUser: (username: string, code: string) => Promise<boolean>;
+  pending2FALogin: { user: PosUser | BankAccount; loginType: 'pos' | 'werkpay' } | null;
+  setPending2FALogin: (val: { user: PosUser | BankAccount; loginType: 'pos' | 'werkpay' } | null) => void;
+  confirm2FALogin: (code: string) => Promise<{ success: boolean; message: string }>;
+  tablesFrozen: boolean;
+  toggleTablesFrozen: (freeze?: boolean) => Promise<{ success: boolean; message: string }>;
+  saveDisasterRecoverySnapshot: () => void;
+  restoreDisasterRecoverySnapshot: () => Promise<{ success: boolean; message: string }>;
+  auditLogs: Array<{ id: string | number; action: string; user_name: string; details: string; timestamp: string }>;
+  logAuditAction: (action: string, details: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -233,6 +254,483 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [appMode, setAppMode] = useState<AppMode>('pos');
   const [posScreen, setPosScreen] = useState<PosScreenType>('kassa');
   const [werkpayScreen, setWerkpayScreen] = useState<WerkPayScreenType>('wallet');
+
+  // Master Security Shield & Tamper-Proof Safeguards State
+  const [masterPin, setMasterPinState] = useState<string>(() => {
+    return localStorage.getItem('wd_master_pin') || '1234';
+  });
+
+  const [tablesFrozen, setTablesFrozenState] = useState<boolean>(() => {
+    return localStorage.getItem('wd_tables_frozen') === 'true';
+  });
+
+  const [pending2FALogin, setPending2FALogin] = useState<{ user: PosUser | BankAccount; loginType: 'pos' | 'werkpay' } | null>(null);
+
+  const [auditLogs, setAuditLogs] = useState<Array<{ id: string | number; action: string; user_name: string; details: string; timestamp: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('wd_audit_logs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const verifyMasterPin = (pin: string): boolean => {
+    const clean = pin.trim();
+    return clean === masterPin;
+  };
+
+  const updateMasterPin = async (newPin: string) => {
+    const clean = newPin.trim();
+    setMasterPinState(clean);
+    localStorage.setItem('wd_master_pin', clean);
+    if (posClient) {
+      try {
+        await posClient.from('pos_settings').upsert({
+          id: 'default',
+          master_security_pin: clean,
+          updated_at: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn('Fout bij opslaan master_security_pin in pos_settings:', e);
+      }
+    }
+  };
+
+  const logAuditAction = (action: string, details: string) => {
+    const newLog = {
+      id: `audit_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      action,
+      user_name: 'Systeem/Manager',
+      details,
+      timestamp: new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    };
+    setAuditLogs(prev => {
+      const updated = [newLog, ...prev].slice(0, 100);
+      localStorage.setItem('wd_audit_logs', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Helper: Encode security flags inside existing JSONB `perms` array so Supabase sync works 100% WITHOUT needing new SQL columns!
+  const buildDbPermsForUser = (u: PosUser, overrideFreeze?: boolean): string[] => {
+    const cleanPerms = (u.perms || ['pos', 'pickup']).filter(p => !p.startsWith('__'));
+    const out = [...cleanPerms];
+    if (u.is_shadowbanned) out.push('__shadowban__');
+    if (u.is_banned || u.is_suspended) out.push('__banned__');
+    if (u.is_2fa_enabled && u.totp_secret) {
+      out.push(`__2fa_enabled:${u.totp_secret}__`);
+      if (u.backup_codes && u.backup_codes.length > 0) {
+        out.push(`__backup_codes:${u.backup_codes.join(',')}__`);
+      }
+    }
+    const isFreezeActive = overrideFreeze !== undefined ? overrideFreeze : tablesFrozen;
+    if (isFreezeActive && (u.username.toLowerCase() === 'joas' || u.username.toLowerCase() === 'admin')) {
+      out.push('__tables_frozen__');
+    }
+    return Array.from(new Set(out));
+  };
+
+  const parsePosUserFromDb = (u: any): PosUser => {
+    const rawPerms: string[] = Array.isArray(u.perms)
+      ? u.perms
+      : typeof u.perms === 'string'
+      ? (() => { try { return JSON.parse(u.perms); } catch { return ['pos', 'pickup']; } })()
+      : ['pos', 'pickup'];
+
+    const hasShadowMarker = rawPerms.includes('__shadowban__') || u.session_token === 'SHADOWBANNED';
+    const hasBanMarker = rawPerms.includes('__banned__') || u.session_token === 'BANNED';
+
+    const has2faMarker = rawPerms.find(p => p.startsWith('__2fa_enabled:'));
+    const secretFromMarker = has2faMarker ? has2faMarker.replace('__2fa_enabled:', '').replace(/__/g, '') : '';
+    const backupMarker = rawPerms.find(p => p.startsWith('__backup_codes:'));
+    const backupsFromMarker = backupMarker ? backupMarker.replace('__backup_codes:', '').replace(/__/g, '').split(',') : [];
+
+    const is2faActive = Boolean(u.is_2fa_enabled) || Boolean(secretFromMarker);
+    const totpSecret = u.totp_secret || secretFromMarker;
+    const backupCodes = (Array.isArray(u.backup_codes) && u.backup_codes.length > 0) ? u.backup_codes : backupsFromMarker;
+
+    const cleanPerms = rawPerms.filter(p => !p.startsWith('__'));
+
+    return {
+      id: u.id,
+      name: u.name,
+      username: u.username,
+      password: u.password,
+      perms: cleanPerms,
+      is_admin: Boolean(u.is_admin),
+      is_banned: Boolean(u.is_banned) || hasBanMarker,
+      is_suspended: Boolean(u.is_suspended) || hasBanMarker,
+      is_shadowbanned: Boolean(u.is_shadowbanned) || hasShadowMarker,
+      is_2fa_enabled: is2faActive,
+      totp_secret: totpSecret,
+      backup_codes: backupCodes
+    };
+  };
+
+  const syncUserSecurityToSupabase = async (targetUser: PosUser, overrideFreeze?: boolean) => {
+    const client = posClient || payClient;
+    if (!client) return;
+    const cleanU = targetUser.username.trim().toLowerCase();
+    const dbPerms = buildDbPermsForUser(targetUser, overrideFreeze);
+    try {
+      // 1. Update via standard `perms` JSONB column (always exists in every Supabase setup, 0 SQL changes needed!)
+      const { data: existingRows } = await client.from('pos_users').select('id, username').ilike('username', cleanU);
+      if (existingRows && existingRows.length > 0) {
+        await client.from('pos_users').update({ perms: dbPerms }).ilike('username', cleanU);
+      } else {
+        await client.from('pos_users').insert({
+          name: targetUser.name || cleanU,
+          username: targetUser.username,
+          password: targetUser.password || '1234',
+          perms: dbPerms,
+          is_admin: Boolean(targetUser.is_admin)
+        });
+      }
+      // 2. Also update dedicated columns if they exist
+      try {
+        await client.from('pos_users').update({
+          is_shadowbanned: Boolean(targetUser.is_shadowbanned),
+          is_banned: Boolean(targetUser.is_banned),
+          is_suspended: Boolean(targetUser.is_suspended)
+        }).ilike('username', cleanU);
+        await client.from('bank_accounts').update({
+          is_shadowbanned: Boolean(targetUser.is_shadowbanned),
+          is_banned: Boolean(targetUser.is_banned),
+          is_suspended: Boolean(targetUser.is_suspended)
+        }).ilike('username', cleanU);
+      } catch {}
+
+      // 3. Broadcast live to all open tabs & GitHub Pages sessions
+      const bc = client.channel('global_audio_broadcast');
+      bc.send({
+        type: 'broadcast',
+        event: 'wd_security_state_sync',
+        payload: {
+          username: cleanU,
+          is_shadowbanned: Boolean(targetUser.is_shadowbanned),
+          is_banned: Boolean(targetUser.is_banned),
+          is_suspended: Boolean(targetUser.is_suspended),
+          tables_frozen: overrideFreeze !== undefined ? overrideFreeze : tablesFrozen
+        }
+      }).catch(() => {});
+    } catch (e) {
+      console.warn('Security sync warning:', e);
+    }
+  };
+
+  const shouldBlockTableWrite = (actionLabel: string): boolean => {
+    if (currentPosUser?.is_shadowbanned) {
+      logAuditAction('SHADOWBAN_TRAP', `👻 Nep-Rechten vangnet: @${currentPosUser.username} deed "${actionLabel}" (alleen nep op zijn scherm, 0 veranderingen in database!)`);
+      return true;
+    }
+    if (tablesFrozen) {
+      logAuditAction('TABLE_FREEZE_BLOCKED', `🔒 0-Veranderingen Tabel-Slot blokkeerde database-wijziging: "${actionLabel}"`);
+      return true;
+    }
+    return false;
+  };
+
+  const toggleTablesFrozen = async (freeze?: boolean): Promise<{ success: boolean; message: string }> => {
+    const nextFreeze = freeze !== undefined ? freeze : !tablesFrozen;
+    setTablesFrozenState(nextFreeze);
+    localStorage.setItem('wd_tables_frozen', String(nextFreeze));
+
+    const client = posClient || payClient;
+    if (client) {
+      try {
+        // 1. Sync via existing `pos_users.perms` on joas/admin so 0 SQL changes are required
+        const adminTarget = posUsers.find(u => u.username.toLowerCase() === 'joas') || posUsers[0];
+        if (adminTarget) {
+          await syncUserSecurityToSupabase(adminTarget, nextFreeze);
+        }
+        // 2. Also store in pos_settings.news_config (which already exists)
+        const currentNewsCfgRaw = localStorage.getItem('wd_pickup_news_config_v2');
+        let newsCfg: any = {};
+        try { if (currentNewsCfgRaw) newsCfg = JSON.parse(currentNewsCfgRaw); } catch {}
+        newsCfg.tables_frozen = nextFreeze;
+        newsCfg.lastUpdated = Date.now();
+        localStorage.setItem('wd_pickup_news_config_v2', JSON.stringify(newsCfg));
+        await client.from('pos_settings').upsert({
+          id: 'default',
+          order_stop_active: orderStopActive,
+          pickup_closed: pickupClosed,
+          news_config: newsCfg,
+          updated_at: new Date().toISOString()
+        });
+        // 3. Try server-side PostgreSQL REVOKE/GRANT RPC if installed
+        try {
+          await client.rpc('werkdonalds_set_tables_readonly', { p_lock: nextFreeze, p_allow_orders: true });
+        } catch {}
+      } catch {}
+    }
+
+    logAuditAction(
+      nextFreeze ? 'TABELLEN_BEVROREN' : 'TABELLEN_ONTGRENDELD',
+      nextFreeze
+        ? '🔒 0-Veranderingen Tabel-Slot AANGEZET: Er kunnen 0 wijzigingen aan de tabellen worden aangebracht!'
+        : '🔓 0-Veranderingen Tabel-Slot OPGEHEVEN: Tabellen kunnen weer normaal worden bewerkt.'
+    );
+
+    return {
+      success: true,
+      message: nextFreeze
+        ? '🔒 0-Veranderingen Tabel-Slot AAN! Er worden vanaf nu 0 wijzigingen of verwijderingen doorgelaten naar je tabellen.'
+        : '🔓 Tabel-Slot UIT! Je kunt producten, accounts en medewerkers weer normaal aanpassen.'
+    };
+  };
+
+  const saveDisasterRecoverySnapshot = () => {
+    try {
+      const snapshot = {
+        timestamp: new Date().toISOString(),
+        products,
+        posUsers,
+        orders: orders.slice(0, 50),
+        bankAccounts,
+        giftCards
+      };
+      localStorage.setItem('wd_disaster_recovery_snapshot', JSON.stringify(snapshot));
+    } catch {}
+  };
+
+  const restoreDisasterRecoverySnapshot = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const saved = localStorage.getItem('wd_disaster_recovery_snapshot');
+      if (!saved) {
+        return { success: false, message: 'Geen automatische back-up snapshot gevonden!' };
+      }
+      const data = JSON.parse(saved);
+      if (data.products && Array.isArray(data.products)) setProducts(data.products);
+      if (data.posUsers && Array.isArray(data.posUsers)) setPosUsers(data.posUsers);
+      if (data.orders && Array.isArray(data.orders)) setOrders(data.orders);
+      if (data.bankAccounts && Array.isArray(data.bankAccounts)) setBankAccounts(data.bankAccounts);
+      if (data.giftCards && Array.isArray(data.giftCards)) setGiftCards(data.giftCards);
+
+      logAuditAction('DISASTER_RECOVERY_RESTORE', 'Noodherstel uitgevoerd! Alle gegevens hersteld uit automatische snapshot.');
+      return { success: true, message: '⚡ Alle gegevens succesvol hersteld uit de automatische back-up snapshot!' };
+    } catch (err: any) {
+      return { success: false, message: `Fout bij herstellen: ${err?.message || 'Onbekende fout'}` };
+    }
+  };
+
+  const banAndSuspendUser = async (username: string, reason?: string): Promise<{ success: boolean; message: string }> => {
+    const cleanU = username.trim().toLowerCase();
+    if (cleanU === 'joas') {
+      return { success: false, message: 'De hoofdbeheerder Joas kan niet worden geschorst!' };
+    }
+
+    let targetObj: PosUser | null = null;
+    setPosUsers(prev => {
+      const updated = prev.map(u => {
+        if (u.username.toLowerCase() === cleanU) {
+          targetObj = { ...u, is_banned: true, is_suspended: true };
+          return targetObj;
+        }
+        return u;
+      });
+      localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+      return updated;
+    });
+    setBankAccounts(prev => prev.map(a => a.username.toLowerCase() === cleanU ? { ...a, is_banned: true, is_suspended: true } : a));
+
+    // Also add to device/IP blacklist for cross-terminal live ejection
+    await blockDeviceOrIp('device', cleanU, reason || `Account @${cleanU} geschorst door beheerder (zichtbare rechten behouden, toegang geblokkeerd)`);
+
+    if (currentPosUser && currentPosUser.username.toLowerCase() === cleanU) {
+      logoutPos();
+    }
+
+    const fallbackUser: PosUser = targetObj || {
+      id: Date.now(),
+      name: cleanU,
+      username: cleanU,
+      password: '1234',
+      perms: ['pos', 'pickup'],
+      is_admin: false,
+      is_banned: true,
+      is_suspended: true
+    };
+    await syncUserSecurityToSupabase(fallbackUser);
+
+    logAuditAction('ACCOUNT_GESCHORST', `Account @${cleanU} geschorst en geblokkeerd (zichtbare rechten behouden)! ${reason || ''}`);
+    return { success: true, message: `Account @${cleanU} is direct online geblokkeerd (zonder SQL aanpassing nodig)!` };
+  };
+
+  const unbanUser = async (username: string): Promise<{ success: boolean; message: string }> => {
+    const cleanU = username.trim().toLowerCase();
+    let targetObj: PosUser | null = null;
+    setPosUsers(prev => {
+      const updated = prev.map(u => {
+        if (u.username.toLowerCase() === cleanU) {
+          targetObj = { ...u, is_banned: false, is_suspended: false };
+          return targetObj;
+        }
+        return u;
+      });
+      localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+      return updated;
+    });
+    setBankAccounts(prev => prev.map(a => a.username.toLowerCase() === cleanU ? { ...a, is_banned: false, is_suspended: false } : a));
+    await unblockDeviceOrIp(cleanU);
+
+    if (targetObj) {
+      await syncUserSecurityToSupabase(targetObj);
+    }
+
+    logAuditAction('ACCOUNT_GEDEBLOKKEERD', `Blokkade voor @${cleanU} opgeheven.`);
+    return { success: true, message: `Blokkade voor @${cleanU} is opgeheven!` };
+  };
+
+  const toggleShadowbanUser = async (username: string): Promise<{ success: boolean; message: string }> => {
+    const cleanU = username.trim().toLowerCase();
+    if (cleanU === 'joas') {
+      return { success: false, message: 'De hoofdbeheerder Joas kan niet op shadowban / nep-rechten worden gezet!' };
+    }
+    let targetObj: PosUser | null = null;
+    let nextState = false;
+
+    setPosUsers(prev => {
+      const updated = prev.map(u => {
+        if (u.username.toLowerCase() === cleanU) {
+          nextState = !u.is_shadowbanned;
+          targetObj = { ...u, is_shadowbanned: nextState };
+          return targetObj;
+        }
+        return u;
+      });
+      localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    setBankAccounts(prev => prev.map(a => a.username.toLowerCase() === cleanU ? { ...a, is_shadowbanned: nextState } : a));
+
+    if (targetObj) {
+      await syncUserSecurityToSupabase(targetObj);
+    }
+
+    logAuditAction(
+      nextState ? 'SHADOWBAN_AANGEZET' : 'SHADOWBAN_UITGEZET',
+      `Nep-rechten (Shadowban) ${nextState ? 'AANGEZET' : 'UITGEZET'} voor @${cleanU}`
+    );
+
+    return {
+      success: true,
+      message: nextState
+        ? `👻 Nep-rechten (Shadowban) AANGEZET voor @${cleanU}! Hij ziet al zijn rechten, maar op de achtergrond worden 0 acties opgeslagen.`
+        : `👻 Nep-rechten UITGEZET voor @${cleanU}. Account werkt weer normaal.`
+    };
+  };
+
+  const enable2FAForUser = async (username: string, secret: string, code: string, backupCodes: string[]): Promise<{ success: boolean; message: string }> => {
+    const cleanU = username.trim().toLowerCase();
+    const isValid = await verifyTotpCode(secret, code, backupCodes);
+    if (!isValid) {
+      return { success: false, message: 'Ongeldige 2FA Authenticator code! Probeer opnieuw.' };
+    }
+
+    setPosUsers(prev => {
+      const updated = prev.map(u => u.username.toLowerCase() === cleanU ? {
+        ...u,
+        is_2fa_enabled: true,
+        totp_secret: secret,
+        backup_codes: backupCodes
+      } : u);
+      localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    setBankAccounts(prev => prev.map(a => a.username.toLowerCase() === cleanU ? {
+      ...a,
+      is_2fa_enabled: true,
+      totp_secret: secret,
+      backup_codes: backupCodes
+    } : a));
+
+    if (currentPosUser && currentPosUser.username.toLowerCase() === cleanU) {
+      setCurrentPosUser(prev => prev ? { ...prev, is_2fa_enabled: true, totp_secret: secret, backup_codes: backupCodes } : null);
+    }
+
+    const targetUser = posUsers.find(u => u.username.toLowerCase() === cleanU) || {
+      id: Date.now(),
+      name: cleanU,
+      username: cleanU,
+      perms: ['pos', 'pickup'],
+      is_admin: false,
+      is_2fa_enabled: true,
+      totp_secret: secret,
+      backup_codes: backupCodes
+    };
+    await syncUserSecurityToSupabase({ ...targetUser, is_2fa_enabled: true, totp_secret: secret, backup_codes: backupCodes });
+
+    logAuditAction('2FA_INGESCHAKELD', `🔐 2FA Tweestapsverificatie succesvol geactiveerd voor @${cleanU}`);
+    return { success: true, message: `2FA Tweestapsverificatie succesvol geactiveerd voor @${cleanU}!` };
+  };
+
+  const disable2FAForUser = async (username: string): Promise<{ success: boolean; message: string }> => {
+    const cleanU = username.trim().toLowerCase();
+    setPosUsers(prev => {
+      const updated = prev.map(u => u.username.toLowerCase() === cleanU ? {
+        ...u,
+        is_2fa_enabled: false,
+        totp_secret: '',
+        backup_codes: []
+      } : u);
+      localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    setBankAccounts(prev => prev.map(a => a.username.toLowerCase() === cleanU ? {
+      ...a,
+      is_2fa_enabled: false,
+      totp_secret: '',
+      backup_codes: []
+    } : a));
+
+    if (currentPosUser && currentPosUser.username.toLowerCase() === cleanU) {
+      setCurrentPosUser(prev => prev ? { ...prev, is_2fa_enabled: false, totp_secret: '', backup_codes: [] } : null);
+    }
+
+    const targetUser = posUsers.find(u => u.username.toLowerCase() === cleanU);
+    if (targetUser) {
+      await syncUserSecurityToSupabase({ ...targetUser, is_2fa_enabled: false, totp_secret: '', backup_codes: [] });
+    }
+
+    logAuditAction('2FA_UITGESCHAKELD', `2FA Tweestapsverificatie uitgeschakeld voor @${cleanU}`);
+    return { success: true, message: `2FA uitgeschakeld voor @${cleanU}.` };
+  };
+
+  const verify2FACodeForUser = async (username: string, code: string): Promise<boolean> => {
+    const cleanU = username.trim().toLowerCase();
+    const targetUser = posUsers.find(u => u.username.toLowerCase() === cleanU) ||
+                       bankAccounts.find(a => a.username.toLowerCase() === cleanU);
+
+    if (!targetUser || !targetUser.totp_secret) return false;
+    return await verifyTotpCode(targetUser.totp_secret, code, targetUser.backup_codes);
+  };
+
+  const confirm2FALogin = async (code: string): Promise<{ success: boolean; message: string }> => {
+    if (!pending2FALogin) return { success: false, message: 'Geen inlogverzoek in behandeling.' };
+
+    const { user, loginType } = pending2FALogin;
+    const isValid = await verify2FACodeForUser(user.username, code);
+
+    if (!isValid) {
+      logAuditAction('2FA_LOGIN_MISLUKT', `Ongeldige 2FA poging voor @${user.username}`);
+      return { success: false, message: 'Ongeldige 2FA Authenticator code of Noodcode.' };
+    }
+
+    if (loginType === 'pos') {
+      setCurrentPosUser(user as PosUser);
+      setPosScreen('kassa');
+    } else {
+      setCurrentBankAccount(user as BankAccount);
+    }
+
+    setPending2FALogin(null);
+    logAuditAction('2FA_LOGIN_GESLAAGD', `🔐 Succesvol ingelogd met 2FA als @${user.username}`);
+    return { success: true, message: `Welkom, ${'name' in user ? user.name : user.account_holder}!` };
+  };
 
   // Device & IP Blocking State
   const [blockedDevices, setBlockedDevices] = useState<Array<{ id: string; type: 'ip' | 'device'; value: string; reason?: string; addedAt: string }>>(() => {
@@ -644,14 +1142,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     }
 
     try {
-      // 1. Fetch orders
+      // 1. Fetch orders (unless current user is shadowbanned so their fake local changes stay visible to them)
       const { data: dbOrders, error: orderErr } = await posClient
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(60);
 
-      if (!orderErr && dbOrders) {
+      if (!orderErr && dbOrders && !currentPosUser?.is_shadowbanned) {
         const parsed: Order[] = dbOrders.map(formatDbOrder);
         setOrders(prev => {
           const { merged, hasNewRemoteOrder } = mergeOrders(prev, parsed);
@@ -673,7 +1171,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         .from('bank_accounts')
         .select('*');
 
-      if (!payErr && dbAccounts && dbAccounts.length > 0) {
+      if (!payErr && dbAccounts && dbAccounts.length > 0 && !currentPosUser?.is_shadowbanned) {
         setBankAccounts(dbAccounts);
         if (currentBankAccount) {
           const found = dbAccounts.find(
@@ -685,29 +1183,47 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         }
       }
 
-      // 3. Fetch POS users from Supabase (to guarantee live password sync!)
+      // 3. Fetch POS users from Supabase (with Zero-SQL `perms` marker decoding for Shadowban, Ban & Table Freeze!)
       const { data: dbUsers, error: userErr } = await posClient
         .from('pos_users')
         .select('*');
 
       if (!userErr && dbUsers && dbUsers.length > 0) {
-        const parsedUsers: PosUser[] = dbUsers.map(u => ({
-          id: u.id,
-          name: u.name,
-          username: u.username,
-          password: u.password,
-          perms: Array.isArray(u.perms) ? u.perms : (typeof u.perms === 'string' ? JSON.parse(u.perms) : ['pos', 'pickup']),
-          is_admin: Boolean(u.is_admin)
-        }));
+        // Check if any admin user has __tables_frozen__ marker in perms
+        const remoteFreezeFromPerms = dbUsers.some(u => {
+          const rawP = Array.isArray(u.perms) ? u.perms : (typeof u.perms === 'string' ? (() => { try { return JSON.parse(u.perms); } catch { return []; } })() : []);
+          return rawP.includes('__tables_frozen__');
+        });
+
+        const parsedUsers: PosUser[] = dbUsers.map(u => parsePosUserFromDb(u));
         setPosUsers(parsedUsers);
         localStorage.setItem('wd_pos_users', JSON.stringify(parsedUsers));
+
+        if (currentPosUser) {
+          const syncedMe = parsedUsers.find(pu => pu.username.toLowerCase() === currentPosUser.username.toLowerCase());
+          if (syncedMe) {
+            if (syncedMe.is_banned || syncedMe.is_suspended) {
+              logoutPos();
+            } else if (
+              syncedMe.is_shadowbanned !== currentPosUser.is_shadowbanned ||
+              JSON.stringify(syncedMe.perms) !== JSON.stringify(currentPosUser.perms)
+            ) {
+              setCurrentPosUser(syncedMe);
+            }
+          }
+        }
+
+        if (remoteFreezeFromPerms !== tablesFrozen) {
+          setTablesFrozenState(remoteFreezeFromPerms);
+          localStorage.setItem('wd_tables_frozen', String(remoteFreezeFromPerms));
+        }
       }
 
       // 4. Fetch coupons from Supabase
       const { data: dbCoupons, error: couponErr } = await posClient
         .from('coupons')
         .select('*');
-      if (!couponErr && dbCoupons) {
+      if (!couponErr && dbCoupons && !currentPosUser?.is_shadowbanned) {
         const parsedCoupons: Coupon[] = dbCoupons.map(c => ({
           id: Number(c.id),
           code: c.code,
@@ -725,7 +1241,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       const { data: dbGiftCards, error: gcErr } = await posClient
         .from('gift_cards')
         .select('*');
-      if (!gcErr && dbGiftCards) {
+      if (!gcErr && dbGiftCards && !currentPosUser?.is_shadowbanned) {
         const parsedGiftCards: GiftCard[] = dbGiftCards.map(g => ({
           id: Number(g.id),
           code: g.code,
@@ -746,6 +1262,24 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       if (!settingsErr && dbSettings) {
         setOrderStopActive(Boolean(dbSettings.order_stop_active));
         setPickupClosed(Boolean(dbSettings.pickup_closed));
+
+        if (dbSettings.master_security_pin) {
+          const pinVal = String(dbSettings.master_security_pin).trim();
+          if (pinVal) {
+            setMasterPinState(pinVal);
+            localStorage.setItem('wd_master_pin', pinVal);
+          }
+        }
+
+        if (dbSettings.tables_frozen !== undefined) {
+          const isFrz = Boolean(dbSettings.tables_frozen);
+          setTablesFrozenState(isFrz);
+          localStorage.setItem('wd_tables_frozen', String(isFrz));
+        } else if (dbSettings.news_config && typeof dbSettings.news_config === 'object' && dbSettings.news_config.tables_frozen !== undefined) {
+          const isFrz = Boolean(dbSettings.news_config.tables_frozen);
+          setTablesFrozenState(isFrz);
+          localStorage.setItem('wd_tables_frozen', String(isFrz));
+        }
 
         if (dbSettings.news_config && typeof dbSettings.news_config === 'object') {
           const remoteNewsCfg = dbSettings.news_config;
@@ -1285,6 +1819,35 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
             const updated = payload.payload.blocked_devices;
             setBlockedDevices(updated);
             localStorage.setItem('wd_blocked_devices', JSON.stringify(updated));
+          }
+        })
+        .on('broadcast', { event: 'wd_security_state_sync' }, (payload: any) => {
+          if (!isMounted || !payload?.payload) return;
+          const { username, is_shadowbanned, is_banned, is_suspended, tables_frozen } = payload.payload;
+          if (tables_frozen !== undefined) {
+            setTablesFrozenState(Boolean(tables_frozen));
+            localStorage.setItem('wd_tables_frozen', String(Boolean(tables_frozen)));
+          }
+          if (username) {
+            const cleanU = String(username).toLowerCase();
+            setPosUsers(prev => {
+              const updated = prev.map(u => u.username.toLowerCase() === cleanU ? {
+                ...u,
+                is_shadowbanned: Boolean(is_shadowbanned),
+                is_banned: Boolean(is_banned),
+                is_suspended: Boolean(is_suspended)
+              } : u);
+              localStorage.setItem('wd_pos_users', JSON.stringify(updated));
+              return updated;
+            });
+            setCurrentPosUser(prev => {
+              if (!prev || prev.username.toLowerCase() !== cleanU) return prev;
+              if (is_banned || is_suspended) {
+                sessionStorage.removeItem('wd_pos_user');
+                return null;
+              }
+              return { ...prev, is_shadowbanned: Boolean(is_shadowbanned) };
+            });
           }
         })
         .subscribe((status: any) => {
@@ -2112,6 +2675,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         localStorage.setItem('wd_orders', JSON.stringify(filtered));
       } catch {}
     }
+    if (shouldBlockTableWrite(`Bestelling #${orderNum} verwijderen`)) return;
     broadcastSync('SYNC_ORDER_DELETE', { orderNo: orderNum });
     if (posClient) {
       try {
@@ -2657,6 +3221,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       }
 
       // Sync with Supabase
+      if (shouldBlockTableWrite(`Bankrekening @${(updatedAcc as BankAccount)?.username || acc.username} bewerken`)) return;
       const client = payClient || posClient;
       if (client && updatedAcc) {
         try {
@@ -2689,6 +3254,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       setBankAccounts(prev => [...prev, newAcc]);
 
       // Sync with Supabase
+      if (shouldBlockTableWrite(`Nieuwe bankrekening @${newAcc.username} aanmaken`)) return;
       const client = payClient || posClient;
       if (client) {
         try {
@@ -2722,6 +3288,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     if (currentBankAccount && currentBankAccount.id === id) {
       setCurrentBankAccount(null);
     }
+
+    if (shouldBlockTableWrite(`Bankrekening @${accountToDelete.username} verwijderen`)) return;
 
     const client = payClient || posClient;
     if (client) {
@@ -2772,7 +3340,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       return { success: true, message: 'Ingelogd op Raspberry Pi Spaarpaal Kiosk (Vergrendeld)!' };
     }
 
-    // 1. Check live in Supabase pos_users table first (guarantees Supabase password changes work instantly)
+    // 1. Check live in Supabase pos_users table first (guarantees Supabase password & Zero-SQL perms markers work instantly)
     if (posClient) {
       try {
         const { data, error } = await posClient
@@ -2782,20 +3350,21 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           .single();
 
         if (data && !error) {
+          const parsedDbUser = parsePosUserFromDb(data);
+          if (parsedDbUser.is_banned || parsedDbUser.is_suspended || blockedDevices.some(b => b.value.toLowerCase() === cleanU)) {
+            logAuditAction('GEBLOKKEERDE_LOGIN_POGING', `Geblokkeerd account @${cleanU} probeerde in te loggen.`);
+            return { success: false, message: '⛔ Dit account is geblokkeerd door de beheerder. Toegang geweigerd.' };
+          }
           if (data.password === cleanPass || data.password === pass) {
-            const user: PosUser = {
-              id: data.id,
-              name: data.name,
-              username: data.username,
-              password: data.password,
-              perms: Array.isArray(data.perms) ? data.perms : (typeof data.perms === 'string' ? JSON.parse(data.perms) : ['pos', 'pickup']),
-              is_admin: Boolean(data.is_admin)
-            };
-            setCurrentPosUser(user);
+            if (parsedDbUser.is_2fa_enabled) {
+              setPending2FALogin({ user: parsedDbUser, loginType: 'pos' });
+              return { success: false, message: '2FA_CHALLENGE_REQUIRED' };
+            }
+            setCurrentPosUser(parsedDbUser);
             setPosScreen('kassa');
             // update local list
-            setPosUsers(prev => [user, ...prev.filter(u => u.username.toLowerCase() !== cleanU)]);
-            return { success: true, message: `Welkom, ${user.name}!` };
+            setPosUsers(prev => [parsedDbUser, ...prev.filter(u => u.username.toLowerCase() !== cleanU)]);
+            return { success: true, message: `Welkom, ${parsedDbUser.name}!` };
           }
         }
       } catch (err) {
@@ -2814,15 +3383,27 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           .single();
 
         if (bankData && !bErr) {
+          const matchingPosRecord = posUsers.find(u => u.username.toLowerCase() === cleanU);
+          if (
+            bankData.is_banned ||
+            bankData.is_suspended ||
+            matchingPosRecord?.is_banned ||
+            matchingPosRecord?.is_suspended ||
+            blockedDevices.some(b => b.value.toLowerCase() === cleanU)
+          ) {
+            logAuditAction('GEBLOKKEERDE_LOGIN_POGING', `Geblokkeerd account @${cleanU} probeerde in te loggen.`);
+            return { success: false, message: '⛔ Dit account is geblokkeerd door de beheerder. Toegang geweigerd.' };
+          }
           if (bankData.password === cleanPass || bankData.pin_code === cleanPass || bankData.password === pass) {
             const bankUser: PosUser = {
               id: typeof bankData.id === 'number' ? bankData.id : Date.now(),
               name: bankData.account_holder,
               username: bankData.username,
-              perms: bankData.is_admin 
+              perms: matchingPosRecord?.perms || (bankData.is_admin 
                 ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
-                : ['pos', 'pickup'],
-              is_admin: bankData.is_admin
+                : ['pos', 'pickup']),
+              is_admin: bankData.is_admin,
+              is_shadowbanned: Boolean(bankData.is_shadowbanned || matchingPosRecord?.is_shadowbanned)
             };
             setCurrentPosUser(bankUser);
             setPosScreen('kassa');
@@ -2840,6 +3421,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       (!u.password || u.password === cleanPass || cleanPass === '1234' || cleanPass === 'admin123')
     );
     if (user) {
+      if (user.is_banned || user.is_suspended || blockedDevices.some(b => b.value.toLowerCase() === cleanU)) {
+        logAuditAction('GEBLOKKEERDE_LOGIN_POGING', `Geblokkeerd account @${cleanU} probeerde in te loggen.`);
+        return { success: false, message: '⛔ Dit account is geblokkeerd door de beheerder. Toegang geweigerd.' };
+      }
       setCurrentPosUser(user);
       setPosScreen('kassa');
       return { success: true, message: `Welkom, ${user.name}!` };
@@ -2908,6 +3493,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       : (existing?.password || '1234');
 
     const finalUser: PosUser = {
+      ...existing,
       ...u,
       password: resolvedPassword
     };
@@ -2920,14 +3506,19 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       setCurrentPosUser(finalUser);
     }
 
+    if (shouldBlockTableWrite(`Medewerker @${finalUser.username} bewerken`)) {
+      return { success: true, message: `Gebruiker ${finalUser.name} succesvol opgeslagen!` };
+    }
+
     if (posClient) {
       try {
+        const dbPerms = buildDbPermsForUser(finalUser);
         await posClient.from('pos_users').upsert({
           id: finalUser.id,
           name: finalUser.name,
           username: finalUser.username,
           password: finalUser.password,
-          perms: finalUser.perms,
+          perms: dbPerms,
           is_admin: finalUser.is_admin
         });
       } catch {}
@@ -2943,6 +3534,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     setPosUsers(updated);
     localStorage.setItem('wd_pos_users', JSON.stringify(updated));
 
+    if (shouldBlockTableWrite(`Nieuwe medewerker @${u.username} aanmaken`)) {
+      return { success: true, message: `Nieuwe medewerker ${u.name} aangemaakt!` };
+    }
+
     if (posClient) {
       try {
         await posClient.from('pos_users').insert({
@@ -2950,7 +3545,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           name: u.name,
           username: u.username,
           password: u.password,
-          perms: u.perms,
+          perms: buildDbPermsForUser(newUser),
           is_admin: u.is_admin
         });
       } catch {}
@@ -2974,6 +3569,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     setPosUsers(updated);
     localStorage.setItem('wd_pos_users', JSON.stringify(updated));
 
+    if (shouldBlockTableWrite(`Medewerker @${target.username} verwijderen`)) {
+      return { success: true, message: `Gebruiker ${target.name} verwijderd.` };
+    }
+
     if (posClient) {
       try {
         await posClient.from('pos_users').delete().eq('id', userId);
@@ -2987,6 +3586,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   const createProduct = async (p: Omit<Product, 'id'>) => {
     const newP: Product = { ...p, id: Date.now() };
     setProducts(prev => [...prev, newP]);
+    if (shouldBlockTableWrite(`Product "${p.name}" aanmaken`)) return;
     if (posClient) {
       try {
         await posClient.from('products').insert(newP);
@@ -2996,6 +3596,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const updateProduct = async (p: Product) => {
     setProducts(prev => prev.map(x => x.id === p.id ? p : x));
+    if (shouldBlockTableWrite(`Product "${p.name}" wijzigen naar €${p.price}`)) return;
     if (posClient) {
       try {
         await posClient.from('products').upsert(p);
@@ -3004,6 +3605,12 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   };
 
   const deleteProduct = async (id: number) => {
+    const prod = products.find(x => x.id === id);
+    if (shouldBlockTableWrite(`Product "${prod?.name || id}" verwijderen`)) {
+      setProducts(prev => prev.filter(x => x.id !== id));
+      return;
+    }
+    saveDisasterRecoverySnapshot();
     setProducts(prev => prev.filter(x => x.id !== id));
     if (posClient) {
       try {
@@ -3017,6 +3624,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   };
 
   const resetProductsToDefault = () => {
+    if (shouldBlockTableWrite('Menulijst resetten')) {
+      setProducts(DEFAULT_PRODUCTS);
+      return;
+    }
+    saveDisasterRecoverySnapshot();
     localStorage.setItem('wd_products', JSON.stringify(DEFAULT_PRODUCTS));
     localStorage.setItem('wd_products_version', 'v6_werk_only_138');
     setProducts(DEFAULT_PRODUCTS);
@@ -3078,6 +3690,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     setGiftCards(prev => [...prev, newGc]);
     localStorage.setItem('wd_gift_cards', JSON.stringify([...giftCards, newGc]));
 
+    if (shouldBlockTableWrite(`Cadeaubon ${cleanCode} aanmaken`)) return;
+
     if (posClient) {
       try {
         await posClient.from('gift_cards').insert({
@@ -3114,6 +3728,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const topUpGiftCard = async (id: number, amount: number) => {
     setGiftCards(prev => prev.map(g => g.id === id ? { ...g, current_balance: g.current_balance + amount } : g));
+    if (shouldBlockTableWrite(`Cadeaubon #${id} opwaarderen`)) return;
     if (posClient) {
       try {
         const { data } = await posClient.from('gift_cards').select('current_balance').eq('id', id).single();
@@ -3127,6 +3742,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const deleteGiftCard = async (id: number) => {
     setGiftCards(prev => prev.filter(g => g.id !== id));
+    if (shouldBlockTableWrite(`Cadeaubon #${id} verwijderen`)) return;
     if (posClient) {
       try {
         await posClient.from('gift_cards').delete().eq('id', id);
@@ -3139,6 +3755,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   const createCoupon = async (coupon: Omit<Coupon, 'id'>) => {
     const newC: Coupon = { ...coupon, id: Date.now() };
     setCoupons(prev => [...prev, newC]);
+    if (shouldBlockTableWrite(`Coupon ${newC.code} aanmaken`)) return;
     if (posClient) {
       try {
         await posClient.from('coupons').insert({
@@ -3165,6 +3782,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       }
       return c;
     }));
+    if (shouldBlockTableWrite(`Coupon #${id} status wijzigen`)) return;
     if (posClient) {
       try {
         await posClient.from('coupons').update({ is_active: nextActiveState }).eq('id', id);
@@ -3343,7 +3961,25 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         isBlocked,
         blockedReason,
         clientIp,
-        deviceId
+        deviceId,
+        masterPin,
+        verifyMasterPin,
+        updateMasterPin,
+        banAndSuspendUser,
+        unbanUser,
+        toggleShadowbanUser,
+        enable2FAForUser,
+        disable2FAForUser,
+        verify2FACodeForUser,
+        pending2FALogin,
+        setPending2FALogin,
+        confirm2FALogin,
+        tablesFrozen,
+        toggleTablesFrozen,
+        saveDisasterRecoverySnapshot,
+        restoreDisasterRecoverySnapshot,
+        auditLogs,
+        logAuditAction
       }}
     >
       {children}

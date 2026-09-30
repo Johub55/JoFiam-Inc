@@ -4,7 +4,9 @@ import { euro } from '../../services/store';
 import { Product, Coupon, GiftCard, PosUser } from '../../types';
 import { DiyTerminalModal } from './DiyTerminalModal';
 import { VipWerkPaySubscriptionModal } from './VipWerkPaySubscriptionModal';
+import { TwoFactorSetupModal } from '../TwoFactorSetupModal';
 import { showToast } from '../../services/appToast';
+import { ZERO_CHANGES_FREEZE_SQL, ZERO_CHANGES_UNFREEZE_SQL, SHADOWBAN_SECURITY_PATCH_SQL } from '../../services/sqlScripts';
 import { 
   getLoyaltyCustomers, 
   saveLoyaltyCustomers, 
@@ -80,8 +82,48 @@ export const ManagerScreen: React.FC = () => {
     blockAllOtherDevices,
     activeSessions,
     clientIp,
-    deviceId
+    deviceId,
+    masterPin,
+    verifyMasterPin,
+    updateMasterPin,
+    banAndSuspendUser,
+    unbanUser,
+    toggleShadowbanUser,
+    tablesFrozen,
+    toggleTablesFrozen,
+    saveDisasterRecoverySnapshot,
+    restoreDisasterRecoverySnapshot,
+    auditLogs,
+    logAuditAction
   } = useApp();
+
+  // Master PIN Security Modal State & 2FA Setup State
+  const [setup2FAUser, setSetup2FAUser] = useState<string | null>(null);
+  const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
+  const [pinModalTitle, setPinModalTitle] = useState<string>('');
+  const [pinModalInput, setPinModalInput] = useState<string>('');
+  const [pinModalAction, setPinModalAction] = useState<(() => void) | null>(null);
+  const [showEditMasterPinModal, setShowEditMasterPinModal] = useState<boolean>(false);
+  const [newMasterPinVal, setNewMasterPinVal] = useState<string>('');
+
+  const executeWithMasterPin = (title: string, action: () => void) => {
+    setPinModalTitle(title);
+    setPinModalAction(() => action);
+    setPinModalInput('');
+    setPinModalOpen(true);
+  };
+
+  const handlePinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (verifyMasterPin(pinModalInput)) {
+      setPinModalOpen(false);
+      showToast('🔑 Master Security PIN Bevestigd!', 'success');
+      if (pinModalAction) pinModalAction();
+    } else {
+      showToast('❌ Onjuiste Master Security PIN! Actie geblokkeerd.', 'error');
+      logAuditAction('MASTER_PIN_FOUT', `Foutieve PIN poging ingevoerd bij ${pinModalTitle}`);
+    }
+  };
 
   // Device & IP Block Form State
   const [blockType, setBlockType] = useState<'ip' | 'device'>('ip');
@@ -444,6 +486,26 @@ export const ManagerScreen: React.FC = () => {
           </div>
 
           <button
+            onClick={() => {
+              executeWithMasterPin(
+                tablesFrozen ? 'Tabellen Ontgrendelen' : '0-Veranderingen Tabel-Slot Activeren',
+                async () => {
+                  const res = await toggleTablesFrozen();
+                  showToast(res.message, !tablesFrozen ? 'warning' : 'success');
+                }
+              );
+            }}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black border transition shadow ${
+              tablesFrozen
+                ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-400 animate-pulse'
+                : 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+            }`}
+          >
+            <Lock className="w-4 h-4" />
+            <span>{tablesFrozen ? '🔒 TABELLEN BEVROREN (0 Veranderingen Actief)' : '🛡️ Bevries Tabellen (0 Veranderingen)'}</span>
+          </button>
+
+          <button
             onClick={() => setShowZReport(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
           >
@@ -570,6 +632,151 @@ export const ManagerScreen: React.FC = () => {
                 <Cpu className="w-4 h-4" />
                 <span>Open Pinapparaat Terminal</span>
               </button>
+            </div>
+          </div>
+
+          {/* 🛡️ Tamper-Proof Veiligheid, Audit Trail & Noodherstel Card */}
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 shadow space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                    <span>🛡️ Tamper-Proof Beveiliging, Audit Trail &amp; Noodherstel</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800 font-mono">
+                      Master Shield
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Beveilig je kassa tegen sabotages, wisacties en uitgeschakelde accounts.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    executeWithMasterPin('Noodherstel Uitvoeren', async () => {
+                      const res = await restoreDisasterRecoverySnapshot();
+                      showToast(res.message, res.success ? 'success' : 'error');
+                    });
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow flex items-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>🚨 Noodherstel (Herstel Back-up Snapshot)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <strong className="text-amber-300 block font-bold flex items-center gap-1.5">
+                  <Key className="w-4 h-4 text-amber-400" />
+                  Master Security PIN
+                </strong>
+                <p className="text-slate-400 text-[11px]">
+                  Master Security PIN beveiligt alle gevoelige acties (gebruikers verwijderen, menu wissen, back-up herstellen).
+                </p>
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-slate-400 font-mono">Opslag: <strong className="text-emerald-400">Beveiligd in pos_settings (Supabase)</strong></span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      executeWithMasterPin('Master PIN Wijzigen', () => {
+                        const newPin = prompt('Voer de NIEUWE 4-cijferige Master Security PIN in:');
+                        if (newPin && newPin.trim().length >= 4) {
+                          updateMasterPin(newPin.trim());
+                          showToast('Master Security PIN succesvol bijgewerkt!', 'success');
+                        }
+                      });
+                    }}
+                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold"
+                  >
+                    PIN Wijzigen
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <strong className="text-emerald-300 block font-bold flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  1-Klik 0-Veranderingen Tabel-Slot &amp; Automatische Nep-Rechten
+                </strong>
+                <p className="text-slate-400 text-[11px]">
+                  <strong>Nep-Rechten (👻 Shadowban)</strong> en <strong>Blokkades</strong> werken nu 100% automatisch online via de al bestaande <code className="text-purple-300 font-mono">perms</code> kolom (<strong>je hoeft zelf 0 SQL aan te passen!</strong>). Met de knop hieronder bevries je direct alle tabellen zodat er 0 wijzigingen plaatsvinden:
+                </p>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      executeWithMasterPin(
+                        tablesFrozen ? 'Tabellen Ontgrendelen' : '0-Veranderingen Tabel-Slot Activeren',
+                        async () => {
+                          const res = await toggleTablesFrozen();
+                          showToast(res.message, !tablesFrozen ? 'warning' : 'success');
+                        }
+                      );
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[11px] font-black transition ${
+                      tablesFrozen
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white'
+                    }`}
+                  >
+                    {tablesFrozen ? '🔓 Ontgrendel Tabellen Nu' : '🔒 Bevries Tabellen Nu (0 Veranderingen)'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ZERO_CHANGES_FREEZE_SQL);
+                      showToast('🔒 1-Regel Server Lock SQL gekopieerd! Plak in Supabase om op server-niveau élke wijziging te blokkeren.', 'success');
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-500/30 text-[10px] font-bold"
+                  >
+                    📋 Kopieer 1-Regel SQL Slot
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ZERO_CHANGES_UNFREEZE_SQL);
+                      showToast('🔓 SQL Ontgrendeling gekopieerd!', 'success');
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold"
+                  >
+                    📋 Kopieer SQL Unlock
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Audit Log Table */}
+            <div className="space-y-2 pt-2 border-t border-slate-800">
+              <h4 className="font-bold text-white text-xs flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5 text-amber-400" />
+                <span>🕵️ Veiligheids &amp; Audit Logboek (Laatste {auditLogs.length} acties)</span>
+              </h4>
+              <div className="max-h-40 overflow-y-auto bg-slate-950 border border-slate-800 rounded-xl p-2 space-y-1 font-mono text-[11px]">
+                {auditLogs.length > 0 ? (
+                  auditLogs.map((log, idx) => (
+                    <div key={log.id || idx} className="p-1.5 rounded bg-slate-900/60 flex items-center justify-between gap-2 border border-slate-800/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 font-bold">[{log.timestamp}]</span>
+                        <span className="text-emerald-300 font-bold">{log.action}:</span>
+                        <span className="text-slate-300">{log.details}</span>
+                      </div>
+                      <span className="text-slate-500 text-[10px]">{log.user_name}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-500 italic p-2 text-center text-[11px]">
+                    Nog geen veiligheidsacties geregistreerd.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1810,18 +2017,28 @@ export const ManagerScreen: React.FC = () => {
                 <div key={u.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col gap-2.5 text-xs transition hover:border-slate-700">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <div className="font-extrabold text-white text-sm flex items-center gap-2">
+                      <div className="font-extrabold text-white text-sm flex items-center gap-2 flex-wrap">
                         <span>{u.name}</span>
                         {isJoas && (
                           <span className="text-[10px] px-2 py-0.2 rounded-full font-black bg-purple-500/20 text-purple-300 border border-purple-500/40">
                             Eigenaar
                           </span>
                         )}
+                        {u.is_banned && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                            ⛔ Account Geblokkeerd (Rechten Zichtbaar)
+                          </span>
+                        )}
+                        {u.is_shadowbanned && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                            👻 Nep-Rechten (Shadowban Sandbox)
+                          </span>
+                        )}
                       </div>
                       <div className="text-[11px] text-slate-400 font-mono">@{u.username}</div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap justify-end">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                         u.is_admin 
                           ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' 
@@ -1831,6 +2048,20 @@ export const ManagerScreen: React.FC = () => {
                       }`}>
                         {u.is_admin ? 'Manager' : u.username === 'bestel_kassa' || u.username === 'klant' ? 'Klant' : 'Medewerker'}
                       </span>
+
+                      <button
+                        type="button"
+                        onClick={() => setSetup2FAUser(u.username)}
+                        className={`px-2 py-1 rounded-lg font-extrabold text-[11px] border flex items-center gap-1 transition ${
+                          u.is_2fa_enabled
+                            ? 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 shadow-sm'
+                            : 'bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border-purple-500/40'
+                        }`}
+                        title="Stel 2FA Tweestapsverificatie in (QR Code & Authenticator)"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span>{u.is_2fa_enabled ? '🔐 2FA Actief' : '🔐 2FA Instellen'}</span>
+                      </button>
 
                       {canEditThisUser ? (
                         <button
@@ -1854,14 +2085,75 @@ export const ManagerScreen: React.FC = () => {
                       )}
 
                       {!isJoas && u.username !== 'bestel_kassa' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u)}
-                          className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
-                          title="Medewerker verwijderen"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              executeWithMasterPin(
+                                u.is_shadowbanned
+                                  ? `Nep-Rechten (Shadowban) Uitzetten voor @${u.username}`
+                                  : `👻 Nep-Rechten (Shadowban) Aanzetten voor @${u.username}`,
+                                async () => {
+                                  const res = await toggleShadowbanUser(u.username);
+                                  showToast(res.message, 'success');
+                                }
+                              );
+                            }}
+                            className={`px-2 py-1 rounded-lg font-extrabold text-[11px] border flex items-center gap-1 transition ${
+                              u.is_shadowbanned
+                                ? 'bg-purple-600 text-white border-purple-400 shadow-sm'
+                                : 'bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border-purple-500/40'
+                            }`}
+                            title="Geef hem zichtbaar alle rechten waar hij om vraagt, maar negeer op de achtergrond alles wat hij probeert te wissen of slopen!"
+                          >
+                            <span>{u.is_shadowbanned ? '👻 Nep-Rechten AAN' : '👻 Nep-Rechten'}</span>
+                          </button>
+
+                          {u.is_banned ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                executeWithMasterPin(`Account @${u.username} Deblokkeren`, async () => {
+                                  const res = await unbanUser(u.username);
+                                  showToast(res.message, 'success');
+                                });
+                              }}
+                              className="px-2 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 font-extrabold text-[11px] border border-emerald-500/40 flex items-center gap-1 transition"
+                              title="Hef blokkade voor dit account op"
+                            >
+                              <Unlock className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>🔓 Deblokkeer</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                executeWithMasterPin(`Account @${u.username} Schorsen & Blokkeren (Toestemmingen blijven zichtbaar staan)`, async () => {
+                                  const res = await banAndSuspendUser(u.username, 'Account geblokkeerd met behoud van zichtbare rechten');
+                                  showToast(res.message, res.success ? 'success' : 'error');
+                                });
+                              }}
+                              className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 font-extrabold text-[11px] border border-rose-500/40 flex items-center gap-1 transition"
+                              title="Blokkeer account direct terwijl zijn aangevinkte toestemmingen gewoon zichtbaar blijven staan"
+                            >
+                              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" />
+                              <span>🚷 Schors &amp; Blokkeer</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              executeWithMasterPin(`Medewerker ${u.name} Verwijderen`, () => {
+                                handleDeleteUser(u);
+                              });
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                            title="Medewerker verwijderen"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -2347,6 +2639,62 @@ export const ManagerScreen: React.FC = () => {
             setLoyaltyCustomers(getLoyaltyCustomers());
             setVipModalCustomer(null);
           }}
+        />
+      )}
+
+      {/* 🔑 Master PIN Security Gate Modal */}
+      {pinModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <form onSubmit={handlePinSubmit} className="bg-slate-900 border border-amber-500/40 rounded-3xl w-full max-w-sm p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Lock className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-white text-base">🔑 Master Security PIN</h3>
+                <p className="text-xs text-slate-400">{pinModalTitle || 'Geautoriseerde actie'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-950/30 border border-amber-500/20 rounded-xl text-xs text-amber-200">
+              Voer de 4-cijferige Master Security PIN in om deze actie uit te voeren.
+            </div>
+
+            <input
+              type="password"
+              maxLength={8}
+              autoFocus
+              required
+              value={pinModalInput}
+              onChange={e => setPinModalInput(e.target.value)}
+              placeholder="****"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 text-center text-2xl tracking-[0.5em] font-mono text-amber-400 focus:border-amber-400 outline-none"
+            />
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPinModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs"
+              >
+                Annuleren
+              </button>
+              <button
+                type="submit"
+                className="flex-1 py-2.5 rounded-xl font-black bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs shadow-lg shadow-amber-400/20"
+              >
+                Bevestigen &amp; Uitvoeren
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 🔑 2FA Setup Modal */}
+      {setup2FAUser && (
+        <TwoFactorSetupModal
+          username={setup2FAUser}
+          onClose={() => setSetup2FAUser(null)}
         />
       )}
 

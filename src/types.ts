@@ -113,6 +113,12 @@ export interface BankAccount {
   pin_code?: string;
   balance: number;
   is_admin: boolean;
+  is_banned?: boolean;
+  is_suspended?: boolean;
+  is_shadowbanned?: boolean;
+  is_2fa_enabled?: boolean;
+  totp_secret?: string;
+  backup_codes?: string[];
   created_at?: string;
 }
 
@@ -190,6 +196,12 @@ export interface PosUser {
   password?: string;
   perms: string[];
   is_admin?: boolean;
+  is_banned?: boolean;
+  is_suspended?: boolean;
+  is_shadowbanned?: boolean;
+  is_2fa_enabled?: boolean;
+  totp_secret?: string;
+  backup_codes?: string[];
   is_terminal_locked?: boolean;
   assigned_screen?: PosScreenType;
   session_token?: string;

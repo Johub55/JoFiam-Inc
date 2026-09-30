@@ -24,6 +24,12 @@ CREATE TABLE IF NOT EXISTS public.bank_accounts (
   pin_code TEXT NOT NULL DEFAULT '1234',
   balance NUMERIC(12, 2) NOT NULL DEFAULT 25.00,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  totp_secret TEXT DEFAULT '',
+  backup_codes JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -111,6 +117,12 @@ CREATE TABLE IF NOT EXISTS public.pos_users (
   password TEXT NOT NULL,
   perms JSONB NOT NULL DEFAULT '["pos","kitchen","pickup"]'::jsonb,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  totp_secret TEXT DEFAULT '',
+  backup_codes JSONB DEFAULT '[]'::jsonb,
   session_token TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -236,6 +248,27 @@ ALTER TABLE public.loyalty_customers ADD COLUMN IF NOT EXISTS orders_today_count
 
 ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS pin_code TEXT NOT NULL DEFAULT '1234';
 ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS totp_secret TEXT DEFAULT '';
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS backup_codes JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS totp_secret TEXT DEFAULT '';
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS backup_codes JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.products ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS master_security_pin TEXT DEFAULT '1234';
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS tables_frozen BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS identifier TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS notes TEXT;
@@ -284,6 +317,10 @@ BEGIN
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'message', 'Ongeldige inloggegevens');
+  END IF;
+
+  IF v_acc.is_banned = TRUE OR v_acc.is_suspended = TRUE THEN
+    RETURN jsonb_build_object('success', false, 'message', '⚠️ Dit account is geschorst en geblokkeerd voor toegang.');
   END IF;
 
   RETURN jsonb_build_object(
@@ -497,6 +534,28 @@ CREATE TRIGGER trg_orders_bank_payment
   FOR EACH ROW
   EXECUTE FUNCTION public.trg_fn_process_order_bank_payment();
 
+-- 3.4 1-KLIK SERVER-NIVEAU TABEL BEVRIEZING (0 VERANDERINGEN AAN TABELLEN)
+CREATE OR REPLACE FUNCTION public.werkdonalds_set_tables_readonly(p_lock BOOLEAN, p_allow_orders BOOLEAN DEFAULT TRUE)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF p_lock THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.products, public.pos_users, public.bank_accounts, public.coupons, public.gift_cards, public.inventory FROM anon, authenticated;
+    IF NOT p_allow_orders THEN
+      REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+    END IF;
+    UPDATE public.pos_settings SET tables_frozen = TRUE WHERE id = 'default';
+    RETURN jsonb_build_object('success', true, 'locked', true, 'message', '🔒 Alle tabellen zijn nu op server-niveau vergrendeld (0 veranderingen mogelijk)!');
+  ELSE
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+    UPDATE public.pos_settings SET tables_frozen = FALSE WHERE id = 'default';
+    RETURN jsonb_build_object('success', true, 'locked', false, 'message', '🔓 Tabel-slot opgeheven: wijzigingen zijn weer toegestaan.');
+  END IF;
+END;
+$$;
+
 -- 4. BEVEILIGING (ROW LEVEL SECURITY & RECHTEN)
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.bank_accounts ENABLE ROW LEVEL SECURITY;
@@ -615,6 +674,12 @@ CREATE TABLE IF NOT EXISTS public.bank_accounts (
   pin_code TEXT NOT NULL DEFAULT '1234',
   balance NUMERIC(12, 2) NOT NULL DEFAULT 25.00,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  totp_secret TEXT DEFAULT '',
+  backup_codes JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -664,6 +729,12 @@ CREATE TABLE IF NOT EXISTS public.pos_users (
   password TEXT NOT NULL,
   perms JSONB NOT NULL DEFAULT '["pos","kitchen","pickup"]'::jsonb,
   is_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_suspended BOOLEAN NOT NULL DEFAULT FALSE,
+  is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE,
+  is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  totp_secret TEXT DEFAULT '',
+  backup_codes JSONB DEFAULT '[]'::jsonb,
   session_token TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -761,3 +832,122 @@ ON CONFLICT (id) DO UPDATE SET
   cat = EXCLUDED.cat,
   emoji = EXCLUDED.emoji;
 `;
+
+/* 
+ * 4. OUDE LAPTOP / EIGEN DATABASE SETUP (SELF-HOSTED POSTGRESQL & SUPABASE DOCKER)
+ * ==============================================================================
+ * Wil je een oude laptop instellen als je eigen lokale database server?
+ * 
+ * STAP 1: Installeer Docker op je oude laptop (Linux Ubuntu/Debian aanbevolen, of Windows Docker Desktop).
+ * STAP 2: Draai een Supabase of PostgreSQL container:
+ *         git clone --depth 1 https://github.com/supabase/supabase
+ *         cd supabase/docker
+ *         cp .env.example .env
+ *         docker compose up -d
+ * STAP 3: Je lokale Supabase Studio draait nu op http://<IP_VAN_LAPTOP>:8000
+ * STAP 4: Open SQL Editor in Studio en voer onderstaand script uit!
+ * STAP 5: Vul in Werkdonalds POS bij 'Live Realtime' (Setup) het IP-adres van je laptop in:
+ *         URL: http://192.168.x.x:8000
+ * ==============================================================================
+ */
+
+export const SELF_HOSTED_LAPTOP_SQL = `-- ==============================================================================
+-- WERKDONALDS POS, DE KOEKPLOEG & WERKPAY - OUDE LAPTOP / SELF-HOSTED DATABASE SCRIPT
+-- ==============================================================================
+-- Dit script is geoptimaliseerd voor een eigen lokale PostgreSQL / Docker Supabase server op een oude laptop.
+-- 
+-- INSTRUCTIES DOCKER SERVER OP OUDE LAPTOP:
+-- 1. Install Docker & Docker Compose op de oude laptop.
+-- 2. Voer uit: docker run -d --name werkdonalds-db -e POSTGRES_PASSWORD=werkdonalds123 -p 5432:5432 postgres:15
+-- 3. Of gebruik Supabase CLI: npx supabase init && npx supabase start
+-- 4. Voer onderstaand SQL script uit in pgAdmin, psql of Supabase Studio (http://localhost:5432 of port 8000)
+-- ==============================================================================
+
+` + UNIFIED_SUPABASE_SQL;
+
+/* 
+ * 5. ZIMAOS & REMOTE NETWORKS (TAILSCALE / CLOUDFLARE TUNNEL / PORT FORWARDING)
+ * ==============================================================================
+ * JA! Werkdonalds POS & WerkPay draaien perfect op ZimaOS (op ZimaBoard, ZimaCube of oude PC/laptop met ZimaOS).
+ *
+ * TOEGANG VANAF ANDERE NETWERKEN (4G/5G, THUIS, ANDERE FILIALEN):
+ * 1. Zima Client Remote Access: Ingebouwd in ZimaOS voor directe versleutelde P2P verbinding.
+ * 2. Tailscale App (ZimaOS App Store): Installeer Tailscale met 1-klik in ZimaOS. Kassa's en telefoons
+ *    met Tailscale kunnen nu vanaf ELK netwerk ter wereld verbinden met bijv. http://100.x.x.x:8000!
+ * 3. Cloudflare Tunnel / Public Domain: Koppel een eigen domein (bijv. pos.jouwdomein.nl) aan je ZimaOS server.
+ * ==============================================================================
+ */
+
+export const ZIMAOS_SUPABASE_SQL = `-- ==============================================================================
+-- WERKDONALDS POS & WERKPAY - ZIMAOS & REMOTE NETWORKS (SELF-HOSTED DATABASE)
+-- ==============================================================================
+-- Geschikt voor ZimaOS (ZimaBoard, ZimaCube, of Oude PC/Laptop geflasht met ZimaOS)
+--
+-- ZIMAOS LOKAAL & REMOTE STAPPENPLAN:
+-- 1. Open ZimaOS Dashboard op je netwerk (http://zimaos.local of IP-adres).
+-- 2. Ga naar de ZimaOS App Store of klik op '+' voor Custom Docker Compose.
+-- 3. Installeer PostgreSQL of Supabase Docker container.
+-- 4. Voer onderstaand SQL-script uit via Supabase Studio (port 8000) of pgAdmin.
+-- 5. TOEGANG VANAF ANDERE NETWERKEN (4G/5G / Externe Locaties):
+--    - Installeer Tailscale via ZimaOS App Store -> Koppel kassa/telefoons via Tailscale IP (bijv. http://100.x.y.z:8000).
+--    - Of gebruik Cloudflare Tunnel voor toegang via je eigen domeinnaam (bijv. https://db.jouwbedrijf.nl).
+-- ==============================================================================
+
+` + UNIFIED_SUPABASE_SQL;
+
+// 6. SNELLE BEVEILIGING & 0-VERANDERINGEN SQL SNIPPETS
+export const ZERO_CHANGES_FREEZE_SQL = `-- 🔒 1-SECONDE NOODSLOT: 0 VERANDERINGEN AAN TABELLEN TOESTAAN (READ-ONLY)
+-- Plak en klik op RUN in Supabase om direct alle wijzigingen/verwijderingen te blokkeren:
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.products, public.pos_users, public.bank_accounts, public.coupons, public.gift_cards, public.inventory FROM anon, authenticated;`;
+
+export const ZERO_CHANGES_TOTAL_LOCKDOWN_SQL = `-- 🧊 TOTALE DATABASE LOCKDOWN: LETTERLIJK 0,0 SCHRIJFACTIES OP ALLE TABELLEN
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;`;
+
+export const ZERO_CHANGES_UNFREEZE_SQL = `-- 🔓 ONTGRENDEL TABELLEN WEER (NORMAAL BEWERKEN HERSTELLEN)
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;`;
+
+export const SHADOWBAN_SECURITY_PATCH_SQL = `-- 👻 NEP-RECHTEN (SHADOWBAN), ACCOUNT-BLOKKADE & 2-FACTOR AUTHENTICATIE PATCH
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS totp_secret TEXT DEFAULT '';
+ALTER TABLE public.pos_users ADD COLUMN IF NOT EXISTS backup_codes JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_shadowbanned BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS is_2fa_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS totp_secret TEXT DEFAULT '';
+ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS backup_codes JSONB DEFAULT '[]'::jsonb;
+
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS master_security_pin TEXT DEFAULT '1234';
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS tables_frozen BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
+
+CREATE OR REPLACE FUNCTION public.werkdonalds_set_tables_readonly(p_lock BOOLEAN, p_allow_orders BOOLEAN DEFAULT TRUE)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF p_lock THEN
+    REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON public.products, public.pos_users, public.bank_accounts, public.coupons, public.gift_cards, public.inventory FROM anon, authenticated;
+    IF NOT p_allow_orders THEN
+      REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+    END IF;
+    UPDATE public.pos_settings SET tables_frozen = TRUE WHERE id = 'default';
+    RETURN jsonb_build_object('success', true, 'locked', true);
+  ELSE
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+    UPDATE public.pos_settings SET tables_frozen = FALSE WHERE id = 'default';
+    RETURN jsonb_build_object('success', true, 'locked', false);
+  END IF;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.werkdonalds_set_tables_readonly TO anon, authenticated, service_role;`;
+
+
+
+

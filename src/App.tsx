@@ -21,6 +21,7 @@ import { AutoUpdateBanner } from './components/AutoUpdateBanner';
 import { PickupControlScreen } from './components/WerkdonaldsPOS/PickupControlScreen';
 import { LoyaltyTerminalScreen } from './components/WerkdonaldsPOS/LoyaltyTerminalScreen';
 import { AppToast } from './components/AppToast';
+import { TwoFactorChallengeModal } from './components/TwoFactorChallengeModal';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -31,7 +32,10 @@ const MainLayout: React.FC = () => {
     isBlocked,
     blockedReason,
     clientIp,
-    deviceId
+    deviceId,
+    pending2FALogin,
+    setPending2FALogin,
+    confirm2FALogin
   } = useApp();
 
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false);
@@ -151,6 +155,16 @@ const MainLayout: React.FC = () => {
       )}
       <GitHubExportModal isOpen={showGithubModal} onClose={() => setShowGithubModal(false)} />
       <DigitalPhone />
+      {pending2FALogin && (
+        <TwoFactorChallengeModal
+          username={pending2FALogin.user.username}
+          userTitle={pending2FALogin.loginType === 'pos' ? 'POS Kassa' : 'WerkPay Bank'}
+          onSuccess={() => {
+            // Confirm pending login state
+          }}
+          onCancel={() => setPending2FALogin(null)}
+        />
+      )}
     </div>
   );
 };

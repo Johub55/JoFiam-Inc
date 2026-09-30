@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { SCHEMA_ONLY_SUPABASE_SQL, BASIS_SUPABASE_SQL, UNIFIED_SUPABASE_SQL } from '../services/sqlScripts';
+import { SCHEMA_ONLY_SUPABASE_SQL, BASIS_SUPABASE_SQL, UNIFIED_SUPABASE_SQL, SELF_HOSTED_LAPTOP_SQL, ZIMAOS_SUPABASE_SQL, ZERO_CHANGES_FREEZE_SQL, ZERO_CHANGES_UNFREEZE_SQL, SHADOWBAN_SECURITY_PATCH_SQL } from '../services/sqlScripts';
 import { DEFAULT_PRODUCTS } from '../services/defaultProducts';
 import { showToast } from '../services/appToast';
 import { 
@@ -17,7 +17,13 @@ import {
   Download,
   CloudUpload,
   RefreshCw,
-  Shield
+  Shield,
+  Laptop,
+  Server,
+  Globe,
+  Wifi,
+  Cpu,
+  Network
 } from 'lucide-react';
 
 interface SupabaseModalProps {
@@ -25,14 +31,14 @@ interface SupabaseModalProps {
 }
 
 export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
-  const { supabaseConfig, setSupabaseConfig, isSupabaseConfigured, resetProductsToDefault } = useApp();
+  const { supabaseConfig, setSupabaseConfig, isSupabaseConfigured, resetProductsToDefault, tablesFrozen, toggleTablesFrozen } = useApp();
   const [copied, setCopied] = useState<boolean>(false);
   const [downloaded, setDownloaded] = useState<boolean>(false);
   const [syncingCloud, setSyncingCloud] = useState<boolean>(false);
   const [syncMsg, setSyncMsg] = useState<{ success: boolean; text: string } | null>(null);
 
-  // SQL Script variant: 'schema_only' (recommended: no product reset), 'basis', or 'full'
-  const [sqlVariant, setSqlVariant] = useState<'schema_only' | 'basis' | 'full'>('schema_only');
+  // SQL Script variant: 'schema_only', 'basis', 'full', 'laptop', or 'zimaos'
+  const [sqlVariant, setSqlVariant] = useState<'schema_only' | 'basis' | 'full' | 'laptop' | 'zimaos'>('schema_only');
 
   const [url, setUrl] = useState<string>(supabaseConfig.supabaseUrl || '');
   const [anonKey, setAnonKey] = useState<string>(supabaseConfig.supabaseAnonKey || '');
@@ -41,7 +47,11 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
   const activeSqlCode = 
     sqlVariant === 'schema_only' ? SCHEMA_ONLY_SUPABASE_SQL :
     sqlVariant === 'basis' ? BASIS_SUPABASE_SQL :
+    sqlVariant === 'laptop' ? SELF_HOSTED_LAPTOP_SQL :
+    sqlVariant === 'zimaos' ? ZIMAOS_SUPABASE_SQL :
     UNIFIED_SUPABASE_SQL;
+
+
 
   const handleCopySql = () => {
     try {
@@ -265,6 +275,32 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>📦 Volledig + Seed</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setSqlVariant('laptop')}
+                className={`flex-1 min-w-[130px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  sqlVariant === 'laptop'
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Laptop className="w-3.5 h-3.5" />
+                <span>💻 Oude Laptop</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSqlVariant('zimaos')}
+                className={`flex-1 min-w-[140px] px-3 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  sqlVariant === 'zimaos'
+                    ? 'bg-purple-500 text-white shadow-md shadow-purple-500/20 font-extrabold'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>⚡ ZimaOS &amp; Remote</span>
+              </button>
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -273,11 +309,15 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
                   {sqlVariant === 'schema_only' && '🛡️ Schema Only (Aanbevolen voor bestaande projecten)'}
                   {sqlVariant === 'basis' && '📄 Basis Schema (Alleen 5 kern-tabellen)'}
                   {sqlVariant === 'full' && '📦 Volledige Unificatie + Standaard Menu Data'}
+                  {sqlVariant === 'laptop' && '💻 Self-Hosted Script voor Oude Laptop / Docker Database'}
+                  {sqlVariant === 'zimaos' && '⚡ ZimaOS Server & Externe Netwerken (Tailscale / 4G / Cloudflare)'}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-medium">
                   {sqlVariant === 'schema_only' && '✓ Inclusief Telefoon Chat, Cash, Audit logs, RLS & Realtime — ZONDER jouw producten te overschrijven'}
                   {sqlVariant === 'basis' && '✓ Uitsluitend de basis-tabellen voor snelle opstart'}
                   {sqlVariant === 'full' && '✓ Alle tabellen + 138 standaard producten (ON CONFLICT DO NOTHING)'}
+                  {sqlVariant === 'laptop' && '✓ Geoptimaliseerd voor eigen Docker / PostgreSQL op een oude laptop op je lokale netwerk'}
+                  {sqlVariant === 'zimaos' && '✓ Geoptimaliseerd voor ZimaOS met Tailscale / Cloudflare Tunnel voor toegang vanaf elk ander netwerk'}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -335,6 +375,79 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
             {/* Quick Status / RLS Fix Snippets for Supabase */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               
+              {/* 1-Klik 0-Veranderingen Tabel-Slot & Nep-Rechten Box */}
+              <div className={`p-4 rounded-2xl space-y-3 col-span-1 sm:col-span-2 border ${
+                tablesFrozen
+                  ? 'bg-rose-950/50 border-rose-500/60 shadow-lg shadow-rose-500/10'
+                  : 'bg-purple-950/35 border-purple-500/40'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-xs font-black text-white flex items-center gap-2">
+                      {tablesFrozen ? '🔒 TABELLEN BEVROREN (0-Veranderingen Slot ACTIEF!)' : '🛡️ 1-Klik 0-Veranderingen Slot & Nep-Rechten (Zonder SQL nodig!)'}
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        ⚡ Automatisch Online via perms
+                      </span>
+                    </span>
+                    <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                      <strong>Nep-Rechten (👻 Shadowban)</strong> en <strong>Account-Blokkades</strong> werken nu <strong>100% automatisch online</strong> via de al bestaande <code className="text-purple-300 font-mono">perms</code> kolom in Supabase — je hoeft dus <strong>zelf 0 SQL aan te passen</strong>! Wil je daarnaast met 1 klik zorgen dat er <strong>0 veranderingen aan de tabellen</strong> kunnen worden gebracht? Gebruik de noodknop hieronder:
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await toggleTablesFrozen();
+                      showToast(res.message, !tablesFrozen ? 'warning' : 'success');
+                    }}
+                    className={`px-4 py-2.5 rounded-xl text-xs font-black transition shadow-lg shrink-0 flex items-center gap-2 ${
+                      tablesFrozen
+                        ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white'
+                    }`}
+                  >
+                    <span>{tablesFrozen ? '🔓 Ontgrendel Tabellen (Sta wijzigingen weer toe)' : '🔒 BEVRIJS TABELLEN NU (0 Veranderingen)'}</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ZERO_CHANGES_FREEZE_SQL);
+                      showToast('🔒 1-Regel "0-Veranderingen" SQL gekopieerd! Plak in Supabase SQL Editor om op server-niveau élke wijziging te blokkeren.', 'success');
+                    }}
+                    className="px-3 py-2 rounded-xl text-[11px] font-bold bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 transition text-left"
+                  >
+                    <strong className="block text-rose-300">📋 Kopieer Harde SQL Lock (1 regel)</strong>
+                    <span className="text-[10px] text-slate-400">REVOKE INSERT, UPDATE, DELETE (0 veranderingen mogelijk op server)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(ZERO_CHANGES_UNFREEZE_SQL);
+                      showToast('🔓 Ontgrendel SQL gekopieerd! Plak in Supabase om tabellen weer schrijfbaar te maken.', 'success');
+                    }}
+                    className="px-3 py-2 rounded-xl text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 transition text-left"
+                  >
+                    <strong className="block text-emerald-300">📋 Kopieer SQL Unlock (1 regel)</strong>
+                    <span className="text-[10px] text-slate-400">GRANT ALL ON ALL TABLES (heft harde server-lock weer op)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard?.writeText(SHADOWBAN_SECURITY_PATCH_SQL);
+                      showToast('👻 Nep-Rechten & RPC SQL Patch gekopieerd!', 'success');
+                    }}
+                    className="px-3 py-2 rounded-xl text-[11px] font-bold bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border border-purple-500/40 transition text-left"
+                  >
+                    <strong className="block text-purple-300">📋 Kopieer Nep-Rechten SQL (Optioneel)</strong>
+                    <span className="text-[10px] text-slate-400">Voegt extra kolommen &amp; server-lock RPC toe aan Supabase</span>
+                  </button>
+                </div>
+              </div>
+
               {/* WerkLoyalty Customers SQL Snippet */}
               <div className="p-3.5 bg-amber-950/30 border border-amber-500/30 rounded-2xl space-y-2 col-span-1 sm:col-span-2">
                 <div className="flex items-center justify-between gap-2">
@@ -595,16 +708,125 @@ END $$;`;
             )}
           </div>
 
+          {/* Special Laptop Self-Hosting Card */}
+          {sqlVariant === 'laptop' && (
+            <div className="bg-amber-950/40 border border-amber-500/40 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-amber-300 font-extrabold text-sm">
+                <Laptop className="w-5 h-5 text-amber-400" />
+                <span>💻 Handleiding: Jouw Oude Laptop als Eigen Database Server</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed text-xs">
+                Je kunt een oude laptop uitstekend ombouwen tot een supersnelle, gratis lokale database server voor je restaurant of kassa! Zo hoef je niets te betalen voor Supabase cloud.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-amber-500/20 space-y-1">
+                  <span className="font-bold text-amber-300 block">1. Docker op Oude Laptop</span>
+                  <p className="text-slate-400 text-[11px]">
+                    Installeer Linux (Ubuntu/Debian) of Windows met <strong>Docker Desktop</strong> op je oude laptop.
+                  </p>
+                </div>
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-amber-500/20 space-y-1">
+                  <span className="font-bold text-amber-300 block">2. Start Supabase / Postgres Container</span>
+                  <p className="text-slate-400 text-[11px]">
+                    Kloon Supabase Docker (<code className="text-amber-200">git clone https://github.com/supabase/supabase</code>) en voer <code className="text-amber-200">docker compose up -d</code> uit.
+                  </p>
+                </div>
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-amber-500/20 space-y-1">
+                  <span className="font-bold text-amber-300 block">3. Voer het SQL Script Uit</span>
+                  <p className="text-slate-400 text-[11px]">
+                    Open Supabase Studio op je laptop (<code className="text-amber-200">http://localhost:8000</code>) en plak het onderstaande SQL script.
+                  </p>
+                </div>
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-amber-500/20 space-y-1">
+                  <span className="font-bold text-amber-300 block">4. Vul Laptop IP In Bij Instellingen</span>
+                  <p className="text-slate-400 text-[11px]">
+                    Zoek het IP-adres van je laptop in je netwerk (bijv. <code className="text-amber-200">http://192.168.1.150:8000</code>) en vul het hieronder in!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Special ZimaOS & Externe Netwerken Card */}
+          {sqlVariant === 'zimaos' && (
+            <div className="bg-purple-950/40 border border-purple-500/40 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center gap-2 text-purple-300 font-extrabold text-sm">
+                <Globe className="w-5 h-5 text-purple-400" />
+                <span>⚡ Handleiding: ZimaOS Database &amp; Toegang Vanaf Andere Netwerken</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed text-xs">
+                <strong>Ja, dit kan 100% in ZimaOS!</strong> ZimaOS (op een ZimaBoard, ZimaCube of een oude laptop/PC geflasht met ZimaOS) is uitermate geschikt als jouw eigen privé cloud en database server.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-purple-500/20 space-y-1">
+                  <span className="font-bold text-purple-300 block flex items-center gap-1.5">
+                    <Cpu className="w-3.5 h-3.5 text-purple-400" />
+                    1. Installeer Database in ZimaOS
+                  </span>
+                  <p className="text-slate-400 text-[11px]">
+                    Open ZimaOS dashboard op je browser (<code className="text-purple-200">http://zimaos.local</code>). Ga naar de App Store of klik op <strong>+ Custom App (Docker Compose)</strong> en voeg PostgreSQL of Supabase toe.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-purple-500/20 space-y-1">
+                  <span className="font-bold text-purple-300 block flex items-center gap-1.5">
+                    <Database className="w-3.5 h-3.5 text-purple-400" />
+                    2. Voer het SQL Script Uit
+                  </span>
+                  <p className="text-slate-400 text-[11px]">
+                    Open Supabase Studio op je ZimaOS server (<code className="text-purple-200">http://&lt;zimaos-ip&gt;:8000</code>) en plak het onderstaande SQL script voor alle tabellen &amp; RPC functies.
+                  </p>
+                </div>
+
+                <div className="bg-slate-950/80 p-3 rounded-xl border border-purple-500/20 space-y-1 col-span-1 md:col-span-2">
+                  <span className="font-bold text-purple-300 block flex items-center gap-1.5 text-xs">
+                    <Network className="w-4 h-4 text-purple-400" />
+                    🌐 3. Hoe verbind je vanaf ANDERE NETWERKEN (4G/5G, thuis of externe filialen)?
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                    <div className="p-2 bg-slate-900 rounded-lg border border-purple-500/20">
+                      <strong className="text-purple-200 block text-[11px]">🔑 Optie A: Tailscale (Aanbevolen)</strong>
+                      <p className="text-[10px] text-slate-400">
+                        Installeer <strong>Tailscale</strong> direct met 1-klik in de ZimaOS App Store. Installeer de gratis Tailscale app op je kassa/telefoon. Je kunt nu via het Tailscale IP (<code className="text-purple-300">http://100.x.y.z:8000</code>) vanaf <strong>ELK netwerk ter wereld</strong> (4G/5G) veilig verbinden!
+                      </p>
+                    </div>
+
+                    <div className="p-2 bg-slate-900 rounded-lg border border-purple-500/20">
+                      <strong className="text-purple-200 block text-[11px]">🌐 Optie B: Cloudflare Tunnel</strong>
+                      <p className="text-[10px] text-slate-400">
+                        Draai de Cloudflare Tunnel Docker container op ZimaOS. Hiermee geef je je ZimaOS database gratis een openbaar HTTPS domein (bijv. <code className="text-purple-300">https://db.mijnrestaurant.nl</code>) zonder poorten open te zetten!
+                      </p>
+                    </div>
+
+                    <div className="p-2 bg-slate-900 rounded-lg border border-purple-500/20">
+                      <strong className="text-purple-200 block text-[11px]">🛡️ Optie C: Zima Client Remote ID</strong>
+                      <p className="text-[10px] text-slate-400">
+                        ZimaOS beschikt ingebouwd over Remote Access via Zima Account/Client ID voor beveiligde verbindingen buitenshuis.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Optional Supabase Credentials Connection */}
           <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h4 className="font-bold text-white">Verbind met jouw Supabase Project (Optioneel)</h4>
+                <h4 className="font-bold text-white flex items-center gap-2">
+                  <span>Verbind met jouw Supabase of Oude Laptop Database</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    Cloud &amp; Self-Hosted Compatible
+                  </span>
+                </h4>
                 <p className="text-[11px] text-slate-400">
-                  Vul hieronder je Supabase Project URL &amp; Anon Key in om rechtstreeks met de cloud te communiceren. (Als je dit leeg laat, werkt alles soepel via de snelle lokale database simulatie!)
+                  Vul hieronder je Supabase Project URL (of het lokale IP-adres van je laptop, bijv. <code className="text-cyan-300">http://192.168.1.100:8000</code>) &amp; Anon Key in.
                 </p>
               </div>
             </div>
+
 
             <form onSubmit={handleSaveCredentials} className="space-y-3">
               <div>
