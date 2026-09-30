@@ -392,12 +392,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         await client.from('pos_users').update({
           is_shadowbanned: Boolean(targetUser.is_shadowbanned),
           is_banned: Boolean(targetUser.is_banned),
-          is_suspended: Boolean(targetUser.is_suspended)
+          is_suspended: Boolean(targetUser.is_suspended),
+          is_2fa_enabled: Boolean(targetUser.is_2fa_enabled),
+          totp_secret: targetUser.totp_secret || '',
+          backup_codes: targetUser.backup_codes || []
         }).ilike('username', cleanU);
         await client.from('bank_accounts').update({
           is_shadowbanned: Boolean(targetUser.is_shadowbanned),
           is_banned: Boolean(targetUser.is_banned),
-          is_suspended: Boolean(targetUser.is_suspended)
+          is_suspended: Boolean(targetUser.is_suspended),
+          is_2fa_enabled: Boolean(targetUser.is_2fa_enabled),
+          totp_secret: targetUser.totp_secret || '',
+          backup_codes: targetUser.backup_codes || []
         }).ilike('username', cleanU);
       } catch {}
 
@@ -651,17 +657,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentPosUser(prev => prev ? { ...prev, is_2fa_enabled: true, totp_secret: secret, backup_codes: backupCodes } : null);
     }
 
-    const targetUser = posUsers.find(u => u.username.toLowerCase() === cleanU) || {
-      id: Date.now(),
-      name: cleanU,
-      username: cleanU,
-      perms: ['pos', 'pickup'],
-      is_admin: false,
+    const existingUser = posUsers.find(u => u.username.toLowerCase() === cleanU);
+    const userToSync: PosUser = {
+      ...(existingUser || {
+        id: Date.now(),
+        name: cleanU,
+        username: cleanU,
+        password: '1234',
+        perms: ['pos', 'manager'],
+        is_admin: true
+      }),
       is_2fa_enabled: true,
       totp_secret: secret,
       backup_codes: backupCodes
     };
-    await syncUserSecurityToSupabase({ ...targetUser, is_2fa_enabled: true, totp_secret: secret, backup_codes: backupCodes });
+    await syncUserSecurityToSupabase(userToSync);
 
     logAuditAction('2FA_INGESCHAKELD', `🔐 2FA Tweestapsverificatie succesvol geactiveerd voor @${cleanU}`);
     return { success: true, message: `2FA Tweestapsverificatie succesvol geactiveerd voor @${cleanU}!` };
@@ -691,10 +701,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setCurrentPosUser(prev => prev ? { ...prev, is_2fa_enabled: false, totp_secret: '', backup_codes: [] } : null);
     }
 
-    const targetUser = posUsers.find(u => u.username.toLowerCase() === cleanU);
-    if (targetUser) {
-      await syncUserSecurityToSupabase({ ...targetUser, is_2fa_enabled: false, totp_secret: '', backup_codes: [] });
-    }
+    try {
+      sessionStorage.removeItem(`wd_manager_unlocked_${cleanU}`);
+    } catch {}
+
+    const existingUser = posUsers.find(u => u.username.toLowerCase() === cleanU);
+    const disabledUser: PosUser = {
+      ...(existingUser || {
+        id: Date.now(),
+        name: cleanU,
+        username: cleanU,
+        password: '1234',
+        perms: ['pos', 'manager'],
+        is_admin: true
+      }),
+      is_2fa_enabled: false,
+      totp_secret: '',
+      backup_codes: []
+    };
+    await syncUserSecurityToSupabase(disabledUser);
 
     logAuditAction('2FA_UITGESCHAKELD', `2FA Tweestapsverificatie uitgeschakeld voor @${cleanU}`);
     return { success: true, message: `2FA uitgeschakeld voor @${cleanU}.` };
@@ -3356,10 +3381,6 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
             return { success: false, message: '⛔ Dit account is geblokkeerd door de beheerder. Toegang geweigerd.' };
           }
           if (data.password === cleanPass || data.password === pass) {
-            if (parsedDbUser.is_2fa_enabled) {
-              setPending2FALogin({ user: parsedDbUser, loginType: 'pos' });
-              return { success: false, message: '2FA_CHALLENGE_REQUIRED' };
-            }
             setCurrentPosUser(parsedDbUser);
             setPosScreen('kassa');
             // update local list
@@ -3403,7 +3424,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
                 ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
                 : ['pos', 'pickup']),
               is_admin: bankData.is_admin,
-              is_shadowbanned: Boolean(bankData.is_shadowbanned || matchingPosRecord?.is_shadowbanned)
+              is_shadowbanned: Boolean(bankData.is_shadowbanned || matchingPosRecord?.is_shadowbanned),
+              is_2fa_enabled: Boolean(bankData.is_2fa_enabled || matchingPosRecord?.is_2fa_enabled),
+              totp_secret: bankData.totp_secret || matchingPosRecord?.totp_secret,
+              backup_codes: bankData.backup_codes || matchingPosRecord?.backup_codes
             };
             setCurrentPosUser(bankUser);
             setPosScreen('kassa');
@@ -3442,7 +3466,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         perms: bankAcc.is_admin 
           ? ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay']
           : ['pos', 'pickup'],
-        is_admin: bankAcc.is_admin
+        is_admin: bankAcc.is_admin,
+        is_2fa_enabled: Boolean(bankAcc.is_2fa_enabled),
+        totp_secret: bankAcc.totp_secret,
+        backup_codes: bankAcc.backup_codes
       };
       setCurrentPosUser(bankUser);
       setPosScreen('kassa');

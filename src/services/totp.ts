@@ -216,8 +216,8 @@ export async function verifyTotpCode(secret: string, inputCode: string, backupCo
   }
 
   const now = Date.now();
-  // Check -30s, 0s, +30s time steps for clock drift tolerance
-  const timeSteps = [-1, 0, 1];
+  // Check -60s, -30s, 0s, +30s, +60s time steps for clock drift tolerance across devices
+  const timeSteps = [-2, -1, 0, 1, 2];
   for (const stepOffset of timeSteps) {
     const testTime = now + stepOffset * 30000;
     const expected = await generateTotpCode(secret, 30, testTime);

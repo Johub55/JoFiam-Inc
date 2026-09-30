@@ -338,6 +338,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
           return;
         }
         meta = { code: giftCardCode.trim().toUpperCase() };
+      } else if (paymentMethod === 'sumup') {
+        meta = { sumup: true, transaction_id: 'SUMUP-' + Math.random().toString(36).substring(2, 10).toUpperCase() };
       }
 
       if (activeLoyaltyCustomer) {

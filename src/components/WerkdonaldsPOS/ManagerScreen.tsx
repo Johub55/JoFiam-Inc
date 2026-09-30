@@ -5,6 +5,8 @@ import { Product, Coupon, GiftCard, PosUser } from '../../types';
 import { DiyTerminalModal } from './DiyTerminalModal';
 import { VipWerkPaySubscriptionModal } from './VipWerkPaySubscriptionModal';
 import { TwoFactorSetupModal } from '../TwoFactorSetupModal';
+import { TwoFactorChallengeModal } from '../TwoFactorChallengeModal';
+import { generateTotpCode, verifyTotpCode } from '../../services/totp';
 import { showToast } from '../../services/appToast';
 import { ZERO_CHANGES_FREEZE_SQL, ZERO_CHANGES_UNFREEZE_SQL, SHADOWBAN_SECURITY_PATCH_SQL } from '../../services/sqlScripts';
 import { 
@@ -46,7 +48,8 @@ import {
   ShieldAlert,
   Laptop,
   Smartphone,
-  Unlock
+  Unlock,
+  Zap
 } from 'lucide-react';
 
 export const ManagerScreen: React.FC = () => {
@@ -89,6 +92,7 @@ export const ManagerScreen: React.FC = () => {
     banAndSuspendUser,
     unbanUser,
     toggleShadowbanUser,
+    disable2FAForUser,
     tablesFrozen,
     toggleTablesFrozen,
     saveDisasterRecoverySnapshot,
@@ -105,6 +109,84 @@ export const ManagerScreen: React.FC = () => {
   const [pinModalAction, setPinModalAction] = useState<(() => void) | null>(null);
   const [showEditMasterPinModal, setShowEditMasterPinModal] = useState<boolean>(false);
   const [newMasterPinVal, setNewMasterPinVal] = useState<string>('');
+
+  // Manager Menu 2FA Security Gate State
+  const [managerUnlocked, setManagerUnlocked] = useState<boolean>(() => {
+    if (!currentPosUser) return false;
+    const sessionKey = `wd_manager_unlocked_${currentPosUser.username.toLowerCase()}`;
+    return sessionStorage.getItem(sessionKey) === 'true';
+  });
+  const [manager2FAInput, setManager2FAInput] = useState<string>('');
+  const [manager2FAError, setManager2FAError] = useState<string | null>(null);
+  const [verifyingManager2FA, setVerifyingManager2FA] = useState<boolean>(false);
+
+  const markManagerUnlocked = (method: string) => {
+    setManagerUnlocked(true);
+    if (currentPosUser) {
+      sessionStorage.setItem(`wd_manager_unlocked_${currentPosUser.username.toLowerCase()}`, 'true');
+    }
+  };
+
+  const handleUnlockManagerWith2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = manager2FAInput.trim();
+    if (!clean) {
+      setManager2FAError('Voer je 2FA code, wachtwoord of Master PIN in.');
+      return;
+    }
+    setVerifyingManager2FA(true);
+    setManager2FAError(null);
+
+    try {
+      const userHas2FA = Boolean(currentPosUser?.is_2fa_enabled);
+
+      // 1. Check 2FA TOTP code or Backup code if user has 2FA enabled
+      if (userHas2FA && currentPosUser && currentPosUser.totp_secret) {
+        const isValid2FA = await verifyTotpCode(currentPosUser.totp_secret, clean, currentPosUser.backup_codes);
+        if (isValid2FA) {
+          markManagerUnlocked('2FA');
+          showToast('🔐 2FA Geverifieerd! Welkom in het Manager Menu.', 'success');
+          logAuditAction('MANAGER_2FA_UNLOCK', `Manager menu ontgrendeld met 2FA door @${currentPosUser.username}`);
+          return;
+        }
+      }
+
+      // 2. Only allow user's own account password fallback IF the user does NOT have 2FA enabled!
+      if (!userHas2FA && currentPosUser && currentPosUser.password && (clean === currentPosUser.password || clean.toLowerCase() === currentPosUser.password.toLowerCase())) {
+        markManagerUnlocked('PASSWORD');
+        showToast('🔓 Account Wachtwoord Geverifieerd! Manager Menu Ontgrendeld.', 'success');
+        logAuditAction('MANAGER_PASS_UNLOCK', `Manager menu ontgrendeld met wachtwoord door @${currentPosUser.username}`);
+        return;
+      }
+
+      // 3. Check Master Security PIN (always allowed as emergency admin bypass)
+      if (verifyMasterPin(clean)) {
+        markManagerUnlocked('MASTER_PIN');
+        showToast('🔑 Master PIN Geverifieerd! Manager Menu Ontgrendeld.', 'success');
+        logAuditAction('MANAGER_PIN_UNLOCK', `Manager menu ontgrendeld met Master PIN door @${currentPosUser?.username || 'manager'}`);
+        return;
+      }
+
+      if (userHas2FA) {
+        setManager2FAError('❌ Ongeldige 2FA code of Master Security PIN. (Omdat 2FA actief is op dit account, is je normale wachtwoord hier geweigerd!)');
+      } else {
+        setManager2FAError('Ongeldige code, wachtwoord of Master PIN. Probeer opnieuw.');
+      }
+      logAuditAction('MANAGER_2FA_FOUT', `Foutieve ontgrendelpoging bij Manager Menu voor @${currentPosUser?.username}`);
+    } catch (err: any) {
+      setManager2FAError(err?.message || 'Fout bij verifiëren van code.');
+    } finally {
+      setVerifyingManager2FA(false);
+    }
+  };
+
+  const handleLaptopAutoFillManager = async () => {
+    if (currentPosUser && currentPosUser.totp_secret) {
+      const code = await generateTotpCode(currentPosUser.totp_secret);
+      setManager2FAInput(code);
+      showToast(`💻 Laptop 2FA Code '${code}' automatisch ingevuld!`, 'success');
+    }
+  };
 
   const executeWithMasterPin = (title: string, action: () => void) => {
     setPinModalTitle(title);
@@ -437,6 +519,105 @@ export const ManagerScreen: React.FC = () => {
     }
   };
 
+  if (!managerUnlocked) {
+    const userHas2FA = Boolean(currentPosUser?.is_2fa_enabled);
+
+    return (
+      <div className="flex-1 flex items-center justify-center bg-slate-950 p-4 sm:p-6">
+        <div className="bg-slate-900 border border-purple-500/40 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl space-y-6 text-white text-center">
+          <div className="w-16 h-16 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center mx-auto shadow-lg shadow-purple-950/50">
+            <ShieldCheck className="w-8 h-8 animate-pulse text-purple-300" />
+          </div>
+
+          {!userHas2FA ? (
+            <div className="space-y-5">
+              <div className="space-y-1.5">
+                <h2 className="text-xl font-black text-purple-400 flex items-center justify-center gap-2">
+                  <span>🔒 2FA Setup Verplicht</span>
+                </h2>
+                <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
+                  Om toegang te krijgen tot de managerinstellingen is tweestapsverificatie (2FA) verplicht gesteld door de beheerder. Stel nu 2FA in om door te gaan.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSetup2FAUser(currentPosUser?.username || 'manager')}
+                className="w-full py-3.5 rounded-2xl font-black text-sm bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg shadow-purple-600/25 flex items-center justify-center gap-2"
+              >
+                <span>🔑 Start 2FA Inschakelen</span>
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <h2 className="text-xl font-black text-white flex items-center justify-center gap-2">
+                  <span>🔐 Manager Menu Beveiligd</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono border border-purple-500/30">
+                    2FA Active
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                  Het Manager Menu bevat gevoelige gegevens (omzet, prijzen, personeel &amp; instellingen). Voer je 2FA code of Master Security PIN in om het menu te openen.
+                </p>
+              </div>
+
+              <form onSubmit={handleUnlockManagerWith2FA} className="space-y-4 text-left">
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-purple-400" />
+                      <span>2FA Code of Master PIN</span>
+                    </label>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="password"
+                      value={manager2FAInput}
+                      onChange={e => setManager2FAInput(e.target.value)}
+                      placeholder="Voer 2FA code of Master PIN in..."
+                      maxLength={16}
+                      autoFocus
+                      className="w-full bg-slate-950 border border-purple-500/40 rounded-2xl px-4 py-3 text-center text-xl font-mono tracking-widest text-purple-300 focus:outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-500/30"
+                    />
+                  </div>
+                </div>
+
+                {manager2FAError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>{manager2FAError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={verifyingManager2FA || !manager2FAInput.trim()}
+                  className="w-full py-3.5 rounded-2xl font-black text-sm bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg shadow-purple-600/25 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-5 h-5" />
+                  <span>{verifyingManager2FA ? 'Verifiëren...' : 'Verifieer & Open Manager Menu'}</span>
+                </button>
+              </form>
+            </>
+          )}
+
+          {/* 🔑 2FA Setup Modal inside gate */}
+          {setup2FAUser && (
+            <TwoFactorSetupModal
+              username={setup2FAUser}
+              onClose={() => setSetup2FAUser(null)}
+              onSuccess={() => {
+                setSetup2FAUser(null);
+              }}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 flex flex-col h-[calc(100vh-108px)] overflow-y-auto bg-slate-950 p-4 sm:p-6 space-y-6">
       
@@ -467,7 +648,7 @@ export const ManagerScreen: React.FC = () => {
               <span>Algemeen Overzicht</span>
             </button>
 
-            {canAccess('manager') && (
+            {(currentPosUser?.username.toLowerCase() === 'joas') && (
               <button
                 onClick={() => setActiveTab('ops')}
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
@@ -479,7 +660,7 @@ export const ManagerScreen: React.FC = () => {
                 <Sliders className="w-3.5 h-3.5 text-purple-300" />
                 <span>Ops Beheer</span>
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-purple-950 border border-purple-500/40 text-purple-300 font-mono">
-                  Manager
+                  Joas Exclusief
                 </span>
               </button>
             )}
@@ -2049,19 +2230,40 @@ export const ManagerScreen: React.FC = () => {
                         {u.is_admin ? 'Manager' : u.username === 'bestel_kassa' || u.username === 'klant' ? 'Klant' : 'Medewerker'}
                       </span>
 
-                      <button
-                        type="button"
-                        onClick={() => setSetup2FAUser(u.username)}
-                        className={`px-2 py-1 rounded-lg font-extrabold text-[11px] border flex items-center gap-1 transition ${
-                          u.is_2fa_enabled
-                            ? 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 shadow-sm'
-                            : 'bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border-purple-500/40'
-                        }`}
-                        title="Stel 2FA Tweestapsverificatie in (QR Code & Authenticator)"
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>{u.is_2fa_enabled ? '🔐 2FA Actief' : '🔐 2FA Instellen'}</span>
-                      </button>
+                      {(u.is_admin || u.username === 'joas' || (u.perms && u.perms.includes('manager'))) && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setSetup2FAUser(u.username)}
+                            className={`px-2 py-1 rounded-lg font-extrabold text-[11px] border flex items-center gap-1 transition ${
+                              u.is_2fa_enabled
+                                ? 'bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border-emerald-500/40 shadow-sm'
+                                : 'bg-purple-950/50 hover:bg-purple-900/70 text-purple-300 border-purple-500/40'
+                            }`}
+                            title="Stel 2FA Tweestapsverificatie in (QR Code & Authenticator)"
+                          >
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>{u.is_2fa_enabled ? '🔐 2FA Actief' : '🔐 2FA Instellen'}</span>
+                          </button>
+
+                          {u.is_2fa_enabled && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                executeWithMasterPin(`2FA Tweestapsverificatie Verwijderen voor @${u.username}`, async () => {
+                                  const res = await disable2FAForUser(u.username);
+                                  showToast(res.message, res.success ? 'success' : 'error');
+                                });
+                              }}
+                              className="px-2 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 font-extrabold text-[11px] border border-rose-500/40 flex items-center gap-1 transition"
+                              title={`Verwijder 2FA voor @${u.username} (vereist Master Security PIN)`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                              <span>2FA Verwijderen</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       {canEditThisUser ? (
                         <button

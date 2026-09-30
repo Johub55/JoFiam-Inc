@@ -3,6 +3,8 @@ import { useApp } from '../context/AppContext';
 import { 
   generateTotpSecret, 
   getTotpQrCodeUrl, 
+  getTotpUri,
+  generateTotpCode,
   generateBackupCodes, 
   verifyTotpCode 
 } from '../services/totp';
@@ -19,7 +21,9 @@ import {
   Download, 
   AlertCircle,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Laptop,
+  Zap
 } from 'lucide-react';
 
 interface TwoFactorSetupModalProps {
@@ -33,7 +37,7 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
   onClose,
   onSuccess
 }) => {
-  const { enable2FAForUser, disable2FAForUser, posUsers, currentPosUser } = useApp();
+  const { enable2FAForUser, disable2FAForUser, verify2FACodeForUser, verifyMasterPin, posUsers, currentPosUser } = useApp();
 
   const user = posUsers.find(u => u.username.toLowerCase() === username.toLowerCase());
   const isAlreadyEnabled = Boolean(user?.is_2fa_enabled);
@@ -48,6 +52,10 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
 
+  // Disable 2FA Verification State
+  const [showDisableConfirm, setShowDisableConfirm] = useState<boolean>(false);
+  const [disableVerifyInput, setDisableVerifyInput] = useState<string>('');
+
   useEffect(() => {
     if (!isAlreadyEnabled) {
       const sec = generateTotpSecret(16);
@@ -61,6 +69,12 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
     navigator.clipboard?.writeText(secret);
     setCopiedSecret(true);
     setTimeout(() => setCopiedSecret(false), 2000);
+  };
+
+  const handleCopyOtpUri = () => {
+    const uri = getTotpUri(username, secret);
+    navigator.clipboard?.writeText(uri);
+    showToast('📋 otpauth:// URI gekopieerd voor Laptop Password Manager!', 'success');
   };
 
   const handleCopyBackup = () => {
@@ -96,20 +110,41 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
     }
   };
 
-  const handleDisable2FA = async () => {
-    if (!window.confirm(`Weet je zeker dat je 2FA Tweestapsverificatie wilt uitschakelen voor @${username}?`)) {
+  const handleDisable2FA = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+
+    if (!showDisableConfirm) {
+      setShowDisableConfirm(true);
+      return;
+    }
+
+    const cleanInput = disableVerifyInput.trim();
+    if (!cleanInput) {
+      setErrorMsg('Voer je 2FA code of Master PIN in om te bevestigen.');
       return;
     }
 
     setSubmitting(true);
+    setErrorMsg(null);
+
     try {
+      const isValid2FA = await verify2FACodeForUser(username, cleanInput);
+      const isValidMasterPin = verifyMasterPin(cleanInput);
+
+      if (!isValid2FA && !isValidMasterPin) {
+        setErrorMsg('❌ Ongeldige 2FA Authenticator code of Master PIN! Uitschakelen geweigerd.');
+        return;
+      }
+
       const res = await disable2FAForUser(username);
       if (res.success) {
-        showToast(`2FA uitgeschakeld voor @${username}`, 'info');
+        showToast(`🔓 2FA Tweestapsverificatie succesvol uitgeschakeld voor @${username}`, 'success');
         onClose();
       } else {
-        showToast(res.message, 'error');
+        setErrorMsg(res.message || 'Fout bij uitschakelen 2FA');
       }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Fout bij uitschakelen van 2FA');
     } finally {
       setSubmitting(false);
     }
@@ -177,9 +212,9 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
                   </div>
                 )}
 
-                <div className="space-y-2 text-center sm:text-left flex-1">
+                <div className="space-y-2.5 text-center sm:text-left flex-1">
                   <span className="text-[11px] text-slate-400 block font-bold">
-                    Kun je niet scannen? Voer deze geheime sleutel handmatig in:
+                    Kun je niet scannen op telefoon? Gebruik onderstaande sleutel op je laptop:
                   </span>
                   <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-xl font-mono text-purple-300 font-extrabold text-sm tracking-widest break-all flex items-center justify-between gap-2">
                     <span>{secret}</span>
@@ -192,6 +227,19 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
                       {copiedSecret ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                     </button>
                   </div>
+
+                  {/* Laptop Password Manager Link Copy */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleCopyOtpUri}
+                      className="px-2.5 py-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900 text-purple-200 border border-purple-500/30 text-[11px] font-bold flex items-center gap-1.5 transition"
+                    >
+                      <Laptop className="w-3.5 h-3.5 text-cyan-400" />
+                      <span>Kopieer otpauth:// link (1Password / macOS / Bitwarden)</span>
+                    </button>
+                  </div>
+
                   <p className="text-[10px] text-slate-400">
                     Type: Time-Based (TOTP) | Periode: 30s | Lengte: 6 cijfers
                   </p>
@@ -302,33 +350,83 @@ export const TwoFactorSetupModal: React.FC<TwoFactorSetupModalProps> = ({
                 </p>
               </div>
 
-              <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-left text-xs space-y-1.5">
-                <span className="font-bold text-emerald-300 block">Wat betekent dit?</span>
-                <ul className="list-disc pl-5 space-y-1 text-slate-400 text-[11px]">
-                  <li>Bij het inloggen als @{username} wordt voortaan eerst je wachtwoord én daarna je 6-cijferige Authenticator code gevraagd.</li>
-                  <li>Bij gevoelige manager-acties (zoals Master PIN) zorgt 2FA voor maximale bescherming tegen hacks en sabotage.</li>
-                </ul>
-              </div>
+              {!showDisableConfirm ? (
+                <>
+                  <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-2xl text-left text-xs space-y-1.5">
+                    <span className="font-bold text-emerald-300 block">Wat betekent dit?</span>
+                    <ul className="list-disc pl-5 space-y-1 text-slate-400 text-[11px]">
+                      <li>Bij het inloggen als @{username} wordt voortaan eerst je wachtwoord én daarna je 6-cijferige Authenticator code gevraagd.</li>
+                      <li>Bij gevoelige manager-acties (zoals Master PIN) zorgt 2FA voor maximale bescherming.</li>
+                    </ul>
+                  </div>
 
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={handleDisable2FA}
-                  disabled={submitting}
-                  className="py-2.5 px-4 rounded-xl font-bold text-xs bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 transition flex items-center gap-1.5"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>2FA Uitschakelen</span>
-                </button>
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowDisableConfirm(true)}
+                      className="py-2.5 px-4 rounded-xl font-bold text-xs bg-rose-950/60 hover:bg-rose-900 border border-rose-500/40 text-rose-300 transition flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>2FA Uitschakelen</span>
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 py-2.5 rounded-xl font-black text-xs bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg"
-                >
-                  Klaar &amp; Sluiten
-                </button>
-              </div>
+                    <button
+                      type="button"
+                      onClick={onClose}
+                      className="flex-1 py-2.5 rounded-xl font-black text-xs bg-purple-600 hover:bg-purple-500 text-white transition shadow-lg"
+                    >
+                      Klaar &amp; Sluiten
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <form onSubmit={handleDisable2FA} className="space-y-3.5 text-left p-4 bg-slate-950 border border-rose-500/40 rounded-2xl">
+                  <div className="space-y-1">
+                    <strong className="text-rose-300 text-xs flex items-center gap-1.5">
+                      <Lock className="w-4 h-4 text-rose-400" />
+                      Bevestig Uitschakelen van 2FA
+                    </strong>
+                    <p className="text-slate-400 text-[11px]">
+                      Voer je huidige 2FA Authenticator code of Master Security PIN in om te verifiëren dat jij dit bent:
+                    </p>
+                  </div>
+
+                  <input
+                    type="password"
+                    value={disableVerifyInput}
+                    onChange={e => setDisableVerifyInput(e.target.value)}
+                    placeholder="Voer 2FA code of Master PIN in..."
+                    maxLength={16}
+                    autoFocus
+                    className="w-full bg-slate-900 border border-rose-500/50 rounded-xl px-4 py-2.5 text-center font-mono text-base tracking-widest text-white focus:outline-none focus:border-rose-400"
+                  />
+
+                  {errorMsg && (
+                    <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-bold flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                      <span>{errorMsg}</span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setShowDisableConfirm(false); setErrorMsg(null); }}
+                      className="py-2 px-3 rounded-xl font-bold text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                    >
+                      Annuleren
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting || !disableVerifyInput.trim()}
+                      className="flex-1 py-2 rounded-xl font-extrabold text-xs bg-rose-600 hover:bg-rose-500 text-white transition shadow disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>{submitting ? 'Verifiëren...' : 'Verifieer & Verwijder 2FA'}</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
 

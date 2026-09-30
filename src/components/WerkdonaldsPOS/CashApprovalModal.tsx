@@ -211,6 +211,7 @@ export const CashApprovalModal: React.FC<CashApprovalModalProps> = ({
           >
             Annuleren
           </button>
+          
           <button
             type="button"
             onClick={handleConfirm}

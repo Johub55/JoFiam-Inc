@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { ShieldCheck, Lock, Key, AlertCircle, CheckCircle2, X, Smartphone, Hash } from 'lucide-react';
+import { ShieldCheck, Lock, Key, AlertCircle, CheckCircle2, X, Smartphone, Hash, Laptop, Zap } from 'lucide-react';
 import { showToast } from '../services/appToast';
 
 interface TwoFactorChallengeModalProps {
@@ -16,11 +16,14 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
   onSuccess,
   onCancel
 }) => {
-  const { verify2FACodeForUser } = useApp();
+  const { confirm2FALogin, posUsers, bankAccounts } = useApp();
   const [code, setCode] = useState<string>('');
   const [useBackupCode, setUseBackupCode] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [verifying, setVerifying] = useState<boolean>(false);
+
+  const matchedUser = posUsers.find(u => u.username.toLowerCase() === username.toLowerCase()) ||
+                      bankAccounts.find(a => a.username.toLowerCase() === username.toLowerCase());
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +37,12 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
     setErrorMsg(null);
 
     try {
-      const isValid = await verify2FACodeForUser(username, clean);
-      if (isValid) {
+      const res = await confirm2FALogin(clean);
+      if (res.success) {
         showToast('🔐 2FA Verificatie geslaagd!', 'success');
         onSuccess();
       } else {
-        setErrorMsg('Ongeldige 2FA Authenticator code of Noodcode! Controleer de klok van je telefoon of de code.');
+        setErrorMsg(res.message || 'Ongeldige 2FA Authenticator code of Noodcode.');
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Fout bij verifiëren van 2FA code.');
@@ -82,12 +85,12 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
           <div className="p-3.5 bg-purple-950/40 border border-purple-500/30 rounded-2xl text-xs text-purple-200 space-y-1">
             <span className="font-bold block flex items-center gap-1.5">
               <Smartphone className="w-4 h-4 text-purple-400 shrink-0" />
-              {useBackupCode ? 'Voer je Noodcode in (bijv. WD-8492-1042):' : 'Open je Authenticator App (Google / Authy / Apple):'}
+              {useBackupCode ? 'Voer je Noodcode in (bijv. WD-8492-1042):' : 'Open je Authenticator App (Google / Authy / Apple / 1Password):'}
             </span>
             <p className="text-slate-300 text-[11px] leading-relaxed">
               {useBackupCode
-                ? 'Gebruik één van je opgeslagen 8-cijferige Noodcodes om in te loggen zonder telefoon.'
-                : 'Voer de huidige 6-cijferige code in die op je telefoon in je Authenticator app staat.'}
+                ? 'Gebruik één van je opgeslagen 8-cijferige Noodcodes om in te loggen.'
+                : 'Voer de huidige 6-cijferige code in die in je Authenticator app of wachtwoordbeheerder staat.'}
             </p>
           </div>
 
