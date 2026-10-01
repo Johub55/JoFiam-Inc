@@ -655,6 +655,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     if (currentPosUser && currentPosUser.username.toLowerCase() === cleanU) {
       setCurrentPosUser(prev => prev ? { ...prev, is_2fa_enabled: true, totp_secret: secret, backup_codes: backupCodes } : null);
+      sessionStorage.removeItem(`wd_manager_unlocked_${cleanU}`);
     }
 
     const existingUser = posUsers.find(u => u.username.toLowerCase() === cleanU);
@@ -1231,6 +1232,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
               logoutPos();
             } else if (
               syncedMe.is_shadowbanned !== currentPosUser.is_shadowbanned ||
+              syncedMe.is_2fa_enabled !== currentPosUser.is_2fa_enabled ||
+              syncedMe.totp_secret !== currentPosUser.totp_secret ||
               JSON.stringify(syncedMe.perms) !== JSON.stringify(currentPosUser.perms)
             ) {
               setCurrentPosUser(syncedMe);
@@ -3478,12 +3481,16 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
     // 5. Manager / Joas PIN fallback
     if ((cleanU === 'manager' || cleanU === 'admin' || cleanU === 'joas') && (cleanPass === '1234' || cleanPass === 'admin123' || cleanPass === '0000')) {
+      const matchedLocal = posUsers.find(u => u.username.toLowerCase() === 'joas');
       const managerUser: PosUser = {
-        id: 1,
-        name: 'Joas Thorig',
+        id: matchedLocal?.id || 1,
+        name: matchedLocal?.name || 'Joas Thorig',
         username: 'joas',
         perms: ['pos', 'kitchen', 'pickup', 'voorraad', 'manager', 'medewerkers', 'producten', 'coupons_giftcards', 'cash_pay'],
-        is_admin: true
+        is_admin: true,
+        is_2fa_enabled: Boolean(matchedLocal?.is_2fa_enabled),
+        totp_secret: matchedLocal?.totp_secret || '',
+        backup_codes: matchedLocal?.backup_codes || []
       };
       setCurrentPosUser(managerUser);
       setPosScreen('kassa');

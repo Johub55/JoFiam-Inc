@@ -16,7 +16,7 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
   onSuccess,
   onCancel
 }) => {
-  const { confirm2FALogin, posUsers, bankAccounts } = useApp();
+  const { confirm2FALogin, verify2FACodeForUser, pending2FALogin, posUsers, bankAccounts } = useApp();
   const [code, setCode] = useState<string>('');
   const [useBackupCode, setUseBackupCode] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -37,12 +37,23 @@ export const TwoFactorChallengeModal: React.FC<TwoFactorChallengeModalProps> = (
     setErrorMsg(null);
 
     try {
-      const res = await confirm2FALogin(clean);
-      if (res.success) {
-        showToast('🔐 2FA Verificatie geslaagd!', 'success');
-        onSuccess();
+      if (pending2FALogin) {
+        const res = await confirm2FALogin(clean);
+        if (res.success) {
+          showToast('🔐 2FA Verificatie geslaagd!', 'success');
+          onSuccess();
+        } else {
+          setErrorMsg(res.message || 'Ongeldige 2FA Authenticator code of Noodcode.');
+        }
       } else {
-        setErrorMsg(res.message || 'Ongeldige 2FA Authenticator code of Noodcode.');
+        // Generic screen-access verification
+        const isValid = await verify2FACodeForUser(username, clean);
+        if (isValid) {
+          showToast('🔐 2FA Verificatie geslaagd!', 'success');
+          onSuccess();
+        } else {
+          setErrorMsg('Ongeldige 2FA Authenticator code of Noodcode.');
+        }
       }
     } catch (err: any) {
       setErrorMsg(err?.message || 'Fout bij verifiëren van 2FA code.');

@@ -102,6 +102,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
       showToast('Geen toegang tot TV & Nieuws Beheer. Alleen bevoegde rangen kunnen dit scherm openen.', 'error');
       return;
     }
+    
+    // Auto lock manager screen when navigating away from it to ensure strict security
+    if (screen !== 'manager' && currentPosUser) {
+      sessionStorage.removeItem(`wd_manager_unlocked_${currentPosUser.username.toLowerCase()}`);
+    }
+    
     setPosScreen(screen);
   };
 
