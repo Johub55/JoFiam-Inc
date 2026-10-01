@@ -269,6 +269,7 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL D
 
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS master_security_pin TEXT DEFAULT '1234';
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS tables_frozen BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
 
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS identifier TEXT;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS notes TEXT;
@@ -924,6 +925,7 @@ ALTER TABLE public.bank_accounts ADD COLUMN IF NOT EXISTS backup_codes JSONB DEF
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS master_security_pin TEXT DEFAULT '1234';
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS tables_frozen BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
 
 CREATE OR REPLACE FUNCTION public.werkdonalds_set_tables_readonly(p_lock BOOLEAN, p_allow_orders BOOLEAN DEFAULT TRUE)
 RETURNS JSONB
