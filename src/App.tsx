@@ -23,6 +23,7 @@ import { LoyaltyTerminalScreen } from './components/WerkdonaldsPOS/LoyaltyTermin
 import { AppToast } from './components/AppToast';
 import { TwoFactorChallengeModal } from './components/TwoFactorChallengeModal';
 import { TwoFactorSetupModal } from './components/TwoFactorSetupModal';
+import { SystemLockScreen } from './components/WerkdonaldsPOS/SystemLockScreen';
 
 const MainLayout: React.FC = () => {
   const { 
@@ -37,7 +38,10 @@ const MainLayout: React.FC = () => {
     deviceId,
     pending2FALogin,
     setPending2FALogin,
-    currentPosUser
+    currentPosUser,
+    logoutPos,
+    isSystemLocked,
+    setIsSystemLocked
   } = useApp();
 
   const [showGithubModal, setShowGithubModal] = useState<boolean>(false);
@@ -58,24 +62,22 @@ const MainLayout: React.FC = () => {
     }
   }, [posScreen, currentPosUser]);
 
-  // Global keyboard shortcut to instantly lock the manager screen (Alt or NumpadEnter)
+  // Global keyboard shortcut to instantly lock the manager screen & block the system (NumpadEnter only)
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Alt' || e.code === 'NumpadEnter' || e.key === 'AltGraph') {
-        if (posScreen === 'manager') {
-          e.preventDefault();
-          if (currentPosUser) {
-            sessionStorage.removeItem(`wd_manager_unlocked_${currentPosUser.username.toLowerCase()}`);
-          }
+      if (e.code === 'NumpadEnter') {
+        e.preventDefault();
+        if (currentPosUser) {
+          sessionStorage.removeItem(`wd_manager_unlocked_${currentPosUser.username.toLowerCase()}`);
           setManagerSessionUnlocked(false);
-          setPosScreen('kassa');
+          setIsSystemLocked(true);
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [posScreen, currentPosUser, setPosScreen]);
+  }, [currentPosUser, setIsSystemLocked]);
 
   if (isBlocked) {
     return (
@@ -249,6 +251,7 @@ const MainLayout: React.FC = () => {
           onCancel={() => setPending2FALogin(null)}
         />
       )}
+      <SystemLockScreen />
     </div>
   );
 };

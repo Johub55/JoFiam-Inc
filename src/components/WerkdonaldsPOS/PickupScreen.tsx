@@ -198,7 +198,7 @@ const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, cla
 };
 
 export const PickupScreen: React.FC = () => {
-  const { orders, pickupClosed, orderStopActive, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
+  const { orders, pickupClosed, orderStopActive, orderStopText, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
 
   useEffect(() => {
@@ -724,13 +724,14 @@ export const PickupScreen: React.FC = () => {
       return (
         <div 
           id="werkdonalds-tv-blocked-root"
-          className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col items-center justify-center p-8 select-none overflow-hidden"
+          className="fixed inset-0 z-50 bg-slate-950 text-white flex flex-col p-4 sm:p-5 lg:p-6 select-none overflow-hidden animate-in fade-in duration-300"
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(239,68,68,0.12),transparent_70%)] pointer-events-none" />
           
-          <div className="max-w-3xl text-center space-y-8 animate-in fade-in zoom-in-95 duration-300">
+          {/* Main content centered inside a flex-grow area */}
+          <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto text-center space-y-8">
             {/* Blinking alarm warning light */}
-            <div className="mx-auto w-24 h-24 rounded-full bg-rose-500/10 border-4 border-rose-500 text-rose-500 flex items-center justify-center text-4xl shadow-2xl animate-pulse ring-8 ring-rose-500/20">
+            <div className="mx-auto w-20 h-20 rounded-full bg-rose-500/10 border-4 border-rose-500 text-rose-500 flex items-center justify-center text-3xl shadow-2xl animate-pulse ring-8 ring-rose-500/20">
               ⚠️
             </div>
 
@@ -739,24 +740,24 @@ export const PickupScreen: React.FC = () => {
                 {orderStopActive ? '⚠️ Tijdelijke Bestelstop Actief' : '🔴 Afhaalbalie Gesloten'}
               </span>
               
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight uppercase bg-gradient-to-r from-white via-slate-300 to-slate-500 bg-clip-text text-transparent">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight uppercase bg-gradient-to-r from-white via-slate-300 to-slate-500 bg-clip-text text-transparent">
                 {orderStopActive ? "Tijdelijk Geen Bestellingen" : "Momenteel Gesloten"}
               </h1>
               
-              <p className="text-base sm:text-xl lg:text-2xl text-slate-400 font-medium leading-relaxed max-w-2xl mx-auto">
+              <p className="text-base sm:text-lg lg:text-xl text-slate-300 font-medium leading-relaxed max-w-2xl mx-auto">
                 {orderStopActive 
-                  ? "Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!"
+                  ? (orderStopText || "Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!")
                   : "Beste gast, onze afhaalbalie en keuken zijn op dit moment gesloten. We verwelkomen je graag snel weer!"
                 }
               </p>
             </div>
 
             {/* Crew message with brand name JoFiam */}
-            <div className="pt-8 border-t border-slate-900 flex flex-col items-center justify-center gap-3">
-              <p className="text-xs font-black tracking-widest uppercase text-slate-500">
+            <div className="pt-6 border-t border-slate-900 flex flex-col items-center justify-center gap-2.5">
+              <p className="text-[10px] font-black tracking-widest uppercase text-slate-500">
                 Met vriendelijke groet,
               </p>
-              <div className="px-6 py-2.5 rounded-2xl bg-slate-900 border border-slate-800 text-amber-400 text-base sm:text-lg font-black tracking-wider uppercase shadow-lg">
+              <div className="px-5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 text-sm font-black tracking-wider uppercase shadow-lg">
                 🍳 De Keukenploeg van JoFiam Restaurants
               </div>
             </div>
@@ -765,10 +766,81 @@ export const PickupScreen: React.FC = () => {
           {/* Quick exit button for admin/staff */}
           <button
             onClick={() => setIsTvMode(false)}
-            className="absolute bottom-8 right-8 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 rounded-xl text-xs font-black transition"
+            className="absolute bottom-24 right-8 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 rounded-xl text-xs font-black transition z-30"
           >
             Sluit TV Modus (Esc)
           </button>
+
+          {/* TV Bottom Marquee Bar is STILL active and running on the blocked screen! */}
+          {activeWidgets.ticker && (
+            <footer 
+              onClick={() => setShowNewsModal(true)}
+              title="Klik om alle NOS nieuwsberichten en details te bekijken"
+              className="mt-3 bg-slate-950 border-2 border-slate-800 hover:border-rose-600/80 p-2 rounded-2xl flex items-center justify-between text-xs sm:text-sm font-bold shrink-0 overflow-hidden shadow-2xl cursor-pointer transition group z-20"
+            >
+              {/* Authentic NOS Red Emblem */}
+              <div className="flex items-center gap-2 px-3 py-1 bg-[#E3000F] text-white rounded-xl font-black shrink-0 shadow-lg group-hover:bg-rose-600 transition">
+                <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                <span className="text-xs font-black tracking-widest font-sans">NOS</span>
+                <span className="text-[10px] bg-black/30 px-1.5 py-0.5 rounded text-rose-100 font-mono tracking-wider uppercase">
+                  {nosCategory}
+                </span>
+              </div>
+
+              <div className="flex-1 overflow-hidden mx-4 relative h-6 flex items-center">
+                {(() => {
+                  const totalChars = nosHeadlines.join(' ').length;
+                  const baseSpeed = newsConfigState.speedSeconds || 22;
+                  const headlineDuration = Math.max(18, Math.round((totalChars / 9) * (baseSpeed / 22)));
+
+                  const renderHeadlineSet = (suffix: string) => (
+                    <div className="flex items-center gap-8 pr-8 shrink-0">
+                      {nosHeadlines.map((headline, idx) => {
+                        const isWeather = headline.includes('WEERBERICHT');
+                        const isAlert = headline.startsWith('🚨');
+                        return (
+                          <span key={`${suffix}_${idx}`} className="flex items-center gap-2.5 shrink-0">
+                            {isAlert ? (
+                              <span className="px-2 py-0.5 bg-amber-500 text-slate-950 font-black rounded text-[10px] uppercase">
+                                SPOED
+                              </span>
+                            ) : (
+                              <span className="text-rose-500 font-black text-xs">●</span>
+                            )}
+                            <span className={`transition-colors font-bold ${
+                              isAlert
+                                ? 'text-amber-300 font-black'
+                                : isWeather 
+                                ? 'text-sky-300 font-black' 
+                                : clockStyle === 'pixel' 
+                                ? 'text-emerald-300 font-mono' 
+                                : 'text-slate-100 group-hover:text-white'
+                            }`}>
+                              {headline}
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+
+                  return (
+                    <div 
+                      className={`whitespace-nowrap flex items-center ${newsConfigState.paused ? '' : 'animate-marquee'}`}
+                      style={{ animationDuration: `${headlineDuration}s` }}
+                    >
+                      {renderHeadlineSet('setA')}
+                      {renderHeadlineSet('setB')}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div className="text-amber-400 font-mono font-black shrink-0 px-2 text-xs">
+                NOS LIVE • {timeStr}
+              </div>
+            </footer>
+          )}
         </div>
       );
     }

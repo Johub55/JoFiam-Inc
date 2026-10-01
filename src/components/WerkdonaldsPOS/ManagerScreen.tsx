@@ -59,6 +59,8 @@ export const ManagerScreen: React.FC = () => {
     products,
     totalExpenses,
     orderStopActive,
+    orderStopText,
+    setOrderStopActiveWithText,
     toggleOrderStop,
     pickupClosed,
     togglePickupClosed,
@@ -109,6 +111,11 @@ export const ManagerScreen: React.FC = () => {
   const [pinModalAction, setPinModalAction] = useState<(() => void) | null>(null);
   const [showEditMasterPinModal, setShowEditMasterPinModal] = useState<boolean>(false);
   const [newMasterPinVal, setNewMasterPinVal] = useState<string>('');
+
+  // Bestelstop Customization & Live Preview States
+  const [showBestelstopModal, setShowBestelstopModal] = useState<boolean>(false);
+  const [selectedBestelstopTemplate, setSelectedBestelstopTemplate] = useState<string>('drukte');
+  const [customBestelstopText, setCustomBestelstopText] = useState<string>(orderStopText || '');
 
   // Manager Menu 2FA Security Gate State
   const [managerUnlocked, setManagerUnlocked] = useState<boolean>(() => {
@@ -1526,14 +1533,22 @@ export const ManagerScreen: React.FC = () => {
               </p>
             </div>
             <button
-              onClick={toggleOrderStop}
+              onClick={() => {
+                if (orderStopActive) {
+                  toggleOrderStop();
+                  showToast('🎉 Bestelstop opgeheven! Kassa is weer open.', 'success');
+                } else {
+                  setCustomBestelstopText(orderStopText || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!');
+                  setShowBestelstopModal(true);
+                }
+              }}
               className={`px-3 py-2 rounded-xl font-bold text-xs transition ${
                 orderStopActive 
                   ? 'bg-rose-600 text-white shadow-rose-600/20' 
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              {orderStopActive ? 'Bestelstop Opheffen' : 'Bestelstop Activeren'}
+              {orderStopActive ? 'Bestelstop Opheffen' : 'Bestelstop Instellen'}
             </button>
           </div>
 
@@ -2898,6 +2913,178 @@ export const ManagerScreen: React.FC = () => {
           username={setup2FAUser}
           onClose={() => setSetup2FAUser(null)}
         />
+      )}
+
+      {/* ⛔ Bestelstop Customization & Live Preview Modal */}
+      {showBestelstopModal && (
+        <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-slate-900 border-2 border-rose-500/50 rounded-3xl w-full max-w-lg p-6 sm:p-8 shadow-2xl space-y-6 text-white text-left animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center font-bold text-lg shrink-0">
+                  ⛔
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">⛔ Bestelstop Instellen &amp; Regisseren</h3>
+                  <p className="text-xs text-slate-400">Kies een reden en bekijk direct de live TV preview</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBestelstopModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Template Selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-wider text-rose-400">
+                1. Selecteer Reden / Sjabloon
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBestelstopTemplate('drukte');
+                    setCustomBestelstopText('Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!');
+                  }}
+                  className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                    selectedBestelstopTemplate === 'drukte' ? 'bg-rose-950/60 border-rose-500 text-white' : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-lg">🍳</span>
+                  <span className="text-[10px] font-bold">Extreme Drukte</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBestelstopTemplate('storing');
+                    setCustomBestelstopText('Beste gast, wegens een tijdelijke storing in ons kassasysteem kunnen er momenteel geen nieuwe bestellingen worden geplaatst. Onze excuses voor het ongemak!');
+                  }}
+                  className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                    selectedBestelstopTemplate === 'storing' ? 'bg-rose-950/60 border-rose-500 text-white' : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-lg">💻</span>
+                  <span className="text-[10px] font-bold">Systeem Storing</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedBestelstopTemplate('custom');
+                  }}
+                  className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                    selectedBestelstopTemplate === 'custom' ? 'bg-rose-950/60 border-rose-500 text-white' : 'bg-slate-950/50 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span className="text-lg">✍️</span>
+                  <span className="text-[10px] font-bold">Eigen Tekst</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Text Area */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-wider text-rose-400 flex justify-between items-center">
+                <span>2. Bewerk Aankondiging Tekst</span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {customBestelstopText.length} tekens
+                </span>
+              </label>
+              <textarea
+                value={customBestelstopText}
+                onChange={(e) => {
+                  setCustomBestelstopText(e.target.value);
+                  setSelectedBestelstopTemplate('custom');
+                }}
+                rows={3}
+                placeholder="Typ hier de tekst die op het scherm getoond moet worden..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-white text-xs placeholder-slate-600 focus:outline-none focus:border-rose-500 font-medium"
+              />
+            </div>
+
+            {/* Live TV Screen Mockup Preview */}
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+                <span>3. Live TV Scherm Preview</span>
+                <span className="text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40 px-1.5 py-0.2 rounded animate-pulse">
+                  PREVIEW
+                </span>
+              </label>
+              
+              {/* Giant TV Screen Frame Mockup */}
+              <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 shadow-inner space-y-4 relative overflow-hidden">
+                <div className="absolute top-2 left-2 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
+                  <span className="text-[8px] font-mono text-slate-500 uppercase tracking-widest font-black">Live feed</span>
+                </div>
+                
+                <div className="text-center space-y-3 py-2">
+                  <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500 text-rose-400 flex items-center justify-center text-sm shadow animate-pulse">
+                    ⚠️
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[8px] font-black uppercase">
+                      ⚠️ Tijdelijke Bestelstop Actief
+                    </span>
+                    <h4 className="text-sm font-black text-white uppercase tracking-tight">
+                      Tijdelijk Geen Bestellingen
+                    </h4>
+                    <p className="text-[10px] text-slate-400 leading-normal max-w-sm mx-auto font-medium italic">
+                      "{customBestelstopText || '...'}"
+                    </p>
+                  </div>
+                </div>
+
+                {/* News bar ticker mockup inside the preview */}
+                <div className="border-t border-slate-900 pt-2.5 flex items-center justify-between text-[8px] font-bold text-slate-500 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 bg-[#E3000F] text-white px-1.5 py-0.5 rounded font-black font-sans tracking-widest">
+                    NOS
+                  </div>
+                  <div className="flex-1 overflow-hidden mx-2 relative h-3 flex items-center text-slate-400 text-[8px] font-medium font-mono">
+                    <span className="animate-marquee whitespace-nowrap">
+                      ● [NOS Binnenland] Kabinet presenteert verduurzamingssubsidies voor de Nederlandse horeca ● [NOS Weer] Zonnig & droog in NL (18°C)
+                    </span>
+                  </div>
+                  <div className="shrink-0 font-mono text-[8px] text-amber-400">
+                    NOS LIVE
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBestelstopModal(false)}
+                className="flex-1 py-3 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition"
+              >
+                Annuleren
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const txt = customBestelstopText.trim() || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast.';
+                  await setOrderStopActiveWithText(true, txt);
+                  setShowBestelstopModal(false);
+                  showToast('⛔ Bestelstop kassa succesvol geactiveerd!', 'success');
+                }}
+                className="flex-1 py-3 rounded-xl font-black bg-rose-600 hover:bg-rose-500 text-white text-xs shadow-lg shadow-rose-600/35 transition flex items-center justify-center gap-1.5"
+              >
+                <span>⛔ Activeer Bestelstop</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
       )}
 
     </div>

@@ -124,7 +124,11 @@ interface AppContextType {
   giftCards: GiftCard[];
   totalExpenses: number;
   orderStopActive: boolean;
+  orderStopText: string;
   pickupClosed: boolean;
+  isSystemLocked: boolean;
+  setIsSystemLocked: (locked: boolean) => void;
+  setOrderStopActiveWithText: (active: boolean, text: string) => Promise<void>;
   currentPosUser: PosUser | null;
   setCurrentPosUser: (user: PosUser | null) => void;
   appliedDiscount: { type: string; val: number; code?: string; label: string };
@@ -945,6 +949,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return localStorage.getItem('wd_order_stop') === 'true';
   });
 
+  const [orderStopText, setOrderStopTextState] = useState<string>(() => {
+    return localStorage.getItem('wd_order_stop_text') || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
+  });
+
+  const [isSystemLocked, setIsSystemLockedState] = useState<boolean>(() => {
+    return localStorage.getItem('wd_system_locked') === 'true';
+  });
+
+  const setIsSystemLocked = (locked: boolean) => {
+    setIsSystemLockedState(locked);
+    localStorage.setItem('wd_system_locked', String(locked));
+    if (locked) {
+      logAuditAction('SYSTEEM_VERGRENDELD', 'Systeem handmatig vergrendeld via Numpad Enter.');
+    } else {
+      logAuditAction('SYSTEEM_ONTGRENDELD', 'Systeem succesvol ontgrendeld met wachtwoord en 2FA.');
+    }
+  };
+
   const [pickupClosed, setPickupClosed] = useState<boolean>(() => {
     return localStorage.getItem('wd_pickup_closed') === 'true';
   });
@@ -1057,6 +1079,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     localStorage.setItem('wd_order_stop', String(orderStopActive));
   }, [orderStopActive]);
+
+  useEffect(() => {
+    localStorage.setItem('wd_order_stop_text', orderStopText);
+  }, [orderStopText]);
 
   useEffect(() => {
     localStorage.setItem('wd_pickup_closed', String(pickupClosed));
@@ -1290,6 +1316,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       if (!settingsErr && dbSettings) {
         setOrderStopActive(Boolean(dbSettings.order_stop_active));
         setPickupClosed(Boolean(dbSettings.pickup_closed));
+
+        if (dbSettings.order_stop_text) {
+          setOrderStopTextState(dbSettings.order_stop_text);
+          localStorage.setItem('wd_order_stop_text', dbSettings.order_stop_text);
+        } else if (dbSettings.news_config && typeof dbSettings.news_config === 'object' && dbSettings.news_config.orderStopText) {
+          setOrderStopTextState(dbSettings.news_config.orderStopText);
+          localStorage.setItem('wd_order_stop_text', dbSettings.news_config.orderStopText);
+        }
 
         if (dbSettings.master_security_pin) {
           const pinVal = String(dbSettings.master_security_pin).trim();
@@ -1770,6 +1804,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
                 setOrderStopActive(Boolean(settings.order_stop_active));
                 setPickupClosed(Boolean(settings.pickup_closed));
 
+                if (settings.order_stop_text) {
+                  setOrderStopTextState(settings.order_stop_text);
+                  localStorage.setItem('wd_order_stop_text', settings.order_stop_text);
+                } else if (settings.news_config && typeof settings.news_config === 'object' && settings.news_config.orderStopText) {
+                  setOrderStopTextState(settings.news_config.orderStopText);
+                  localStorage.setItem('wd_order_stop_text', settings.news_config.orderStopText);
+                }
+
                 if (settings.news_config && typeof settings.news_config === 'object') {
                   localStorage.setItem('wd_pickup_news_config_v2', JSON.stringify(settings.news_config));
                   window.dispatchEvent(new Event('wd_news_config_updated'));
@@ -2041,26 +2083,56 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     setAppliedDiscount({ type: 'none', val: 0, label: 'Geen' });
   };
 
+  const setOrderStopActiveWithText = async (active: boolean, text: string) => {
+    setOrderStopActive(active);
+    setOrderStopTextState(text);
+    localStorage.setItem('wd_order_stop', String(active));
+    localStorage.setItem('wd_order_stop_text', text);
+
+    if (posClient) {
+      // Create a copy of current news configuration and put orderStopText in there
+      let newsCfg: any = {};
+      try {
+        const saved = localStorage.getItem('wd_pickup_news_config_v2');
+        if (saved) newsCfg = JSON.parse(saved);
+      } catch {}
+      newsCfg.orderStopText = text;
+
+      const updatePayload: any = {
+        id: 'default',
+        order_stop_active: active,
+        pickup_closed: pickupClosed,
+        news_config: newsCfg,
+        order_stop_text: text
+      };
+
+      await posClient.from('pos_settings').upsert(updatePayload);
+    }
+  };
+
   const toggleOrderStop = async () => {
     const nextVal = !orderStopActive;
-    setOrderStopActive(nextVal);
-    if (posClient) {
-      await posClient.from('pos_settings').upsert({
-        id: 'default',
-        order_stop_active: nextVal,
-        pickup_closed: pickupClosed
-      });
-    }
+    await setOrderStopActiveWithText(nextVal, orderStopText);
   };
 
   const togglePickupClosed = async () => {
     const nextVal = !pickupClosed;
     setPickupClosed(nextVal);
     if (posClient) {
+      // Preserve both column and news_config order stop text
+      let newsCfg: any = {};
+      try {
+        const saved = localStorage.getItem('wd_pickup_news_config_v2');
+        if (saved) newsCfg = JSON.parse(saved);
+      } catch {}
+      newsCfg.orderStopText = orderStopText;
+
       await posClient.from('pos_settings').upsert({
         id: 'default',
         order_stop_active: orderStopActive,
-        pickup_closed: nextVal
+        pickup_closed: nextVal,
+        news_config: newsCfg,
+        order_stop_text: orderStopText
       });
     }
   };
@@ -3920,7 +3992,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         giftCards,
         totalExpenses,
         orderStopActive,
+        orderStopText,
         pickupClosed,
+        isSystemLocked,
+        setIsSystemLocked,
+        setOrderStopActiveWithText,
         currentPosUser,
         setCurrentPosUser,
         appliedDiscount,
