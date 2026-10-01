@@ -1502,7 +1502,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
     const intervalId = setInterval(() => {
       fetchCloudData(true);
-    }, 3000);
+    }, 5000);
 
     const onVisibilityOrFocus = () => {
       if (document.visibilityState === 'visible') {
@@ -2112,14 +2112,32 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
 
   const toggleOrderStop = async () => {
     const nextVal = !orderStopActive;
-    await setOrderStopActiveWithText(nextVal, orderStopText);
+    
+    if (posClient) {
+      let newsCfg: any = {};
+      try {
+        const saved = localStorage.getItem('wd_pickup_news_config_v2');
+        if (saved) newsCfg = JSON.parse(saved);
+      } catch {}
+      newsCfg.orderStopText = orderStopText;
+
+      await posClient.from('pos_settings').upsert({
+        id: 'default',
+        order_stop_active: nextVal,
+        pickup_closed: pickupClosed,
+        news_config: newsCfg,
+        order_stop_text: orderStopText
+      });
+    }
+
+    setOrderStopActive(nextVal);
+    localStorage.setItem('wd_order_stop', String(nextVal));
   };
 
   const togglePickupClosed = async () => {
     const nextVal = !pickupClosed;
-    setPickupClosed(nextVal);
+    
     if (posClient) {
-      // Preserve both column and news_config order stop text
       let newsCfg: any = {};
       try {
         const saved = localStorage.getItem('wd_pickup_news_config_v2');
@@ -2135,6 +2153,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         order_stop_text: orderStopText
       });
     }
+
+    setPickupClosed(nextVal);
   };
 
   // Inventory deductions
