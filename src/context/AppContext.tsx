@@ -2114,19 +2114,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     const nextVal = !orderStopActive;
     
     if (posClient) {
-      let newsCfg: any = {};
-      try {
-        const saved = localStorage.getItem('wd_pickup_news_config_v2');
-        if (saved) newsCfg = JSON.parse(saved);
-      } catch {}
-      newsCfg.orderStopText = orderStopText;
-
+      // We upsert ALLEEN de velden die veranderen, Supabase houdt de rest intact
       await posClient.from('pos_settings').upsert({
         id: 'default',
-        order_stop_active: nextVal,
-        pickup_closed: pickupClosed,
-        news_config: newsCfg,
-        order_stop_text: orderStopText
+        order_stop_active: nextVal
       });
     }
 
@@ -2138,19 +2129,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     const nextVal = !pickupClosed;
     
     if (posClient) {
-      let newsCfg: any = {};
-      try {
-        const saved = localStorage.getItem('wd_pickup_news_config_v2');
-        if (saved) newsCfg = JSON.parse(saved);
-      } catch {}
-      newsCfg.orderStopText = orderStopText;
-
+      // We upsert ALLEEN de velden die veranderen, Supabase houdt de rest intact
       await posClient.from('pos_settings').upsert({
         id: 'default',
-        order_stop_active: orderStopActive,
-        pickup_closed: nextVal,
-        news_config: newsCfg,
-        order_stop_text: orderStopText
+        pickup_closed: nextVal
       });
     }
 

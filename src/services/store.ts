@@ -114,42 +114,42 @@ export function formatCardUid(uid?: string): string {
   return raw.replace(/(.{4})/g, '$1 ').trim();
 }
 
+// Singleton Supabase Client
 let _supabaseClient: SupabaseClient | null = null;
-let _cachedUrlKey = '';
+let _lastConfig: string | null = null;
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (typeof window !== 'undefined') {
     try {
       const cfgRaw = localStorage.getItem('wd_sb_cfg');
-      if (cfgRaw) {
-        const cfg = JSON.parse(cfgRaw);
-        const url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
-        const key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
-        const signature = `${url}::${key}`;
-        if (url && key) {
-          if (_supabaseClient && _cachedUrlKey === signature) {
-            return _supabaseClient;
-          }
-          _cachedUrlKey = signature;
-          _supabaseClient = createClient(url, key, {
-            auth: { persistSession: false, autoRefreshToken: false }
-          });
-          return _supabaseClient;
-        }
+      const cfg = cfgRaw ? JSON.parse(cfgRaw) : {};
+      const url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
+      const key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
+      
+      const configSignature = `${url}::${key}`;
+      
+      if (_supabaseClient && _lastConfig === configSignature) {
+        return _supabaseClient;
       }
-    } catch {
-      // Fallback
+      
+      if (url && key) {
+        _lastConfig = configSignature;
+        _supabaseClient = createClient(url, key, {
+          auth: { persistSession: false, autoRefreshToken: false }
+        });
+        return _supabaseClient;
+      }
+    } catch (e) {
+      console.error('Client init error:', e);
     }
   }
 
+  // Fallback to default if not configured in UI
   if (!_supabaseClient && DEFAULT_SUPABASE_POS_URL && DEFAULT_SUPABASE_POS_KEY) {
-    try {
-      _supabaseClient = createClient(DEFAULT_SUPABASE_POS_URL, DEFAULT_SUPABASE_POS_KEY, {
-        auth: { persistSession: false, autoRefreshToken: false }
-      });
-    } catch {
-      _supabaseClient = null;
-    }
+    _supabaseClient = createClient(DEFAULT_SUPABASE_POS_URL, DEFAULT_SUPABASE_POS_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
   }
+  
   return _supabaseClient;
 }
