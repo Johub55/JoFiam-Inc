@@ -309,48 +309,16 @@ export const PickupScreen: React.FC = () => {
     };
 
     const fetchLiveNews = async () => {
+      // Gebruik exclusief de fallback-lijst om 422/500-fouten te voorkomen
       const fallbackList = REAL_NOS_FALLBACK_HEADLINES[nosCategory] || REAL_NOS_FALLBACK_HEADLINES.general;
       const weatherItem = "🌤️ WEERBERICHT: Zonnig & droog in NL (19°C) · Wind W 3 Bft";
 
-      // Combine custom alerts + custom items + NOS headlines
+      // Combine custom alerts + custom items
       const customAlertList = newsConfigState.isCustomAlertActive && newsConfigState.customAlertText.trim()
         ? [`🚨 ${newsConfigState.customAlertText.trim()}`]
         : [];
       const customHeadlineList = customNewsItems.map(it => `📣 [${it.category}] ${it.title}`);
 
-      // Try fetching live news
-      try {
-        const targetUrl = rssMap[nosCategory] || rssMap.general;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(targetUrl)}`, {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          const data = await res.json();
-          if (isMounted && data && data.status === 'ok' && data.items && Array.isArray(data.items) && data.items.length > 0) {
-            const items = data.items.slice(0, 15).map((item: any) => ({
-              title: item.title,
-              link: item.link || 'https://nos.nl',
-              pubDate: item.pubDate ? new Date(item.pubDate).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : 'Zojuist',
-              description: item.description?.replace(/<[^>]*>?/gm, '').slice(0, 140) || ''
-            }));
-
-            const newTitles = [...customAlertList, ...customHeadlineList, weatherItem, ...items.map(it => `${it.title} (${it.pubDate})`)];
-            setNewsArticles(items);
-            setNosHeadlines(newTitles);
-            return; // Success
-          }
-        }
-      } catch (err) {
-        // API error or abort, fall through to fallback
-        console.warn('Live news fetch failed, using fallback:', err);
-      }
-
-      // Fallback
       if (isMounted) {
         const fallbackTitles = fallbackList.map(f => `${f.title} (${f.pubDate})`);
         setNewsArticles(fallbackList as any);
