@@ -1138,25 +1138,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       if (bUrl === pUrl && bKey === pKey) {
         if (pUrl && pKey) {
-          const pc = createClient(pUrl, pKey, {
+          const pc = getSupabaseClient(pUrl, pKey, {
             realtime: { params: { eventsPerSecond: 10 } }
           });
-          setPosClient(pc);
-          setPayClient(pc);
+          if (pc) {
+            setPosClient(pc);
+            setPayClient(pc);
+          }
         }
       } else {
         if (pUrl && pKey) {
-          const pc = createClient(pUrl, pKey, {
+          const pc = getSupabaseClient(pUrl, pKey, {
             realtime: { params: { eventsPerSecond: 10 } }
           });
-          setPosClient(pc);
+          if (pc) setPosClient(pc);
         }
         if (bUrl && bKey) {
-          const bc = createClient(bUrl, bKey, {
+          const bc = getSupabaseClient(bUrl, bKey, {
             auth: { persistSession: false, autoRefreshToken: false },
             realtime: { params: { eventsPerSecond: 10 } }
           });
-          setPayClient(bc);
+          if (bc) setPayClient(bc);
         }
       }
 

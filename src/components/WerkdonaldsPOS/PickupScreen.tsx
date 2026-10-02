@@ -318,6 +318,7 @@ export const PickupScreen: React.FC = () => {
         : [];
       const customHeadlineList = customNewsItems.map(it => `📣 [${it.category}] ${it.title}`);
 
+      // Try fetching live news
       try {
         const targetUrl = rssMap[nosCategory] || rssMap.general;
         const controller = new AbortController();
@@ -325,11 +326,11 @@ export const PickupScreen: React.FC = () => {
 
         const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(targetUrl)}`, {
           signal: controller.signal
-        }).catch(() => null);
+        });
         clearTimeout(timeoutId);
 
-        if (res && res.ok) {
-          const data = await res.json().catch(() => null);
+        if (res.ok) {
+          const data = await res.json();
           if (isMounted && data && data.status === 'ok' && data.items && Array.isArray(data.items) && data.items.length > 0) {
             const items = data.items.slice(0, 15).map((item: any) => ({
               title: item.title,
@@ -341,13 +342,15 @@ export const PickupScreen: React.FC = () => {
             const newTitles = [...customAlertList, ...customHeadlineList, weatherItem, ...items.map(it => `${it.title} (${it.pubDate})`)];
             setNewsArticles(items);
             setNosHeadlines(newTitles);
-            return;
+            return; // Success
           }
         }
       } catch (err) {
-        // Fallback gracefully
+        // API error or abort, fall through to fallback
+        console.warn('Live news fetch failed, using fallback:', err);
       }
 
+      // Fallback
       if (isMounted) {
         const fallbackTitles = fallbackList.map(f => `${f.title} (${f.pubDate})`);
         setNewsArticles(fallbackList as any);

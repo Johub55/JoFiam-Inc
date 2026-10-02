@@ -114,42 +114,34 @@ export function formatCardUid(uid?: string): string {
   return raw.replace(/(.{4})/g, '$1 ').trim();
 }
 
-// Singleton Supabase Client
-let _supabaseClient: SupabaseClient | null = null;
-let _lastConfig: string | null = null;
+// Supabase Client Factory to prevent multiple instances
+const _clientCache = new Map<string, SupabaseClient>();
 
-export function getSupabaseClient(): SupabaseClient | null {
-  if (typeof window !== 'undefined') {
-    try {
-      const cfgRaw = localStorage.getItem('wd_sb_cfg');
-      const cfg = cfgRaw ? JSON.parse(cfgRaw) : {};
-      const url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
-      const key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
-      
-      const configSignature = `${url}::${key}`;
-      
-      if (_supabaseClient && _lastConfig === configSignature) {
-        return _supabaseClient;
-      }
-      
-      if (url && key) {
-        _lastConfig = configSignature;
-        _supabaseClient = createClient(url, key, {
-          auth: { persistSession: false, autoRefreshToken: false }
-        });
-        return _supabaseClient;
-      }
-    } catch (e) {
-      console.error('Client init error:', e);
+export function getSupabaseClient(url?: string, key?: string, options?: any): SupabaseClient | null {
+  if (!url || !key) {
+    // Attempt to load from localStorage if not provided
+    if (typeof window !== 'undefined') {
+      try {
+        const cfgRaw = localStorage.getItem('wd_sb_cfg');
+        const cfg = cfgRaw ? JSON.parse(cfgRaw) : {};
+        url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
+        key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
+      } catch (e) {}
     }
   }
 
-  // Fallback to default if not configured in UI
-  if (!_supabaseClient && DEFAULT_SUPABASE_POS_URL && DEFAULT_SUPABASE_POS_KEY) {
-    _supabaseClient = createClient(DEFAULT_SUPABASE_POS_URL, DEFAULT_SUPABASE_POS_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
+  if (!url || !key) return null;
+
+  const cacheKey = `${url}::${key}`;
+  if (_clientCache.has(cacheKey)) {
+    return _clientCache.get(cacheKey) || null;
   }
-  
-  return _supabaseClient;
+
+  const client = createClient(url, key, options || {
+    auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { params: { eventsPerSecond: 10 } }
+  });
+
+  _clientCache.set(cacheKey, client);
+  return client;
 }
