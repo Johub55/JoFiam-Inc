@@ -2116,10 +2116,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     const nextVal = !orderStopActive;
     
     if (posClient) {
-      // We upsert ALLEEN de velden die veranderen, Supabase houdt de rest intact
       await posClient.from('pos_settings').upsert({
         id: 'default',
-        order_stop_active: nextVal
+        order_stop_active: nextVal,
+        order_stop_text: orderStopText
       });
     }
 
@@ -2131,10 +2131,10 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     const nextVal = !pickupClosed;
     
     if (posClient) {
-      // We upsert ALLEEN de velden die veranderen, Supabase houdt de rest intact
       await posClient.from('pos_settings').upsert({
         id: 'default',
-        pickup_closed: nextVal
+        pickup_closed: nextVal,
+        order_stop_text: orderStopText
       });
     }
 
