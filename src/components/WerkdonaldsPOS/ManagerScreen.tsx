@@ -1618,9 +1618,42 @@ export const ManagerScreen: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400 p-2 bg-slate-950 rounded-lg">
-              <input type="checkbox" checked={true} readOnly />
-              <span>Gasten kunnen nog wel orderstatus zien</span>
+            <div className="space-y-4 pt-4 border-t border-slate-800">
+              <h4 className="font-bold text-slate-200 text-sm">Layout Customization</h4>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400">Titel</label>
+                  <input 
+                    value={customBestelstopText} // Placeholder for now, need to split Title vs Text
+                    onChange={e => setCustomBestelstopText(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400">Thema Kleur</label>
+                  <select className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs">
+                    <option value="rose">Rood (Standaard)</option>
+                    <option value="amber">Oranje/Amber</option>
+                    <option value="emerald">Groen</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-300">
+                <span>Toon Klok</span>
+                <input type="checkbox" className="toggle toggle-sm" checked={true} />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-300">
+                <span>Toon Nieuwsbalk</span>
+                <input type="checkbox" className="toggle toggle-sm" checked={true} />
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-slate-300">
+                <span>Blokkeer Afhaalscherm</span>
+                <input type="checkbox" className="toggle toggle-sm" defaultChecked />
+              </div>
             </div>
 
             <button onClick={handleUpdateBestelstop} className="w-full bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl font-bold text-sm transition">

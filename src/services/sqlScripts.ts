@@ -174,12 +174,13 @@ CREATE TABLE IF NOT EXISTS public.phone_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 1.12 Systeembesturing & Stops (Bestelstop, Afhaalscherm sluiten, TV & Nieuwsbalk Regie, Apparaat/IP Blokkades)
+-- 1.12 Systeembesturing & Stops
 CREATE TABLE IF NOT EXISTS public.pos_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
   order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
   pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
   order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!',
+  order_stop_config JSONB DEFAULT '{"showClock": true, "showNews": true, "theme": "rose", "blockPickup": true}'::jsonb,
   news_config JSONB DEFAULT '{}'::jsonb,
   custom_news_items JSONB DEFAULT '[]'::jsonb,
   blocked_devices JSONB DEFAULT '[]'::jsonb,
@@ -187,11 +188,12 @@ CREATE TABLE IF NOT EXISTS public.pos_settings (
 );
 
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_config JSONB DEFAULT '{"showClock": true, "showNews": true, "theme": "rose", "blockPickup": true}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS news_config JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS custom_news_items JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
 
--- Zorg dat er altijd een default rij bestaat voor instellingen
+-- Zorg dat er altijd een default rij bestaat
 INSERT INTO public.pos_settings (id, order_stop_active, pickup_closed)
 VALUES ('default', FALSE, FALSE)
 ON CONFLICT (id) DO NOTHING;

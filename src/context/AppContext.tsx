@@ -1494,8 +1494,16 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     if (!posClient) return;
     const initProducts = async () => {
       try {
-        const { data: dbProds } = await posClient.from('products').select('*');
-        if (dbProds && dbProds.length >= ALL_DEFAULT_PRODUCTS.length) {
+        console.log("DEBUG: Initializing products...");
+        const { data: dbProds, error: fetchErr } = await posClient.from('products').select('*');
+        if (fetchErr) {
+          console.error("DEBUG: Error fetching products from Supabase:", fetchErr);
+          throw fetchErr;
+        }
+        
+        console.log("DEBUG: Fetched products from DB:", dbProds?.length || 0);
+
+        if (dbProds && dbProds.length >= 1) { // Changed threshold to 1 for safer testing
           setProducts(dbProds.map(p => ({
             id: p.id,
             name: p.name,
@@ -1506,7 +1514,9 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
             emoji: p.emoji,
             inStock: Boolean(p.in_stock)
           })));
-        } else if (posClient) {
+          console.log("DEBUG: Successfully set products from DB");
+        } else {
+          console.log("DEBUG: No products found, upserting defaults...");
           const rows = ALL_DEFAULT_PRODUCTS.map(p => ({
             id: p.id,
             name: p.name,
@@ -1517,11 +1527,16 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
             emoji: p.emoji,
             in_stock: p.inStock
           }));
-          await posClient.from('products').upsert(rows);
-          setProducts(ALL_DEFAULT_PRODUCTS);
+          const { error: upsertErr } = await posClient.from('products').upsert(rows);
+          if (upsertErr) {
+            console.error("DEBUG: Error upserting default products:", upsertErr);
+          } else {
+            console.log("DEBUG: Successfully upserted default products");
+            setProducts(ALL_DEFAULT_PRODUCTS);
+          }
         }
       } catch (err) {
-        console.warn('Product init error:', err);
+        console.error('Product init error:', err);
       }
     };
     initProducts();
