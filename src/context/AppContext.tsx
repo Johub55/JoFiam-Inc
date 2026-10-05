@@ -828,7 +828,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const parsed = JSON.parse(saved);
         const resolvedUrl = parsed.unifiedUrl || parsed.supabaseUrl || '';
         const resolvedKey = parsed.unifiedKey || parsed.supabaseAnonKey || '';
-        if (resolvedUrl && !resolvedUrl.includes('ezndrnnywjznxpzxgksb')) {
+        
+        // Ensure both URL and KEY are present and the URL is not a known bad value
+        if (resolvedUrl && resolvedKey && !resolvedUrl.includes('ezndrnnywjznxpzxgksb')) {
           return {
             unifiedUrl: resolvedUrl,
             unifiedKey: resolvedKey,
@@ -838,9 +840,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             supabaseUrl: resolvedUrl,
             supabaseAnonKey: resolvedKey
           };
+        } else {
+          // If the config in localStorage is incomplete or invalid, remove it
+          localStorage.removeItem('wd_sb_cfg');
         }
-      } catch {}
+      } catch (e) {
+        // If JSON parsing fails, remove the invalid config
+        localStorage.removeItem('wd_sb_cfg');
+      }
     }
+    // Fallback to defaults
     return {
       unifiedUrl: DEFAULT_SUPABASE_POS_URL,
       unifiedKey: DEFAULT_SUPABASE_POS_KEY,
@@ -1132,21 +1141,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Initialize Supabase Clients with Realtime configuration
   useEffect(() => {
     console.log("DEBUG: AppContext init, config:", supabaseConfig);
+    console.log("DEBUG: Component mounted in AppContext");
     try {
       const pUrl = supabaseConfig.unifiedUrl || supabaseConfig.supabaseUrl;
       const pKey = supabaseConfig.unifiedKey || supabaseConfig.supabaseAnonKey;
-      console.log("DEBUG: Resolved pUrl:", pUrl);
+      console.log("DEBUG: Resolved pUrl:", pUrl, "resolved pKey:", pKey);
       const bUrl = supabaseConfig.useSeparatePay ? (supabaseConfig.payUrl || pUrl) : pUrl;
       const bKey = supabaseConfig.useSeparatePay ? (supabaseConfig.payKey || pKey) : pKey;
 
+      if (!pUrl || !pKey) {
+        console.warn("DEBUG: pUrl or pKey is missing!");
+      }
+      
       if (bUrl === pUrl && bKey === pKey) {
         if (pUrl && pKey) {
           const pc = getSupabaseClient(pUrl, pKey, {
             realtime: { params: { eventsPerSecond: 10 } }
           });
           if (pc) {
+            console.log("DEBUG: Successfully set posClient and payClient");
             setPosClient(pc);
             setPayClient(pc);
+          } else {
+             console.error("DEBUG: Failed to get supabase client");
           }
         }
       } else {
@@ -1155,6 +1172,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             realtime: { params: { eventsPerSecond: 10 } }
           });
           if (pc) setPosClient(pc);
+          else console.error("DEBUG: Failed to get posClient");
         }
         if (bUrl && bKey) {
           const bc = getSupabaseClient(bUrl, bKey, {
@@ -1162,11 +1180,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             realtime: { params: { eventsPerSecond: 10 } }
           });
           if (bc) setPayClient(bc);
+          else console.error("DEBUG: Failed to get payClient");
         }
       }
 
       setConnectionText('Verbonden (Live Supabase & Lokale Cache)');
       setIsOnline(true);
+      console.log("DEBUG: AppContext set to ONLINE");
     } catch (e: any) {
       console.error("DEBUG: Kritieke fout in client init:", e);
       setConnectionText('Offline / Lokale Simulatiemodus');
