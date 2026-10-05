@@ -254,10 +254,10 @@ export const ManagerScreen: React.FC = () => {
   const [newLoyaltyPhone, setNewLoyaltyPhone] = useState<string>('');
   const [vipModalCustomer, setVipModalCustomer] = useState<{ phone: string; name: string } | null>(null);
 
-  const handleUpdateBestelstop = () => {
+  const handleUpdateBestelstop = async () => {
     // Call only the specialized function that handles state AND database correctly, 
     // without calling toggleOrderStop which causes a race condition/conflict.
-    setOrderStopActiveWithText(true, customBestelstopText);
+    await setOrderStopActiveWithText(true, customBestelstopText);
     setShowBestelstopModal(false);
     showToast('⚠️ Bestelstop actief: ' + customBestelstopText, 'warning');
   };
