@@ -255,7 +255,8 @@ export const ManagerScreen: React.FC = () => {
   const [vipModalCustomer, setVipModalCustomer] = useState<{ phone: string; name: string } | null>(null);
 
   const handleUpdateBestelstop = () => {
-    toggleOrderStop();
+    // Call only the specialized function that handles state AND database correctly, 
+    // without calling toggleOrderStop which causes a race condition/conflict.
     setOrderStopActiveWithText(true, customBestelstopText);
     setShowBestelstopModal(false);
     showToast('⚠️ Bestelstop actief: ' + customBestelstopText, 'warning');
