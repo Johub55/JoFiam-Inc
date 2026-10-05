@@ -60,6 +60,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     emptyCart,
     orderNo,
     orderStopActive,
+    orderStopText,
     appliedDiscount,
     applyCouponCode,
     removeCoupon,
