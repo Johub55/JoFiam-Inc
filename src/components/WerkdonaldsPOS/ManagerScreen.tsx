@@ -60,6 +60,7 @@ export const ManagerScreen: React.FC = () => {
     totalExpenses,
     orderStopActive,
     orderStopText,
+    orderStopConfig,
     setOrderStopActiveWithText,
     toggleOrderStop,
     pickupClosed,
@@ -116,6 +117,14 @@ export const ManagerScreen: React.FC = () => {
   const [showBestelstopModal, setShowBestelstopModal] = useState<boolean>(false);
   const [selectedBestelstopTemplate, setSelectedBestelstopTemplate] = useState<string>('drukte');
   const [customBestelstopText, setCustomBestelstopText] = useState<string>(orderStopText || '');
+  
+  // New Layout States
+  const [stopTitle, setStopTitle] = useState<string>(orderStopConfig?.title || 'Tijdelijk geen bestellingen');
+  const [stopTheme, setStopTheme] = useState<string>(orderStopConfig?.theme || 'rose');
+  const [stopShowClock, setStopShowClock] = useState<boolean>(orderStopConfig?.showClock ?? true);
+  const [stopShowNews, setStopShowNews] = useState<boolean>(orderStopConfig?.showNews ?? true);
+  const [stopBlockPickup, setStopBlockPickup] = useState<boolean>(orderStopConfig?.blockPickup ?? true);
+  const [stopIcon, setStopIcon] = useState<string>(orderStopConfig?.icon || '🛑');
 
   // Manager Menu 2FA Security Gate State
   const [managerUnlocked, setManagerUnlocked] = useState<boolean>(() => {
@@ -257,7 +266,14 @@ export const ManagerScreen: React.FC = () => {
   const handleUpdateBestelstop = async () => {
     // Call only the specialized function that handles state AND database correctly, 
     // without calling toggleOrderStop which causes a race condition/conflict.
-    await setOrderStopActiveWithText(true, customBestelstopText);
+    await setOrderStopActiveWithText(true, customBestelstopText, {
+      title: stopTitle,
+      theme: stopTheme as any,
+      showClock: stopShowClock,
+      showNews: stopShowNews,
+      blockPickup: stopBlockPickup,
+      icon: stopIcon
+    });
     setShowBestelstopModal(false);
     showToast('⚠️ Bestelstop actief: ' + customBestelstopText, 'warning');
   };
@@ -1625,34 +1641,69 @@ export const ManagerScreen: React.FC = () => {
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-400">Titel</label>
                   <input 
-                    value={customBestelstopText} // Placeholder for now, need to split Title vs Text
-                    onChange={e => setCustomBestelstopText(e.target.value)}
+                    value={stopTitle}
+                    onChange={e => setStopTitle(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
+                    placeholder="Titel bovenin"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-400">Thema Kleur</label>
-                  <select className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs">
+                  <select 
+                    value={stopTheme}
+                    onChange={e => setStopTheme(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
+                  >
                     <option value="rose">Rood (Standaard)</option>
                     <option value="amber">Oranje/Amber</option>
                     <option value="emerald">Groen</option>
+                    <option value="blue">Blauw</option>
+                    <option value="slate">Donker Grijs</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-slate-400">Icoontje (Emoji)</label>
+                  <input 
+                    value={stopIcon}
+                    onChange={e => setStopIcon(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
+                    placeholder="Bijv: 🛑 of 🛠️"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                   <div className="flex items-center justify-between text-[11px] text-slate-300 mb-2">
+                    <span>Blokkeer Afhaal</span>
+                    <input 
+                      type="checkbox" 
+                      className="toggle toggle-xs" 
+                      checked={stopBlockPickup} 
+                      onChange={e => setStopBlockPickup(e.target.checked)} 
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="flex items-center justify-between text-xs text-slate-300">
                 <span>Toon Klok</span>
-                <input type="checkbox" className="toggle toggle-sm" checked={true} />
+                <input 
+                  type="checkbox" 
+                  className="toggle toggle-sm" 
+                  checked={stopShowClock} 
+                  onChange={e => setStopShowClock(e.target.checked)} 
+                />
               </div>
 
               <div className="flex items-center justify-between text-xs text-slate-300">
                 <span>Toon Nieuwsbalk</span>
-                <input type="checkbox" className="toggle toggle-sm" checked={true} />
-              </div>
-
-              <div className="flex items-center justify-between text-xs text-slate-300">
-                <span>Blokkeer Afhaalscherm</span>
-                <input type="checkbox" className="toggle toggle-sm" defaultChecked />
+                <input 
+                  type="checkbox" 
+                  className="toggle toggle-sm" 
+                  checked={stopShowNews} 
+                  onChange={e => setStopShowNews(e.target.checked)} 
+                />
               </div>
             </div>
 

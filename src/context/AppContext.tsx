@@ -126,10 +126,11 @@ interface AppContextType {
   totalExpenses: number;
   orderStopActive: boolean;
   orderStopText: string;
+  orderStopConfig: OrderStopConfig;
   pickupClosed: boolean;
   isSystemLocked: boolean;
   setIsSystemLocked: (locked: boolean) => void;
-  setOrderStopActiveWithText: (active: boolean, text: string) => Promise<void>;
+  setOrderStopActiveWithText: (active: boolean, text: string, config?: Partial<OrderStopConfig>) => Promise<void>;
   currentPosUser: PosUser | null;
   setCurrentPosUser: (user: PosUser | null) => void;
   appliedDiscount: { type: string; val: number; code?: string; label: string };
@@ -963,6 +964,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return localStorage.getItem('wd_order_stop_text') || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
   });
 
+  const [orderStopConfig, setOrderStopConfig] = useState<OrderStopConfig>(() => {
+    const saved = localStorage.getItem('wd_order_stop_config');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      showClock: true,
+      showNews: true,
+      theme: 'rose',
+      blockPickup: true,
+      icon: '🛑',
+      title: 'Tijdelijk geen bestellingen'
+    };
+  });
+
   const [isSystemLocked, setIsSystemLockedState] = useState<boolean>(() => {
     return localStorage.getItem('wd_system_locked') === 'true';
   });
@@ -1355,6 +1373,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         } else if (dbSettings.news_config && typeof dbSettings.news_config === 'object' && dbSettings.news_config.orderStopText) {
           setOrderStopTextState(dbSettings.news_config.orderStopText);
           localStorage.setItem('wd_order_stop_text', dbSettings.news_config.orderStopText);
+        }
+
+        if (dbSettings.order_stop_config && typeof dbSettings.order_stop_config === 'object') {
+          setOrderStopConfig(dbSettings.order_stop_config);
+          localStorage.setItem('wd_order_stop_config', JSON.stringify(dbSettings.order_stop_config));
         }
 
         if (dbSettings.master_security_pin) {
@@ -3754,8 +3777,19 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     if (shouldBlockTableWrite(`Product "${p.name}" aanmaken`)) return;
     if (posClient) {
       try {
-        await posClient.from('products').insert(newP);
-      } catch {}
+        await posClient.from('products').insert({
+          id: newP.id,
+          name: newP.name,
+          price: newP.price,
+          sale_price: newP.salePrice,
+          on_sale: newP.onSale,
+          cat: newP.cat,
+          emoji: newP.emoji,
+          in_stock: newP.inStock
+        });
+      } catch (err) {
+        console.error("DEBUG: createProduct error:", err);
+      }
     }
   };
 
@@ -3764,8 +3798,19 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     if (shouldBlockTableWrite(`Product "${p.name}" wijzigen naar €${p.price}`)) return;
     if (posClient) {
       try {
-        await posClient.from('products').upsert(p);
-      } catch {}
+        await posClient.from('products').upsert({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          sale_price: p.salePrice,
+          on_sale: p.onSale,
+          cat: p.cat,
+          emoji: p.emoji,
+          in_stock: p.inStock
+        });
+      } catch (err) {
+        console.error("DEBUG: updateProduct error:", err);
+      }
     }
   };
 
@@ -3785,7 +3830,17 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
   };
 
   const toggleProductSale = async (id: number) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...p, onSale: !p.onSale } : p));
+    const prod = products.find(p => p.id === id);
+    if (!prod) return;
+    const newState = !prod.onSale;
+    setProducts(prev => prev.map(p => p.id === id ? { ...p, onSale: newState } : p));
+    if (posClient) {
+      try {
+        await posClient.from('products').update({ on_sale: newState }).eq('id', id);
+      } catch (err) {
+        console.error("DEBUG: toggleProductSale error:", err);
+      }
+    }
   };
 
   const resetProductsToDefault = () => {
@@ -4052,6 +4107,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         totalExpenses,
         orderStopActive,
         orderStopText,
+        orderStopConfig,
         pickupClosed,
         isSystemLocked,
         setIsSystemLocked,

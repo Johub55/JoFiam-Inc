@@ -207,6 +207,15 @@ export interface PosUser {
   session_token?: string;
 }
 
+export interface OrderStopConfig {
+  showClock: boolean;
+  showNews: boolean;
+  theme: 'rose' | 'amber' | 'emerald' | 'blue' | 'slate';
+  blockPickup: boolean;
+  icon: string;
+  title: string;
+}
+
 export interface SupabaseConfig {
   unifiedUrl: string;
   unifiedKey: string;

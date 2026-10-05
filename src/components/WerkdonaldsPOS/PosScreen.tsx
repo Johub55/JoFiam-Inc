@@ -61,6 +61,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     orderNo,
     orderStopActive,
     orderStopText,
+    orderStopConfig,
     appliedDiscount,
     applyCouponCode,
     removeCoupon,
@@ -665,18 +666,74 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
       {/* Main Container */}
       <div className="relative flex-1 flex flex-col min-w-0 border-r border-slate-800 overflow-hidden">
         
-        {/* Full-screen Overlay if Order Stop is active */}
-        {orderStopActive && (
+        {/* Full-screen Overlay if Order Stop is active AND blockPickup is true */}
+        {orderStopActive && orderStopConfig?.blockPickup && (
           <div className="absolute inset-0 z-[100] bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center border border-rose-500/20 backdrop-blur-sm">
-            <div className="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
-              <AlertTriangle className="w-12 h-12 text-rose-500" />
+            {orderStopConfig.showClock && (
+              <div className="absolute top-12 text-4xl font-black text-slate-700/50 font-mono tracking-tighter">
+                {new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
+            
+            <div className={`w-24 h-24 rounded-full flex items-center justify-center mb-6 animate-pulse ${
+              orderStopConfig.theme === 'amber' ? 'bg-amber-500/20' :
+              orderStopConfig.theme === 'emerald' ? 'bg-emerald-500/20' :
+              orderStopConfig.theme === 'blue' ? 'bg-blue-500/20' :
+              orderStopConfig.theme === 'slate' ? 'bg-slate-500/20' : 'bg-rose-500/20'
+            }`}>
+              <span className="text-5xl">{orderStopConfig.icon || '🛑'}</span>
             </div>
-            <h2 className="text-3xl font-black text-white mb-3">Tijdelijk geen bestellingen</h2>
+            
+            <h2 className="text-3xl font-black text-white mb-3">{orderStopConfig.title || 'Tijdelijk geen bestellingen'}</h2>
+            
             <p className="text-sm text-slate-400 max-w-sm mb-8 leading-relaxed">
               {orderStopText}
             </p>
-            <div className="text-xs font-bold text-slate-500 bg-slate-900 px-4 py-2 rounded-full border border-slate-800">
-              Je kunt wel je orderstatus inzien via de tracking-schermen.
+            
+            <div className="flex flex-col gap-4 items-center">
+              <div className="text-xs font-bold text-slate-500 bg-slate-900 px-4 py-2 rounded-full border border-slate-800">
+                Je kunt wel je orderstatus inzien via de tracking-schermen.
+              </div>
+              
+              {!orderStopConfig.blockPickup && (
+                <div className="text-[10px] text-slate-600 uppercase tracking-widest font-bold">
+                  Override modus: Afhaalscherm blijft zichtbaar
+                </div>
+              )}
+            </div>
+
+            {orderStopConfig.showNews && (
+              <div className="absolute bottom-0 left-0 right-0 h-12 bg-slate-900/50 border-t border-slate-800 flex items-center px-6 overflow-hidden">
+                 <div className="flex items-center gap-4 animate-infinite-scroll whitespace-nowrap text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                    <span>+++ BESTELSTOP ACTIEF +++</span>
+                    <span>{orderStopText}</span>
+                    <span>+++ BESTELSTOP ACTIEF +++</span>
+                    <span>{orderStopText}</span>
+                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Spoedbericht banner if Order Stop is active AND blockPickup is false */}
+        {orderStopActive && !orderStopConfig?.blockPickup && (
+          <div className={`border-b px-4 py-3 flex items-center justify-between animate-pulse transition-colors ${
+            orderStopConfig.theme === 'amber' ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' :
+            orderStopConfig.theme === 'emerald' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' :
+            orderStopConfig.theme === 'blue' ? 'bg-blue-500/10 border-blue-500/30 text-blue-300' :
+            orderStopConfig.theme === 'slate' ? 'bg-slate-500/10 border-slate-500/30 text-slate-300' :
+            'bg-rose-500/10 border-rose-500/30 text-rose-300'
+          }`}>
+            <span className="flex items-center gap-3">
+              <span className="text-xl">{orderStopConfig.icon || '⚠️'}</span>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-tighter opacity-70">Spoedbericht: {orderStopConfig.title}</span>
+                <span className="text-sm font-bold leading-tight">{orderStopText}</span>
+              </div>
+            </span>
+            <div className="flex items-center gap-2">
+               {orderStopConfig.showClock && <span className="text-xs font-mono opacity-50">{new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}</span>}
+               <span className="text-[10px] px-2 py-0.5 rounded bg-black/30 font-black">STOP ACTIEF</span>
             </div>
           </div>
         )}
