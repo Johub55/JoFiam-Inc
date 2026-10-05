@@ -661,17 +661,22 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   return (
     <div className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-125px)] sm:h-[calc(100vh-130px)] max-h-[880px] my-2 sm:my-3 mx-2 sm:mx-4 rounded-2xl border border-slate-800/80 shadow-2xl bg-slate-950 overflow-hidden">
       
-      {/* LEFT / CENTER: Products Catalog & Kiosk */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-slate-800 overflow-hidden">
+      {/* Main Container */}
+      <div className="relative flex-1 flex flex-col min-w-0 border-r border-slate-800 overflow-hidden">
         
-        {/* Banner if Order Stop is active */}
+        {/* Full-screen Overlay if Order Stop is active */}
         {orderStopActive && (
-          <div className="bg-rose-500/10 border-b border-rose-500/30 px-4 py-2 text-rose-300 font-bold text-xs flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-rose-400" />
-              ⛔ Bestelstop is actief: Nieuwe bestellingen zijn momenteel gepauzeerd!
-            </span>
-            <span className="text-[11px] text-rose-400/80">Manager override actief</span>
+          <div className="absolute inset-0 z-[100] bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center border border-rose-500/20 backdrop-blur-sm">
+            <div className="w-24 h-24 bg-rose-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+              <AlertTriangle className="w-12 h-12 text-rose-500" />
+            </div>
+            <h2 className="text-3xl font-black text-white mb-3">Tijdelijk geen bestellingen</h2>
+            <p className="text-sm text-slate-400 max-w-sm mb-8 leading-relaxed">
+              {orderStopText}
+            </p>
+            <div className="text-xs font-bold text-slate-500 bg-slate-900 px-4 py-2 rounded-full border border-slate-800">
+              Je kunt wel je orderstatus inzien via de tracking-schermen.
+            </div>
           </div>
         )}
 

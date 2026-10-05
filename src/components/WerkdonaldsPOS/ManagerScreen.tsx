@@ -1589,10 +1589,10 @@ export const ManagerScreen: React.FC = () => {
             
             <div className="space-y-2">
               <label className="text-xs text-slate-400">Status bericht:</label>
-              <input 
+              <textarea 
                 value={customBestelstopText} 
                 onChange={e => setCustomBestelstopText(e.target.value)} 
-                className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-sm"
+                className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-sm h-20"
                 placeholder="Bijv: 🛑 Tijdelijke bestelstop..."
               />
             </div>
@@ -1600,16 +1600,27 @@ export const ManagerScreen: React.FC = () => {
             <div className="space-y-2">
               <label className="text-xs text-slate-400">Snelle templates:</label>
               <div className="flex flex-wrap gap-2">
-                {['🛑 Drukte', '🛠️ Onderhoud', '🔌 Systeemstoring', '🍔 Voorraad op'].map(template => (
+                {[
+                  '🛑 Drukte: Wegens extreme drukte tijdelijk gesloten.', 
+                  '🛠️ Onderhoud: Systeem onderhoud, even geduld.', 
+                  '🔌 Storing: Tijdelijke technische storing.', 
+                  '🍔 Voorraad: Voorraad op, helaas.',
+                  '📢 Vakantie: Even eruit, tot snel!'
+                ].map(template => (
                   <button 
                     key={template}
                     onClick={() => setCustomBestelstopText(template)}
-                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] text-slate-300"
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] text-slate-300 text-left"
                   >
                     {template}
                   </button>
                 ))}
               </div>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-400 p-2 bg-slate-950 rounded-lg">
+              <input type="checkbox" checked={true} readOnly />
+              <span>Gasten kunnen nog wel orderstatus zien</span>
             </div>
 
             <button onClick={handleUpdateBestelstop} className="w-full bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl font-bold text-sm transition">
