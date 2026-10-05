@@ -1339,8 +1339,14 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         .select('*')
         .eq('id', 'default')
         .maybeSingle();
+
+      // Check local intent FIRST
+      const localOrderStop = localStorage.getItem('wd_order_stop') === 'true';
+
       if (!settingsErr && dbSettings) {
-        setOrderStopActive(Boolean(dbSettings.order_stop_active));
+        // Only update from DB if DB explicitly turns it off AND we didn't just have it active locally,
+        // or just apply DB state but prioritize user's last known 'true' state.
+        setOrderStopActive(localOrderStop || Boolean(dbSettings.order_stop_active));
         setPickupClosed(Boolean(dbSettings.pickup_closed));
 
         if (dbSettings.order_stop_text) {

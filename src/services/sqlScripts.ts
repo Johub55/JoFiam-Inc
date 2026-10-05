@@ -179,12 +179,14 @@ CREATE TABLE IF NOT EXISTS public.pos_settings (
   id TEXT PRIMARY KEY DEFAULT 'default',
   order_stop_active BOOLEAN NOT NULL DEFAULT FALSE,
   pickup_closed BOOLEAN NOT NULL DEFAULT FALSE,
+  order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!',
   news_config JSONB DEFAULT '{}'::jsonb,
   custom_news_items JSONB DEFAULT '[]'::jsonb,
   blocked_devices JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_text TEXT DEFAULT 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!';
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS news_config JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS custom_news_items JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
