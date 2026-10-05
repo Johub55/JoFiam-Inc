@@ -254,6 +254,13 @@ export const ManagerScreen: React.FC = () => {
   const [newLoyaltyPhone, setNewLoyaltyPhone] = useState<string>('');
   const [vipModalCustomer, setVipModalCustomer] = useState<{ phone: string; name: string } | null>(null);
 
+  const handleUpdateBestelstop = () => {
+    toggleOrderStop();
+    setOrderStopActiveWithText(true, customBestelstopText);
+    setShowBestelstopModal(false);
+    showToast('⚠️ Bestelstop actief: ' + customBestelstopText, 'warning');
+  };
+
   useEffect(() => {
     const refreshLoyalty = () => {
       setLoyaltyCustomers(getLoyaltyCustomers());
