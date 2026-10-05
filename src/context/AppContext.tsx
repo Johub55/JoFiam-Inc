@@ -33,7 +33,8 @@ import {
   INITIAL_POS_USERS,
   ORDER_KIOSK_USER,
   RPI_KIOSK_USER,
-  BRAND_CONFIGS
+  BRAND_CONFIGS,
+  getSupabaseClient
 } from '../services/store';
 import { DEFAULT_PRODUCTS, ALL_DEFAULT_PRODUCTS, KOEKPLOEG_PRODUCTS } from '../services/defaultProducts';
 import { AudioFX } from '../services/audio';
@@ -1130,9 +1131,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Initialize Supabase Clients with Realtime configuration
   useEffect(() => {
+    console.log("DEBUG: AppContext init, config:", supabaseConfig);
     try {
       const pUrl = supabaseConfig.unifiedUrl || supabaseConfig.supabaseUrl;
       const pKey = supabaseConfig.unifiedKey || supabaseConfig.supabaseAnonKey;
+      console.log("DEBUG: Resolved pUrl:", pUrl);
       const bUrl = supabaseConfig.useSeparatePay ? (supabaseConfig.payUrl || pUrl) : pUrl;
       const bKey = supabaseConfig.useSeparatePay ? (supabaseConfig.payKey || pKey) : pKey;
 
@@ -1165,6 +1168,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setConnectionText('Verbonden (Live Supabase & Lokale Cache)');
       setIsOnline(true);
     } catch (e: any) {
+      console.error("DEBUG: Kritieke fout in client init:", e);
       setConnectionText('Offline / Lokale Simulatiemodus');
       setIsOnline(false);
       setSyncStatus('offline');
