@@ -158,6 +158,20 @@ export const SupabaseModal: React.FC<SupabaseModalProps> = ({ onClose }) => {
           </button>
         </div>
 
+        {/* Action Bar (Reset) */}
+        <div className="px-6 py-3 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
+            <span className="text-[10px] text-slate-500 font-bold uppercase">Configuratie Beheer</span>
+            <button
+                onClick={() => {
+                    localStorage.removeItem('wd_sb_cfg');
+                    window.location.reload();
+                }}
+                className="px-3 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold transition"
+            >
+                Reset Verbinding
+            </button>
+        </div>
+
         {/* Content Body */}
         <div className="p-6 overflow-y-auto space-y-6 text-xs text-slate-300">
           

@@ -118,26 +118,34 @@ export function formatCardUid(uid?: string): string {
 const _clientCache = new Map<string, SupabaseClient>();
 
 export function getSupabaseClient(url?: string, key?: string, options?: any): SupabaseClient | null {
-  if (!url || !key) {
-    // Attempt to load from localStorage if not provided
+  // 1. Try to load from arguments
+  let targetUrl = url;
+  let targetKey = key;
+
+  // 2. If not in arguments, try localStorage
+  if (!targetUrl || !targetKey) {
     if (typeof window !== 'undefined') {
       try {
         const cfgRaw = localStorage.getItem('wd_sb_cfg');
         const cfg = cfgRaw ? JSON.parse(cfgRaw) : {};
-        url = cfg.unifiedUrl || cfg.supabaseUrl || DEFAULT_SUPABASE_POS_URL;
-        key = cfg.unifiedKey || cfg.supabaseAnonKey || DEFAULT_SUPABASE_POS_KEY;
+        if (!targetUrl) targetUrl = cfg.unifiedUrl || cfg.supabaseUrl;
+        if (!targetKey) targetKey = cfg.unifiedKey || cfg.supabaseAnonKey;
       } catch (e) {}
     }
   }
 
-  if (!url || !key) return null;
+  // 3. If still not found, fallback to hardcoded defaults
+  if (!targetUrl) targetUrl = DEFAULT_SUPABASE_POS_URL;
+  if (!targetKey) targetKey = DEFAULT_SUPABASE_POS_KEY;
 
-  const cacheKey = `${url}::${key}`;
+  if (!targetUrl || !targetKey) return null;
+
+  const cacheKey = `${targetUrl}::${targetKey}`;
   if (_clientCache.has(cacheKey)) {
     return _clientCache.get(cacheKey) || null;
   }
 
-  const client = createClient(url, key, options || {
+  const client = createClient(targetUrl, targetKey, options || {
     auth: { persistSession: false, autoRefreshToken: false },
     realtime: { params: { eventsPerSecond: 10 } }
   });

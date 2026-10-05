@@ -347,6 +347,720 @@ void handleSerialInput() {
 }
 `;
 
+export const PICO_W_SKETCH_CODE = `/*
+ * ==============================================================================
+ *  WERKPAY & WERKDONALDS - DIY PINAPPARAAT (RASPBERRY PI PICO W 2022)
+ * ==============================================================================
+ *  Microcontroller: Raspberry Pi Pico W (RP2040)
+ *  Ontwikkelomgeving: Arduino IDE v2 (met Earle Philhower RP2040 core)
+ *  Logische spanning: 3.3V (LET OP: GPIO pinnen zijn NIET 5V tolerant!)
+ *
+ *  AANSLUITSCHEMA BREADBOARD (Raspberry Pi Pico W):
+ *  ----------------------------------------------------------------------------
+ *  A) I2C LCD Display (1602 of 2004 met PCF8574 backpack):
+ *     - VCC  -> Pin 36 (3V3 OUT - Aanbevolen, I2C pull-ups trekken dan veilig naar 3.3V!)
+ *               (Optioneel: Pin 40 VBUS = 5V alleen met bi-directionele logic level shifter)
+ *     - GND  -> Pin 8 (GND) of Pin 3
+ *     - SDA  -> Pin 6 (GP4 - I2C0 SDA)
+ *     - SCL  -> Pin 7 (GP5 - I2C0 SCL)
+ *
+ *  B) RFID-RC522 (NFC / RFID lezer):
+ *     - 3.3V -> Pin 36 (3V3 OUT) [LET OP: Nooit op 5V/VBUS aansluiten!]
+ *     - RST  -> Pin 26 (GP20)
+ *     - GND  -> Pin 23 (GND) of Pin 38
+ *     - MISO -> Pin 21 (GP16 - SPI0 RX)
+ *     - MOSI -> Pin 25 (GP19 - SPI0 TX)
+ *     - SCK  -> Pin 24 (GP18 - SPI0 SCK)
+ *     - SDA  -> Pin 22 (GP17 - SPI0 CS / SS)
+ *
+ *  C) 4x4 Matrix Keypad (8 pinnen op een rij):
+ *     - R1 (Rij 1) -> Pin 9  (GP6)
+ *     - R2 (Rij 2) -> Pin 10 (GP7)
+ *     - R3 (Rij 3) -> Pin 11 (GP8)
+ *     - R4 (Rij 4) -> Pin 12 (GP9)
+ *     - C1 (Kol 1) -> Pin 14 (GP10)
+ *     - C2 (Kol 2) -> Pin 15 (GP11)
+ *     - C3 (Kol 3) -> Pin 16 (GP12)
+ *     - C4 (Kol 4) -> Pin 17 (GP13)
+ *
+ *  D) Passieve of Actieve Buzzer (Optioneel):
+ *     - Positief (+) -> Pin 19 (GP14)
+ *     - Negatief (-) -> Pin 18 (GND)
+ *
+ *  VEREISTE ARDUINO LIBRARIES (Arduino IDE v2 -> Tools -> Manage Libraries):
+ *  1. "LiquidCrystal I2C" door Frank de Brabander of Marco Schwartz
+ *  2. "MFRC522" door GithubCommunity
+ *  3. "Keypad" door Mark Stanley, Alexander Brevig
+ *
+ *  ARDUINO IDE V2 INSTALLATIE:
+ *  1. Ga naar Bestand -> Voorkeuren (File -> Preferences)
+ *  2. Voeg deze URL toe bij "Additional boards manager URLs":
+ *     https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+ *  3. Ga naar Hulpmiddelen -> Board -> Boards Manager en zoek "pico"
+ *  4. Installeer "Raspberry Pi Pico/RP2040 by Earle F. Philhower"
+ *  5. Selecteer Board: "Raspberry Pi Pico W"
+ *  6. Sluit Pico W aan met USB (eerste keer met BOOTSEL ingedrukt) en upload!
+ * ==============================================================================
+ */
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Keypad.h>
+
+// Pinnen voor Raspberry Pi Pico W
+#define I2C_SDA_PIN     4   // GP4 (Fysieke pin 6)
+#define I2C_SCL_PIN     5   // GP5 (Fysieke pin 7)
+
+#define SPI_MISO_PIN    16  // GP16 (Fysieke pin 21)
+#define SPI_CS_PIN      17  // GP17 (Fysieke pin 22 - SDA op RC522)
+#define SPI_SCK_PIN     18  // GP18 (Fysieke pin 24)
+#define SPI_MOSI_PIN    19  // GP19 (Fysieke pin 25)
+#define RST_PIN         20  // GP20 (Fysieke pin 26)
+
+#define BUZZER_PIN      14  // GP14 (Fysieke pin 19)
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+MFRC522 mfrc522(SPI_CS_PIN, RST_PIN);
+
+const byte ROWS = 4; 
+const byte COLS = 4; 
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {6, 7, 8, 9};      // GP6, GP7, GP8, GP9 (Pinnen 9, 10, 11, 12)
+byte colPins[COLS] = {10, 11, 12, 13};  // GP10, GP11, GP12, GP13 (Pinnen 14, 15, 16, 17)
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+enum TerminalState {
+  STATE_IDLE,
+  STATE_WAITING_CARD,
+  STATE_WAITING_PIN,
+  STATE_PROCESSING,
+  STATE_RESULT
+};
+
+TerminalState currentState = STATE_IDLE;
+String pendingAmount = "0.00";
+String pendingOrderId = "";
+String scannedUid = "";
+String enteredPin = "";
+unsigned long stateTimer = 0;
+
+void beep(int frequency, int durationMs) {
+  #if defined(BUZZER_PIN)
+    tone(BUZZER_PIN, frequency, durationMs);
+    delay(durationMs);
+    noTone(BUZZER_PIN);
+  #else
+    delay(durationMs);
+  #endif
+}
+
+void setIdleScreen() {
+  currentState = STATE_IDLE;
+  pendingAmount = "0.00";
+  pendingOrderId = "";
+  scannedUid = "";
+  enteredPin = "";
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Werkdonalds POS");
+  lcd.setCursor(0, 1);
+  lcd.print("Klaar voor order");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  #if defined(BUZZER_PIN)
+    pinMode(BUZZER_PIN, OUTPUT);
+  #endif
+
+  // I2C pinnen instellen voor Raspberry Pi Pico W
+  Wire.setSDA(I2C_SDA_PIN);
+  Wire.setSCL(I2C_SCL_PIN);
+  Wire.begin();
+
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("WerkPay Pico W");
+  lcd.setCursor(0, 1);
+  lcd.print("Opstarten...");
+
+  // SPI pinnen instellen voor Raspberry Pi Pico W
+  SPI.setRX(SPI_MISO_PIN);
+  SPI.setTX(SPI_MOSI_PIN);
+  SPI.setSCK(SPI_SCK_PIN);
+  SPI.begin();
+
+  mfrc522.PCD_Init();
+  delay(100);
+
+  beep(2000, 100);
+  beep(3000, 150);
+
+  setIdleScreen();
+  Serial.println("READY:WERKPAY_PICOW_V1.0");
+}
+
+void loop() {
+  handleSerialInput();
+
+  switch (currentState) {
+    case STATE_IDLE:
+      break;
+
+    case STATE_WAITING_CARD:
+      char cancelKey = keypad.getKey();
+      if (cancelKey == 'D' || cancelKey == '*') {
+        beep(800, 200);
+        Serial.println("RESULT:CANCELLED");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Geannuleerd!");
+        delay(1200);
+        setIdleScreen();
+        return;
+      }
+
+      if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+        scannedUid = "";
+        for (byte i = 0; i < mfrc522.uid.size; i++) {
+          if (mfrc522.uid.uidByte[i] < 0x10) scannedUid += "0";
+          scannedUid += String(mfrc522.uid.uidByte[i], HEX);
+        }
+        scannedUid.toUpperCase();
+        mfrc522.PICC_HaltA();
+        mfrc522.PCD_StopCrypto1();
+
+        beep(2500, 120);
+
+        currentState = STATE_WAITING_PIN;
+        enteredPin = "";
+        stateTimer = millis();
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Pas herkend!");
+        lcd.setCursor(0, 1);
+        lcd.print("Pincode: ");
+      }
+      break;
+
+    case STATE_WAITING_PIN:
+      char key = keypad.getKey();
+      if (key) {
+        if (key == 'D') {
+          beep(800, 200);
+          Serial.println("RESULT:CANCELLED");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Geannuleerd!");
+          delay(1200);
+          setIdleScreen();
+          return;
+        } 
+        else if (key == '*') {
+          if (enteredPin.length() > 0) {
+            enteredPin.remove(enteredPin.length() - 1);
+            beep(1500, 50);
+            updatePinDisplay();
+          }
+        } 
+        else if (key == '#' || key == 'A') {
+          if (enteredPin.length() >= 4) {
+            beep(2800, 150);
+            currentState = STATE_PROCESSING;
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Verifi\\x65ren...");
+            lcd.setCursor(0, 1);
+            lcd.print("Even geduld a.u.b.");
+
+            Serial.print("RESULT:OK:UID=");
+            Serial.print(scannedUid);
+            Serial.print(":PIN=");
+            Serial.println(enteredPin);
+          } else {
+            beep(600, 300);
+          }
+        } 
+        else if (key >= '0' && key <= '9') {
+          if (enteredPin.length() < 6) {
+            enteredPin += key;
+            beep(2000, 40);
+            updatePinDisplay();
+          }
+        }
+      }
+
+      if (millis() - stateTimer > 30000) {
+        Serial.println("RESULT:TIMEOUT");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("PIN Timeout");
+        delay(1500);
+        setIdleScreen();
+      }
+      break;
+
+    case STATE_PROCESSING:
+      break;
+
+    case STATE_RESULT:
+      if (millis() - stateTimer > 3500) {
+        setIdleScreen();
+      }
+      break;
+  }
+}
+
+void updatePinDisplay() {
+  lcd.setCursor(9, 1);
+  lcd.print("       ");
+  lcd.setCursor(9, 1);
+  for (unsigned int i = 0; i < enteredPin.length(); i++) {
+    lcd.print("*");
+  }
+}
+
+void handleSerialInput() {
+  if (!Serial.available()) return;
+
+  String line = Serial.readStringUntil('\\n');
+  line.trim();
+  if (line.length() == 0) return;
+
+  if (line.startsWith("PAY:")) {
+    int firstColon = line.indexOf(':');
+    int secondColon = line.indexOf(':', firstColon + 1);
+
+    if (secondColon != -1) {
+      pendingAmount = line.substring(firstColon + 1, secondColon);
+      pendingOrderId = line.substring(secondColon + 1);
+    } else {
+      pendingAmount = line.substring(firstColon + 1);
+      pendingOrderId = "0000";
+    }
+
+    currentState = STATE_WAITING_CARD;
+    stateTimer = millis();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WerkPay: \\xDF ");
+    lcd.print(pendingAmount);
+
+    lcd.setCursor(0, 1);
+    lcd.print("Scan pas / kaart");
+
+    beep(2400, 100);
+    Serial.println("ACK:WAITING_FOR_CARD");
+  }
+  else if (line.startsWith("APPROVED")) {
+    currentState = STATE_RESULT;
+    stateTimer = millis();
+
+    beep(2000, 100);
+    beep(2500, 100);
+    beep(3000, 200);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Betaling Gelukt!");
+    lcd.setCursor(0, 1);
+    lcd.print("Eet smakelijk! :)");
+  }
+  else if (line.startsWith("DECLINED")) {
+    currentState = STATE_RESULT;
+    stateTimer = millis();
+
+    beep(700, 250);
+    beep(500, 400);
+
+    String reason = "Mislukt!";
+    int c = line.indexOf(':');
+    if (c != -1) reason = line.substring(c + 1);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Afgewezen!");
+    lcd.setCursor(0, 1);
+    lcd.print(reason.substring(0, 16));
+  }
+  else if (line == "RESET" || line == "CANCEL") {
+    setIdleScreen();
+    Serial.println("ACK:RESET");
+  }
+  else if (line == "PING") {
+    Serial.println("PONG:WERKPAY_PINPAD");
+  }
+}
+`;
+
+export const PICO_W_I2C_NFC_SKETCH_CODE = `/*
+ * ==============================================================================
+ *  WERKPAY & WERKDONALDS - DIY PINAPPARAAT (RASPBERRY PI PICO W - I2C NFC)
+ * ==============================================================================
+ *  Microcontroller: Raspberry Pi Pico W (RP2040)
+ *  Zowel het LCD scherm ALS de NFC/RFID lezer zitten SAMEN op dezelfde I2C bus!
+ *  I2C pinnen: SDA = GP4 (Pin 6), SCL = GP5 (Pin 7)
+ *  Ontwikkelomgeving: Arduino IDE v2 (met Earle Philhower RP2040 core)
+ *  Logische spanning: 3.3V
+ *
+ *  AANSLUITSCHEMA BREADBOARD:
+ *  ----------------------------------------------------------------------------
+ *  A) GEDEELDE I2C BUS (Zowel LCD Display als I2C NFC Lezer):
+ *     - 3.3V (VCC van LCD én NFC) -> Pin 36 (3V3_OUT)
+ *     - GND  (GND van LCD én NFC) -> Pin 38 (GND) of Pin 8
+ *     - SDA  (SDA van LCD én NFC) -> Pin 6  (GP4 - I2C0 SDA)
+ *     - SCL  (SCL van LCD én NFC) -> Pin 7  (GP5 - I2C0 SCL)
+ *
+ *     I2C Adressen op de bus:
+ *     - LCD Display: 0x27 (of 0x3F)
+ *     - PN532 NFC:   0x24 (of 0x28 bij RC522 I2C)
+ *
+ *  B) 4x4 Matrix Keypad (8 pinnen):
+ *     - R1 (Rij 1) -> Pin 9  (GP6)
+ *     - R2 (Rij 2) -> Pin 10 (GP7)
+ *     - R3 (Rij 3) -> Pin 11 (GP8)
+ *     - R4 (Rij 4) -> Pin 12 (GP9)
+ *     - C1 (Kol 1) -> Pin 14 (GP10)
+ *     - C2 (Kol 2) -> Pin 15 (GP11)
+ *     - C3 (Kol 3) -> Pin 16 (GP12)
+ *     - C4 (Kol 4) -> Pin 17 (GP13)
+ *
+ *  C) Zoemer / Buzzer (Optioneel):
+ *     - Positief (+) -> Pin 19 (GP14)
+ *     - Negatief (-) -> Pin 18 (GND)
+ *
+ *  VEREISTE ARDUINO LIBRARIES (Arduino IDE v2 -> Tools -> Manage Libraries):
+ *  1. "LiquidCrystal I2C" door Frank de Brabander of Marco Schwartz
+ *  2. "Adafruit PN532" door Adafruit (voor PN532 NFC I2C)
+ *     OF "MFRC522_I2C" (als je een RC522 I2C module hebt)
+ *  3. "Keypad" door Mark Stanley, Alexander Brevig
+ * ==============================================================================
+ */
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Adafruit_PN532.h>
+#include <Keypad.h>
+
+#define I2C_SDA_PIN     4   // GP4 (Fysieke pin 6)
+#define I2C_SCL_PIN     5   // GP5 (Fysieke pin 7)
+#define BUZZER_PIN      14  // GP14 (Fysieke pin 19)
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// PN532 via I2C (gebruikt standaard Wire op GP4/GP5)
+#define PN532_IRQ   (2)
+#define PN532_RESET (3)
+Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+
+const byte ROWS = 4; 
+const byte COLS = 4; 
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {6, 7, 8, 9};      // GP6, GP7, GP8, GP9 (Pinnen 9, 10, 11, 12)
+byte colPins[COLS] = {10, 11, 12, 13};  // GP10, GP11, GP12, GP13 (Pinnen 14, 15, 16, 17)
+
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+enum TerminalState {
+  STATE_IDLE,
+  STATE_WAITING_CARD,
+  STATE_WAITING_PIN,
+  STATE_PROCESSING,
+  STATE_RESULT
+};
+
+TerminalState currentState = STATE_IDLE;
+String pendingAmount = "0.00";
+String pendingOrderId = "";
+String scannedUid = "";
+String enteredPin = "";
+unsigned long stateTimer = 0;
+
+void beep(int frequency, int durationMs) {
+  #if defined(BUZZER_PIN)
+    tone(BUZZER_PIN, frequency, durationMs);
+    delay(durationMs);
+    noTone(BUZZER_PIN);
+  #else
+    delay(durationMs);
+  #endif
+}
+
+void setIdleScreen() {
+  currentState = STATE_IDLE;
+  pendingAmount = "0.00";
+  pendingOrderId = "";
+  scannedUid = "";
+  enteredPin = "";
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Werkdonalds POS");
+  lcd.setCursor(0, 1);
+  lcd.print("Klaar voor order");
+}
+
+void updatePinDisplay() {
+  lcd.setCursor(9, 1);
+  lcd.print("       ");
+  lcd.setCursor(9, 1);
+  for (unsigned int i = 0; i < enteredPin.length(); i++) {
+    lcd.print("*");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  #if defined(BUZZER_PIN)
+    pinMode(BUZZER_PIN, OUTPUT);
+  #endif
+
+  // I2C pinnen instellen voor Raspberry Pi Pico W
+  Wire.setSDA(I2C_SDA_PIN);
+  Wire.setSCL(I2C_SCL_PIN);
+  Wire.begin();
+
+  // LCD Initialiseren
+  lcd.init();
+  lcd.backlight();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("WerkPay Pico W");
+  lcd.setCursor(0, 1);
+  lcd.print("I2C NFC Start...");
+
+  // NFC Lezer Initialiseren via I2C
+  nfc.begin();
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    lcd.setCursor(0, 1);
+    lcd.print("NFC niet gevonden");
+    Serial.println("ERR:NFC_NOT_FOUND");
+  } else {
+    nfc.SAMConfig();
+    lcd.setCursor(0, 1);
+    lcd.print("NFC I2C Gereed!");
+  }
+
+  delay(600);
+  beep(2000, 100);
+  beep(3000, 150);
+
+  setIdleScreen();
+  Serial.println("READY:WERKPAY_PICOW_I2C_V1.0");
+}
+
+void loop() {
+  handleSerialInput();
+
+  switch (currentState) {
+    case STATE_IDLE:
+      break;
+
+    case STATE_WAITING_CARD: {
+      char cancelKey = keypad.getKey();
+      if (cancelKey == 'D' || cancelKey == '*') {
+        beep(800, 200);
+        Serial.println("RESULT:CANCELLED");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Geannuleerd!");
+        delay(1200);
+        setIdleScreen();
+        return;
+      }
+
+      // NFC Lezen via I2C (snelle non-blocking check van 40ms)
+      uint8_t uid[7];
+      uint8_t uidLength = 0;
+      bool success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 40);
+
+      if (success && uidLength > 0) {
+        scannedUid = "";
+        for (uint8_t i = 0; i < uidLength; i++) {
+          if (uid[i] < 0x10) scannedUid += "0";
+          scannedUid += String(uid[i], HEX);
+        }
+        scannedUid.toUpperCase();
+
+        beep(2500, 120);
+
+        currentState = STATE_WAITING_PIN;
+        enteredPin = "";
+        stateTimer = millis();
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Pas herkend!");
+        lcd.setCursor(0, 1);
+        lcd.print("Pincode: ");
+      }
+      break;
+    }
+
+    case STATE_WAITING_PIN: {
+      char key = keypad.getKey();
+      if (key) {
+        if (key == 'D') {
+          beep(800, 200);
+          Serial.println("RESULT:CANCELLED");
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Geannuleerd!");
+          delay(1200);
+          setIdleScreen();
+          return;
+        } 
+        else if (key == '*') {
+          if (enteredPin.length() > 0) {
+            enteredPin.remove(enteredPin.length() - 1);
+            beep(1500, 50);
+            updatePinDisplay();
+          }
+        } 
+        else if (key == '#' || key == 'A') {
+          if (enteredPin.length() >= 4) {
+            beep(2800, 150);
+            currentState = STATE_PROCESSING;
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Verifi\\x65ren...");
+            lcd.setCursor(0, 1);
+            lcd.print("Even geduld a.u.b.");
+
+            Serial.print("RESULT:OK:UID=");
+            Serial.print(scannedUid);
+            Serial.print(":PIN=");
+            Serial.println(enteredPin);
+          } else {
+            beep(600, 300);
+          }
+        } 
+        else if (key >= '0' && key <= '9') {
+          if (enteredPin.length() < 6) {
+            enteredPin += key;
+            beep(2000, 40);
+            updatePinDisplay();
+          }
+        }
+      }
+
+      if (millis() - stateTimer > 30000) {
+        Serial.println("RESULT:TIMEOUT");
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("PIN Timeout");
+        delay(1500);
+        setIdleScreen();
+      }
+      break;
+    }
+
+    case STATE_PROCESSING:
+      break;
+
+    case STATE_RESULT:
+      if (millis() - stateTimer > 3500) {
+        setIdleScreen();
+      }
+      break;
+  }
+}
+
+void handleSerialInput() {
+  if (!Serial.available()) return;
+
+  String line = Serial.readStringUntil('\\n');
+  line.trim();
+  if (line.length() == 0) return;
+
+  if (line.startsWith("PAY:")) {
+    int firstColon = line.indexOf(':');
+    int secondColon = line.indexOf(':', firstColon + 1);
+
+    if (secondColon != -1) {
+      pendingAmount = line.substring(firstColon + 1, secondColon);
+      pendingOrderId = line.substring(secondColon + 1);
+    } else {
+      pendingAmount = line.substring(firstColon + 1);
+      pendingOrderId = "0000";
+    }
+
+    currentState = STATE_WAITING_CARD;
+    stateTimer = millis();
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("WerkPay: \\xDF ");
+    lcd.print(pendingAmount);
+
+    lcd.setCursor(0, 1);
+    lcd.print("Scan pas / kaart");
+
+    beep(2400, 100);
+    Serial.println("ACK:WAITING_FOR_CARD");
+  }
+  else if (line.startsWith("APPROVED")) {
+    currentState = STATE_RESULT;
+    stateTimer = millis();
+
+    beep(2000, 100);
+    beep(2500, 100);
+    beep(3000, 200);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Betaling Gelukt!");
+    lcd.setCursor(0, 1);
+    lcd.print("Eet smakelijk! :)");
+  }
+  else if (line.startsWith("DECLINED")) {
+    currentState = STATE_RESULT;
+    stateTimer = millis();
+
+    beep(700, 250);
+    beep(500, 400);
+
+    String reason = "Mislukt!";
+    int c = line.indexOf(':');
+    if (c != -1) reason = line.substring(c + 1);
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Afgewezen!");
+    lcd.setCursor(0, 1);
+    lcd.print(reason.substring(0, 16));
+  }
+  else if (line == "RESET" || line == "CANCEL") {
+    setIdleScreen();
+    Serial.println("ACK:RESET");
+  }
+  else if (line == "PING") {
+    Serial.println("PONG:WERKPAY_PINPAD");
+  }
+}
+`;
+
 class TerminalManager {
   private port: any = null;
   private reader: any = null;

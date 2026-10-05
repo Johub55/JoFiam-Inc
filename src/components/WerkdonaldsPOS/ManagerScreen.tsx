@@ -1517,63 +1517,75 @@ export const ManagerScreen: React.FC = () => {
         </div>
       </div>
 
-      {/* Store Operations & Controls */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow">
-        <h2 className="font-bold text-sm text-white mb-3 flex items-center gap-2">
-          <span>⚙️ Winkel- &amp; Baliebeheer</span>
+      {/* Systeemregie & Controle Paneel */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow space-y-4">
+        <h2 className="font-black text-sm text-white flex items-center gap-2">
+          <Zap className="w-4 h-4 text-amber-400" />
+          <span>Systeemregie &amp; Controle (Live)</span>
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          
-          {/* Bestelstop */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-            <div>
-              <div className="font-bold text-slate-200">⛔ Bestelstop Kassa</div>
-              <p className="text-[11px] text-slate-400">
-                {orderStopActive ? 'Actief: klanten kunnen niet afrekenen' : 'Niet actief: kassa is open'}
-              </p>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          {/* Bestelstop Regie */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-200">⛔ Bestelstop</span>
+              <button
+                onClick={() => {
+                  if (orderStopActive) {
+                    toggleOrderStop();
+                    showToast('🎉 Bestelstop opgeheven.', 'success');
+                  } else {
+                    setShowBestelstopModal(true);
+                  }
+                }}
+                className={`px-3 py-1 rounded-lg font-bold transition ${orderStopActive ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+              >
+                {orderStopActive ? 'Stop Opheffen' : 'Activeren...'}
+              </button>
             </div>
-            <button
-              onClick={() => {
-                if (orderStopActive) {
-                  toggleOrderStop();
-                  showToast('🎉 Bestelstop opgeheven! Kassa is weer open.', 'success');
-                } else {
-                  setCustomBestelstopText(orderStopText || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!');
-                  setShowBestelstopModal(true);
-                }
-              }}
-              className={`px-3 py-2 rounded-xl font-bold text-xs transition ${
-                orderStopActive 
-                  ? 'bg-rose-600 text-white shadow-rose-600/20' 
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              {orderStopActive ? 'Bestelstop Opheffen' : 'Bestelstop Instellen'}
-            </button>
+            <p className="text-[10px] text-slate-400">Status: {orderStopActive ? 'Actief' : 'Inactief'}</p>
           </div>
 
-          {/* Afhaalscherm sluiten */}
-          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
-            <div>
-              <div className="font-bold text-slate-200">🔴 Afhaalbalie Scherm</div>
-              <p className="text-[11px] text-slate-400">
-                {pickupClosed ? 'Gesloten bord wordt getoond op TV' : 'Actief: bestelnummers worden getoond'}
-              </p>
+          {/* Keuken Blokkeren */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-200">👨‍🍳 Keuken (Intern)</span>
+              <button className="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 font-bold">
+                Blokkeren
+              </button>
             </div>
-            <button
-              onClick={togglePickupClosed}
-              className={`px-3 py-2 rounded-xl font-bold text-xs transition ${
-                pickupClosed 
-                  ? 'bg-rose-600 text-white shadow-rose-600/20' 
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-              }`}
-            >
-              {pickupClosed ? 'Balie Openen' : 'Balie Sluiten'}
-            </button>
+            <p className="text-[10px] text-slate-400">Blokkeer keuken-interface (KDS).</p>
           </div>
 
+          {/* TV-Afhaalbalie Regie */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-200">🔴 Afhaalbalie</span>
+              <button
+                onClick={togglePickupClosed}
+                className={`px-3 py-1 rounded-lg font-bold transition ${pickupClosed ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-300'}`}
+              >
+                {pickupClosed ? 'Balie Openen' : 'Balie Sluiten'}
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400">Schermt de TV af voor gasten.</p>
+          </div>
         </div>
       </div>
+
+      {/* Bestelstop Config Modal */}
+      {showBestelstopModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-4">
+            <h3 className="font-bold text-white">Bestelstop Instellen</h3>
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400">Icoon (Emoji):</label>
+              <input value={customBestelstopText} onChange={e => setCustomBestelstopText(e.target.value)} className="w-full bg-slate-950 border p-2 text-white rounded-lg" />
+            </div>
+            <button onClick={handleUpdateBestelstop} className="w-full bg-blue-600 text-white p-2 rounded-lg font-bold">Bevestigen</button>
+          </div>
+        </div>
+      )}
 
       {/* Cadeaubonnen & Privé Cards Beheer */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">

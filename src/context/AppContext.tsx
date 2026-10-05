@@ -1447,7 +1447,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       setLastSyncTime(new Date());
       setIsOnline(true);
     } catch (err: any) {
-      console.warn('Cloud sync error:', err);
+      console.error('Cloud sync failure details:', err);
+      setIsOnline(false);
       if (!isBackground) {
         setSyncStatus('error');
       }
@@ -3444,16 +3445,22 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       return { success: true, message: 'Ingelogd op Raspberry Pi Spaarpaal Kiosk (Vergrendeld)!' };
     }
 
-    // 1. Check live in Supabase pos_users table first (guarantees Supabase password & Zero-SQL perms markers work instantly)
+    // 1. Check live in Supabase pos_users table first
     if (posClient) {
       try {
+        console.log('Login attempt: Checking Supabase pos_users for', cleanU);
         const { data, error } = await posClient
           .from('pos_users')
           .select('*')
           .ilike('username', cleanU)
           .single();
 
+        if (error) {
+          console.warn('Supabase pos_users login fetch error:', error);
+        }
+
         if (data && !error) {
+          console.log('Login attempt: User found in Supabase pos_users');
           const parsedDbUser = parsePosUserFromDb(data);
           if (parsedDbUser.is_banned || parsedDbUser.is_suspended || blockedDevices.some(b => b.value.toLowerCase() === cleanU)) {
             logAuditAction('GEBLOKKEERDE_LOGIN_POGING', `Geblokkeerd account @${cleanU} probeerde in te loggen.`);
@@ -3462,14 +3469,17 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
           if (data.password === cleanPass || data.password === pass) {
             setCurrentPosUser(parsedDbUser);
             setPosScreen('kassa');
-            // update local list
             setPosUsers(prev => [parsedDbUser, ...prev.filter(u => u.username.toLowerCase() !== cleanU)]);
             return { success: true, message: `Welkom, ${parsedDbUser.name}!` };
+          } else {
+            console.warn('Login attempt: Supabase pos_users found user, but password mismatch');
           }
         }
       } catch (err) {
         console.warn('Supabase pos_users login error:', err);
       }
+    } else {
+      console.warn('Login attempt: posClient is null');
     }
 
     // 2. Check live in Supabase bank_accounts (if changed there)
