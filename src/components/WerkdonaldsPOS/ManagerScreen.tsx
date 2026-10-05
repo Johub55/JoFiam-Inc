@@ -1586,11 +1586,41 @@ export const ManagerScreen: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-5 space-y-4">
             <h3 className="font-bold text-white">Bestelstop Instellen</h3>
+            
             <div className="space-y-2">
-              <label className="text-xs text-slate-400">Icoon (Emoji):</label>
-              <input value={customBestelstopText} onChange={e => setCustomBestelstopText(e.target.value)} className="w-full bg-slate-950 border p-2 text-white rounded-lg" />
+              <label className="text-xs text-slate-400">Status bericht:</label>
+              <input 
+                value={customBestelstopText} 
+                onChange={e => setCustomBestelstopText(e.target.value)} 
+                className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-sm"
+                placeholder="Bijv: 🛑 Tijdelijke bestelstop..."
+              />
             </div>
-            <button onClick={handleUpdateBestelstop} className="w-full bg-blue-600 text-white p-2 rounded-lg font-bold">Bevestigen</button>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400">Snelle templates:</label>
+              <div className="flex flex-wrap gap-2">
+                {['🛑 Drukte', '🛠️ Onderhoud', '🔌 Systeemstoring', '🍔 Voorraad op'].map(template => (
+                  <button 
+                    key={template}
+                    onClick={() => setCustomBestelstopText(template)}
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] text-slate-300"
+                  >
+                    {template}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={handleUpdateBestelstop} className="w-full bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl font-bold text-sm transition">
+              Bestelstop Activeren
+            </button>
+            <button 
+              onClick={() => setShowBestelstopModal(false)}
+              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 p-2.5 rounded-xl font-bold text-sm transition"
+            >
+              Annuleren
+            </button>
           </div>
         </div>
       )}
