@@ -35,7 +35,8 @@ import {
   Link,
   Play,
   SlidersHorizontal,
-  Megaphone
+  Megaphone,
+  ShieldCheck
 } from 'lucide-react';
 
 export const STAGE_CONFIG: Record<OrderItemStage, {
