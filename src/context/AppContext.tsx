@@ -173,6 +173,7 @@ interface AppContextType {
   deleteProduct: (id: number) => Promise<void>;
   toggleProductSale: (id: number) => Promise<void>;
   resetProductsToDefault: () => void;
+  syncProducts: () => Promise<void>;
   buyInventory: (id: number, amount: number) => void;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
 
@@ -2154,11 +2155,17 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     setAppliedDiscount({ type: 'none', val: 0, label: 'Geen' });
   };
 
-  const setOrderStopActiveWithText = async (active: boolean, text: string) => {
+  const setOrderStopActiveWithText = async (active: boolean, text: string, config?: Partial<OrderStopConfig>) => {
     setOrderStopActive(active);
     setOrderStopTextState(text);
     localStorage.setItem('wd_order_stop', String(active));
     localStorage.setItem('wd_order_stop_text', text);
+
+    const nextConfig = config ? { ...orderStopConfig, ...config } : orderStopConfig;
+    if (config) {
+      setOrderStopConfig(nextConfig);
+      localStorage.setItem('wd_order_stop_config', JSON.stringify(nextConfig));
+    }
 
     if (posClient) {
       // Create a copy of current news configuration and put orderStopText in there
@@ -2174,7 +2181,8 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         order_stop_active: active,
         pickup_closed: pickupClosed,
         news_config: newsCfg,
-        order_stop_text: text
+        order_stop_text: text,
+        order_stop_config: nextConfig
       };
 
       await posClient.from('pos_settings').upsert(updatePayload);
@@ -3869,6 +3877,40 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
     }
   };
 
+  const syncProducts = async () => {
+    if (!posClient) {
+      showToast('Niet verbonden met Supabase.', 'error');
+      return;
+    }
+    setSyncStatus('syncing');
+    try {
+      const { data, error } = await posClient.from('products').select('*').order('id', { ascending: true });
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const parsed = data.map(p => ({
+          id: p.id,
+          name: p.name,
+          price: Number(p.price),
+          salePrice: Number(p.sale_price || 0),
+          onSale: Boolean(p.on_sale),
+          cat: p.cat,
+          emoji: p.emoji,
+          inStock: Boolean(p.in_stock)
+        }));
+        setProducts(parsed);
+        localStorage.setItem('wd_products', JSON.stringify(parsed));
+        showToast(`📦 ${data.length} producten succesvol gesynchroniseerd met online database!`, 'success');
+      } else {
+        showToast('Geen producten gevonden in online database.', 'warning');
+      }
+    } catch (err: any) {
+      console.error('Sync products error:', err);
+      showToast('Fout bij laden producten: ' + (err.message || 'Onbekende fout'), 'error');
+    } finally {
+      setSyncStatus('synced');
+    }
+  };
+
   // Inventory
   const buyInventory = (id: number, amount: number) => {
     const item = inventory.find(x => x.id === id);
@@ -4143,6 +4185,7 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         deleteProduct,
         toggleProductSale,
         resetProductsToDefault,
+        syncProducts,
         buyInventory,
         addInventoryItem,
         createGiftCard,

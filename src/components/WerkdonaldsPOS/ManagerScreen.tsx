@@ -77,6 +77,7 @@ export const ManagerScreen: React.FC = () => {
     deleteProduct,
     toggleProductSale,
     resetProductsToDefault,
+    syncProducts,
     posUsers,
     createPosUser,
     updatePosUser,
@@ -2155,6 +2156,15 @@ export const ManagerScreen: React.FC = () => {
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Herstel Standaardlijst</span>
+          </button>
+          <button
+            onClick={async () => {
+              await syncProducts();
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>Producten van online laden</span>
           </button>
         </div>
 

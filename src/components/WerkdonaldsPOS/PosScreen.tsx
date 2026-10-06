@@ -67,7 +67,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     removeCoupon,
     coupons,
     currentPosUser,
-    setCurrentPosUser
+    setCurrentPosUser,
+    verifyMasterPin
   } = useApp();
 
   const isKoekploeg = activeBrand === 'koekploeg';
@@ -78,6 +79,7 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   const [showGiftCardModal, setShowGiftCardModal] = useState<boolean>(false);
   const [selectedCat, setSelectedCat] = useState<string>('Alles');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [managerBypass, setManagerBypass] = useState<boolean>(false);
   
   // Custom item (Handmatig bedrag) modal
   const [showCustomItemModal, setShowCustomItemModal] = useState<boolean>(false);
@@ -666,9 +668,27 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
       {/* Main Container */}
       <div className="relative flex-1 flex flex-col min-w-0 border-r border-slate-800 overflow-hidden">
         
-        {/* Full-screen Overlay if Order Stop is active AND blockPickup is true */}
-        {orderStopActive && orderStopConfig?.blockPickup && (
+        {/* Full-screen Overlay if Order Stop is active AND blockPickup is true AND no managerBypass */}
+        {orderStopActive && orderStopConfig?.blockPickup && !managerBypass && (
           <div className="absolute inset-0 z-[100] bg-slate-950/95 flex flex-col items-center justify-center p-6 text-center border border-rose-500/20 backdrop-blur-sm">
+            
+            {/* Manager Override Button */}
+            <button 
+              onClick={() => {
+                const pin = prompt('Voer Master PIN in voor Manager Override:');
+                if (pin && verifyMasterPin(pin)) {
+                  setManagerBypass(true);
+                  showToast('Manager Override geactiveerd voor deze sessie.', 'success');
+                } else if (pin) {
+                  showToast('Onjuiste Master PIN!', 'error');
+                }
+              }}
+              className="absolute top-4 right-4 p-2 rounded-full bg-slate-900/50 hover:bg-slate-800 text-slate-600 hover:text-slate-400 transition"
+              title="Manager Override"
+            >
+              <ShieldCheck className="w-5 h-5" />
+            </button>
+
             {orderStopConfig.showClock && (
               <div className="absolute top-12 text-4xl font-black text-slate-700/50 font-mono tracking-tighter">
                 {new Date().toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })}
