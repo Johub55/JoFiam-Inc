@@ -159,6 +159,18 @@ export const ManagerScreen: React.FC = () => {
   const [brandGradient, setBrandGradient] = useState<string>(customBranding?.headerGradient || 'from-blue-600 via-blue-500 to-cyan-400');
   const [useCustomBranding, setUseCustomBranding] = useState<boolean>(customBranding?.useCustomBranding ?? false);
 
+  // Sync local states if global orderStopConfig changes
+  useEffect(() => {
+    if (orderStopConfig) {
+      setStopTitle(orderStopConfig.title);
+      setStopTheme(orderStopConfig.theme);
+      setStopShowClock(orderStopConfig.showClock);
+      setStopShowNews(orderStopConfig.showNews);
+      setStopBlockPickup(orderStopConfig.blockPickup);
+      setStopIcon(orderStopConfig.icon);
+    }
+  }, [orderStopConfig]);
+
   // Sync local states if global branding changes
   useEffect(() => {
     if (customBranding) {
