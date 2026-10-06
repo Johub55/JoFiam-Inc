@@ -183,6 +183,7 @@ CREATE TABLE IF NOT EXISTS public.pos_settings (
   order_stop_config JSONB DEFAULT '{"showClock": true, "showNews": true, "theme": "rose", "blockPickup": true}'::jsonb,
   news_config JSONB DEFAULT '{}'::jsonb,
   custom_news_items JSONB DEFAULT '[]'::jsonb,
+  branding_config JSONB DEFAULT '{"storeName": "Werkdonalds", "tagline": "Vers Bereid • Snelle Kassa & Keuken", "logoEmoji": "🍔", "primaryColor": "#2563eb", "headerGradient": "from-blue-600 via-blue-500 to-cyan-400", "useCustomBranding": false}'::jsonb,
   blocked_devices JSONB DEFAULT '[]'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -191,6 +192,7 @@ ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_text TEXT DE
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS order_stop_config JSONB DEFAULT '{"showClock": true, "showNews": true, "theme": "rose", "blockPickup": true}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS news_config JSONB DEFAULT '{}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS custom_news_items JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS branding_config JSONB DEFAULT '{"storeName": "Werkdonalds", "tagline": "Vers Bereid • Snelle Kassa & Keuken", "logoEmoji": "🍔", "primaryColor": "#2563eb", "headerGradient": "from-blue-600 via-blue-500 to-cyan-400", "useCustomBranding": false}'::jsonb;
 ALTER TABLE public.pos_settings ADD COLUMN IF NOT EXISTS blocked_devices JSONB DEFAULT '[]'::jsonb;
 
 -- Zorg dat er altijd een default rij bestaat

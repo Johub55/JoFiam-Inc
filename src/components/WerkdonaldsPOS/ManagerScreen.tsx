@@ -52,6 +52,25 @@ import {
   Zap
 } from 'lucide-react';
 
+const COMMON_POS_EMOJIS = ['🍔', '🍟', '🥤', '🍦', '🍩', '🧇', '🍕', '🌮', '🥩', '🍱', '☕', '🧁', '🍪', '🍎', '🥗', '🥘', '🥡', '🍴', '🍳', '🛑', '⚠️', '🚨', '🚫', '⛔', '🔧', '⚙️', '💻', '📢', '🔥', '✨', '💎', '👑', '✅', '❌'];
+
+const QuickEmojiSelector: React.FC<{ onSelect: (emoji: string) => void; current?: string }> = ({ onSelect, current }) => {
+  return (
+    <div className="flex flex-wrap gap-1 p-2 bg-slate-900/50 border border-slate-800 rounded-xl max-h-32 overflow-y-auto custom-scrollbar">
+      {COMMON_POS_EMOJIS.map(emoji => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => onSelect(emoji)}
+          className={`w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-800 transition-colors text-lg ${current === emoji ? 'bg-blue-600/30 border border-blue-500/50 ring-1 ring-blue-500/30' : 'border border-transparent'}`}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const ManagerScreen: React.FC = () => {
   const {
     currentPosUser,
@@ -61,6 +80,11 @@ export const ManagerScreen: React.FC = () => {
     orderStopActive,
     orderStopText,
     orderStopConfig,
+    customBranding,
+    updateCustomBranding,
+    managerOverride,
+    activateManagerOverride,
+    deactivateManagerOverride,
     setOrderStopActiveWithText,
     toggleOrderStop,
     pickupClosed,
@@ -126,6 +150,26 @@ export const ManagerScreen: React.FC = () => {
   const [stopShowNews, setStopShowNews] = useState<boolean>(orderStopConfig?.showNews ?? true);
   const [stopBlockPickup, setStopBlockPickup] = useState<boolean>(orderStopConfig?.blockPickup ?? true);
   const [stopIcon, setStopIcon] = useState<string>(orderStopConfig?.icon || '🛑');
+
+  // Branding Customization States
+  const [brandName, setBrandName] = useState<string>(customBranding?.storeName || 'Werkdonalds');
+  const [brandTagline, setBrandTagline] = useState<string>(customBranding?.tagline || 'Vers Bereid • Snelle Kassa & Keuken');
+  const [brandEmoji, setBrandEmoji] = useState<string>(customBranding?.logoEmoji || '🍔');
+  const [brandColor, setBrandColor] = useState<string>(customBranding?.primaryColor || '#2563eb');
+  const [brandGradient, setBrandGradient] = useState<string>(customBranding?.headerGradient || 'from-blue-600 via-blue-500 to-cyan-400');
+  const [useCustomBranding, setUseCustomBranding] = useState<boolean>(customBranding?.useCustomBranding ?? false);
+
+  // Sync local states if global branding changes
+  useEffect(() => {
+    if (customBranding) {
+      setBrandName(customBranding.storeName);
+      setBrandTagline(customBranding.tagline);
+      setBrandEmoji(customBranding.logoEmoji);
+      setBrandColor(customBranding.primaryColor);
+      setBrandGradient(customBranding.headerGradient);
+      setUseCustomBranding(customBranding.useCustomBranding);
+    }
+  }, [customBranding]);
 
   // Manager Menu 2FA Security Gate State
   const [managerUnlocked, setManagerUnlocked] = useState<boolean>(() => {
@@ -229,8 +273,8 @@ export const ManagerScreen: React.FC = () => {
   const [blockValue, setBlockValue] = useState<string>('');
   const [blockReasonInput, setBlockReasonInput] = useState<string>('');
 
-  // Active Manager Tab: 'dashboard' (General/Finance/Products/Coupons) | 'ops' (Manager Operations & Controls)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'ops'>('dashboard');
+  // Active Manager Tab: 'dashboard' (General/Finance/Products/Coupons) | 'ops' (Manager Operations & Controls) | 'branding' (Customization)
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'ops' | 'branding'>('dashboard');
 
   // Z-Report Modal
   const [showZReport, setShowZReport] = useState<boolean>(false);
@@ -263,6 +307,17 @@ export const ManagerScreen: React.FC = () => {
   const [newLoyaltyName, setNewLoyaltyName] = useState<string>('');
   const [newLoyaltyPhone, setNewLoyaltyPhone] = useState<string>('');
   const [vipModalCustomer, setVipModalCustomer] = useState<{ phone: string; name: string } | null>(null);
+
+  const handleOpenBestelstop = () => {
+    setStopTitle(orderStopConfig?.title || 'Tijdelijk geen bestellingen');
+    setStopTheme(orderStopConfig?.theme || 'rose');
+    setStopShowClock(orderStopConfig?.showClock ?? true);
+    setStopShowNews(orderStopConfig?.showNews ?? true);
+    setStopBlockPickup(orderStopConfig?.blockPickup ?? true);
+    setStopIcon(orderStopConfig?.icon || '🛑');
+    setCustomBestelstopText(orderStopText || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast. We bereiden momenteel de lopende bestellingen voor. Excuses voor de vertraging!');
+    setShowBestelstopModal(true);
+  };
 
   const handleUpdateBestelstop = async () => {
     // Call only the specialized function that handles state AND database correctly, 
@@ -347,6 +402,7 @@ export const ManagerScreen: React.FC = () => {
     { id: 'producten', label: 'Producten Aanpassen', desc: 'Menu items, prijzen en acties aanpassen' },
     { id: 'coupons_giftcards', label: 'Coupons & Cadeaubonnen', desc: 'Kortingscodes en cadeaubonnen toekennen' },
     { id: 'cash_pay', label: 'Contant Geld Autoriseren', desc: 'Contante bestellingen goedkeuren' },
+    { id: 'manager_override', label: 'Manager Override', desc: 'Globale override om restricties en PIN-verzoeken te omzeilen' },
   ];
 
   // Stats
@@ -696,6 +752,18 @@ export const ManagerScreen: React.FC = () => {
                 </span>
               </button>
             )}
+
+            <button
+              onClick={() => setActiveTab('branding')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                activeTab === 'branding'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-blue-300" />
+              <span>Branding</span>
+            </button>
           </div>
 
           <button
@@ -1389,6 +1457,335 @@ export const ManagerScreen: React.FC = () => {
             </div>
           </div>
         </div>
+      ) : activeTab === 'branding' ? (
+        /* Branding & Layout Customization Tab */
+        <div className="space-y-6">
+          <div className="bg-gradient-to-r from-blue-900/40 via-slate-900 to-slate-900 border border-blue-500/30 rounded-2xl p-5 shadow-xl">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                    <span>Branding & Layout Customization</span>
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
+                      Live Preview
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Pas de naam, kleuren en het uiterlijk van je kassa en afhaalschermen aan.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => updateCustomBranding({
+                  storeName: brandName,
+                  tagline: brandTagline,
+                  logoEmoji: brandEmoji,
+                  primaryColor: brandColor,
+                  headerGradient: brandGradient,
+                  useCustomBranding: useCustomBranding
+                })}
+                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm transition shadow-lg shadow-blue-600/25 flex items-center gap-2"
+              >
+                <Database className="w-4 h-4" />
+                <span>Instellingen Opslaan naar Cloud</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left Column: Inputs */}
+            <div className="lg:col-span-7 space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-5">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <Edit3 className="w-4 h-4 text-blue-400" />
+                  <span>Winkelgegevens & Branding</span>
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400">Winkel Naam</label>
+                    <input 
+                      value={brandName}
+                      onChange={e => setBrandName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:border-blue-500 outline-none transition"
+                      placeholder="Bijv. Werkdonalds"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400">Logo Icoontje (Emoji)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        value={brandEmoji}
+                        onChange={e => setBrandEmoji(e.target.value)}
+                        className="w-20 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:border-blue-500 outline-none transition text-center text-xl"
+                        placeholder="Bijv. 🍔"
+                      />
+                      <div className="flex-1">
+                        <QuickEmojiSelector onSelect={setBrandEmoji} current={brandEmoji} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-400">Tagline / Ondertiteling</label>
+                  <input 
+                    value={brandTagline}
+                    onChange={e => setBrandTagline(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:border-blue-500 outline-none transition"
+                    placeholder="Bijv. Vers Bereid • Snelle Kassa"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400">Themakleur (Hex)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="color"
+                        value={brandColor}
+                        onChange={e => setBrandColor(e.target.value)}
+                        className="h-10 w-12 bg-slate-950 border border-slate-800 rounded-xl p-1 cursor-pointer"
+                      />
+                      <input 
+                        value={brandColor}
+                        onChange={e => setBrandColor(e.target.value)}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono text-sm focus:border-blue-500 outline-none transition"
+                        placeholder="#2563eb"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-400">Header Gradiënt (Tailwind Classes)</label>
+                    <input 
+                      value={brandGradient}
+                      onChange={e => setBrandGradient(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono text-xs focus:border-blue-500 outline-none transition"
+                      placeholder="from-blue-600 via-blue-500 to-cyan-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <label className="flex items-center gap-3 p-4 rounded-2xl bg-blue-500/5 border border-blue-500/20 cursor-pointer group hover:bg-blue-500/10 transition">
+                    <div className={`w-10 h-6 rounded-full transition-colors relative ${useCustomBranding ? 'bg-blue-600' : 'bg-slate-700'}`}>
+                      <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${useCustomBranding ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                    <input 
+                      type="checkbox"
+                      checked={useCustomBranding}
+                      onChange={e => setUseCustomBranding(e.target.checked)}
+                      className="hidden"
+                    />
+                    <div>
+                      <span className="text-sm font-black text-white block">Activeer Aangepaste Branding</span>
+                      <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">Overschrijft de standaard merk-instellingen op alle schermen</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <Smartphone className="w-4 h-4 text-cyan-400" />
+                  <span>Voorbeeld & Voorvertoning</span>
+                </h3>
+                
+                <div className="space-y-4">
+                  <p className="text-[11px] text-slate-400 italic">Dit is hoe je kassa-header eruit komt te zien met de huidige instellingen:</p>
+                  
+                  {/* Fake Preview Header */}
+                  <div className={`h-16 rounded-2xl bg-gradient-to-r ${brandGradient} p-4 flex items-center justify-between shadow-lg`}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-2xl shadow-inner">
+                        {brandEmoji}
+                      </div>
+                      <div>
+                        <h4 className="font-black text-white text-sm uppercase tracking-tighter">{brandName}</h4>
+                        <p className="text-[10px] text-white/80 font-bold">{brandTagline}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <div className="w-8 h-8 rounded-full bg-white/20 border border-white/30" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Information */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 space-y-5">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/20 flex items-center justify-center text-amber-400 mb-2">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <h3 className="text-lg font-black text-white leading-tight">Hoe werkt branding?</h3>
+                <div className="space-y-4 text-sm text-slate-400 leading-relaxed">
+                  <p>
+                    Wanneer je <strong>"Activeer Aangepaste Branding"</strong> inschakelt, zal de applicatie niet langer kijken naar het geselecteerde merk (Werkdonalds of Koekploeg) voor het uiterlijk.
+                  </p>
+                  <ul className="space-y-3">
+                    <li className="flex gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
+                      <span><strong>Kassa Header:</strong> De naam en tagline worden overal bovenaan getoond.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
+                      <span><strong>Afhaalscherm TV:</strong> De TV-interface past zich direct aan aan jouw kleuren en logo.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 shrink-0" />
+                      <span><strong>Themakleuren:</strong> Knoppen en accenten gebruiken je primaire themakleur.</span>
+                    </li>
+                  </ul>
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs font-mono">
+                    💡 Tip: Gebruik <a href="https://tailwindcss.com/docs/gradient-color-stops" target="_blank" rel="noreferrer" className="text-blue-400 underline">Tailwind Gradients</a> voor de header.
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+                 <h4 className="font-bold text-slate-200 text-xs uppercase tracking-widest">Sneltoetsen</h4>
+                 <div className="grid grid-cols-1 gap-2">
+                    <button 
+                      onClick={() => {
+                        setBrandName('Werkdonalds');
+                        setBrandTagline('Vers Bereid • Snelle Kassa & Keuken');
+                        setBrandEmoji('🍔');
+                        setBrandColor('#2563eb');
+                        setBrandGradient('from-blue-600 via-blue-500 to-cyan-400');
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-left hover:border-blue-500 transition flex items-center justify-between"
+                    >
+                      <span className="text-[11px] font-bold text-slate-300">Zet terug naar Werkdonalds Blauw</span>
+                      <span className="text-xs">🍔</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setBrandName('De Koekploeg');
+                        setBrandTagline('Ambachtelijke Stroopwafels & Verse Bakkerij');
+                        setBrandEmoji('🧇');
+                        setBrandColor('#f59e0b');
+                        setBrandGradient('from-amber-500 via-yellow-400 to-amber-600');
+                      }}
+                      className="p-2 rounded-lg bg-slate-950 border border-slate-800 text-left hover:border-amber-500 transition flex items-center justify-between"
+                    >
+                      <span className="text-[11px] font-bold text-slate-300">Zet terug naar Koekploeg Goud</span>
+                      <span className="text-xs">🧇</span>
+                    </button>
+                 </div>
+              </div>
+
+              {/* Order Stop Defaults Section */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <ShieldAlert className="w-4 h-4 text-rose-500" />
+                  <span>Bestelstop Standaard Layout</span>
+                </h3>
+                
+                <p className="text-[11px] text-slate-400">
+                  Stel hier in hoe het scherm er standaard uit moet zien wanneer je een bestelstop activeert op dit apparaat.
+                </p>
+
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Standaard Titel</label>
+                      <input 
+                        value={stopTitle}
+                        onChange={e => setStopTitle(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-rose-500"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Standaard Icoon</label>
+                      <input 
+                        value={stopIcon}
+                        onChange={e => setStopIcon(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs text-center outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <QuickEmojiSelector onSelect={setStopIcon} current={stopIcon} />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase">Thema Kleur</label>
+                      <select
+                        value={stopTheme}
+                        onChange={e => setStopTheme(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs font-bold outline-none focus:border-rose-500"
+                      >
+                        <option value="rose">Rose (Alert)</option>
+                        <option value="amber">Amber (Warning)</option>
+                        <option value="emerald">Emerald (Success)</option>
+                        <option value="blue">Blue (System)</option>
+                        <option value="slate">Slate (Neutral)</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-950 border border-slate-800 cursor-pointer hover:bg-slate-900 transition">
+                        <input 
+                          type="checkbox"
+                          checked={stopBlockPickup}
+                          onChange={e => setStopBlockPickup(e.target.checked)}
+                          className="rounded border-slate-700 bg-slate-950 text-rose-500"
+                        />
+                        <span className="font-bold text-slate-300 text-[10px]">Blokkeer Afhaalscherm</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      await setOrderStopActiveWithText(orderStopActive, orderStopText, {
+                        title: stopTitle,
+                        theme: stopTheme as any,
+                        showClock: stopShowClock,
+                        showNews: stopShowNews,
+                        blockPickup: stopBlockPickup,
+                        icon: stopIcon
+                      });
+                      showToast('Bestelstop configuratie opgeslagen!', 'success');
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-black text-[11px] border border-slate-700 transition shadow-lg"
+                  >
+                    Opslaan als Standaard Layout
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-4">
+                <h3 className="font-bold text-white text-sm flex items-center gap-2 border-b border-slate-800 pb-3">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span>Manager Systeem-Override</span>
+                </h3>
+                
+                <div className="space-y-4">
+                  <p className="text-[11px] text-slate-400">
+                    Activeer een globale override om restricties (zoals PIN-verzoeken bij contant geld of bestelstops) tijdelijk te omzeilen op dit apparaat.
+                  </p>
+                  
+                  <button
+                    onClick={() => managerOverride ? deactivateManagerOverride() : activateManagerOverride()}
+                    className={`w-full py-3 px-4 rounded-xl font-black text-xs transition flex items-center justify-center gap-2 shadow-lg ${
+                      managerOverride 
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20' 
+                        : 'bg-slate-800 hover:bg-slate-750 text-slate-300 border border-slate-700'
+                    }`}
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>{managerOverride ? 'OVERRIDE ACTIEF (Klik om te deactiveren)' : 'ACTIVEER MANAGER OVERRIDE'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         /* Algemeen Dashboard Tab */
         <>
@@ -1560,7 +1957,7 @@ export const ManagerScreen: React.FC = () => {
                     toggleOrderStop();
                     showToast('🎉 Bestelstop opgeheven.', 'success');
                   } else {
-                    setShowBestelstopModal(true);
+                    handleOpenBestelstop();
                   }
                 }}
                 className={`px-3 py-1 rounded-lg font-bold transition ${orderStopActive ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-300'}`}
@@ -3164,10 +3561,93 @@ export const ManagerScreen: React.FC = () => {
               />
             </div>
 
+            {/* Custom Layout Settings */}
+            <div className="bg-slate-950/40 border border-slate-800 rounded-2xl p-4 space-y-4">
+              <label className="text-xs font-black uppercase tracking-wider text-rose-400 block border-b border-slate-800 pb-2 mb-3">
+                3. Layout & Scherm Instellingen
+              </label>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 font-bold">Koptekst (Titel)</label>
+                  <input 
+                    value={stopTitle}
+                    onChange={e => setStopTitle(e.target.value)}
+                    placeholder="Bijv. Tijdelijk geen bestellingen"
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:border-rose-500 outline-none transition"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 font-bold">Icoontje (Emoji)</label>
+                  <div className="flex flex-col gap-2">
+                    <input 
+                      value={stopIcon}
+                      onChange={e => setStopIcon(e.target.value)}
+                      placeholder="Bijv. ⚠️"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white text-center text-lg focus:border-rose-500 outline-none transition"
+                    />
+                    <QuickEmojiSelector onSelect={setStopIcon} current={stopIcon} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-1.5">
+                  <label className="text-slate-400 font-bold">Thema Kleur</label>
+                  <select
+                    value={stopTheme}
+                    onChange={e => setStopTheme(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-bold focus:border-rose-500 outline-none transition"
+                  >
+                    <option value="rose">🔴 Rose (Alert)</option>
+                    <option value="amber">🟠 Amber (Warning)</option>
+                    <option value="emerald">🟢 Emerald (Success/Info)</option>
+                    <option value="blue">🔵 Blue (System)</option>
+                    <option value="slate">⚪ Slate (Neutral)</option>
+                  </select>
+                </div>
+                <div className="flex flex-col justify-end">
+                  <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:bg-slate-850 transition">
+                    <input 
+                      type="checkbox"
+                      checked={stopBlockPickup}
+                      onChange={e => setStopBlockPickup(e.target.checked)}
+                      className="rounded border-slate-700 bg-slate-950 text-rose-500"
+                    />
+                    <div className="flex flex-col">
+                      <span className="font-bold text-white text-[10px]">Blokkeer Afhaalscherm</span>
+                      <span className="text-[9px] text-slate-500">Toon stop-melding over de hele TV</span>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:bg-slate-850 transition">
+                  <input 
+                    type="checkbox"
+                    checked={stopShowClock}
+                    onChange={e => setStopShowClock(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-950 text-rose-500"
+                  />
+                  <span className="font-bold text-white text-[10px]">Toon Klok</span>
+                </label>
+                <label className="flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:bg-slate-850 transition">
+                  <input 
+                    type="checkbox"
+                    checked={stopShowNews}
+                    onChange={e => setStopShowNews(e.target.checked)}
+                    className="rounded border-slate-700 bg-slate-950 text-rose-500"
+                  />
+                  <span className="font-bold text-white text-[10px]">Toon Nieuwsbar</span>
+                </label>
+              </div>
+            </div>
+
             {/* Live TV Screen Mockup Preview */}
             <div className="space-y-2">
               <label className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
-                <span>3. Live TV Scherm Preview</span>
+                <span>4. Live TV Scherm Preview</span>
                 <span className="text-[9px] bg-rose-500/20 text-rose-300 font-bold border border-rose-500/40 px-1.5 py-0.2 rounded animate-pulse">
                   PREVIEW
                 </span>
@@ -3181,37 +3661,57 @@ export const ManagerScreen: React.FC = () => {
                 </div>
                 
                 <div className="text-center space-y-3 py-2">
-                  <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500 text-rose-400 flex items-center justify-center text-sm shadow animate-pulse">
-                    ⚠️
+                  <div className={`mx-auto w-10 h-10 rounded-full flex items-center justify-center text-sm shadow animate-pulse ${
+                    stopTheme === 'amber' ? 'bg-amber-500/20 border-2 border-amber-500 text-amber-400' :
+                    stopTheme === 'emerald' ? 'bg-emerald-500/20 border-2 border-emerald-500 text-emerald-400' :
+                    stopTheme === 'blue' ? 'bg-blue-500/20 border-2 border-blue-500 text-blue-400' :
+                    stopTheme === 'slate' ? 'bg-slate-500/20 border-2 border-slate-500 text-slate-400' :
+                    'bg-rose-500/20 border-2 border-rose-500 text-rose-400'
+                  }`}>
+                    {stopIcon}
                   </div>
                   
                   <div className="space-y-1">
-                    <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[8px] font-black uppercase">
-                      ⚠️ Tijdelijke Bestelstop Actief
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${
+                      stopTheme === 'amber' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' :
+                      stopTheme === 'emerald' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' :
+                      stopTheme === 'blue' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40' :
+                      stopTheme === 'slate' ? 'bg-slate-500/20 text-slate-300 border-slate-500/40' :
+                      'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                    }`}>
+                      {stopIcon} {stopTitle}
                     </span>
                     <h4 className="text-sm font-black text-white uppercase tracking-tight">
-                      Tijdelijk Geen Bestellingen
+                      {stopTitle}
                     </h4>
                     <p className="text-[10px] text-slate-400 leading-normal max-w-sm mx-auto font-medium italic">
                       "{customBestelstopText || '...'}"
                     </p>
                   </div>
+                  
+                  {stopShowClock && (
+                    <div className="text-[9px] font-mono text-slate-600 font-bold pt-1">
+                      {new Date().toLocaleTimeString('nl-NL', {hour:'2-digit', minute:'2-digit'})}
+                    </div>
+                  )}
                 </div>
 
                 {/* News bar ticker mockup inside the preview */}
-                <div className="border-t border-slate-900 pt-2.5 flex items-center justify-between text-[8px] font-bold text-slate-500 shrink-0">
-                  <div className="flex items-center gap-1 shrink-0 bg-[#E3000F] text-white px-1.5 py-0.5 rounded font-black font-sans tracking-widest">
-                    NOS
+                {stopShowNews && (
+                  <div className="border-t border-slate-900 pt-2.5 flex items-center justify-between text-[8px] font-bold text-slate-500 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 bg-[#E3000F] text-white px-1.5 py-0.5 rounded font-black font-sans tracking-widest">
+                      NOS
+                    </div>
+                    <div className="flex-1 overflow-hidden mx-2 relative h-3 flex items-center text-slate-400 text-[8px] font-medium font-mono">
+                      <span className="animate-marquee whitespace-nowrap">
+                        ● [NOS Binnenland] Kabinet presenteert verduurzamingssubsidies voor de Nederlandse horeca ● [NOS Weer] Zonnig & droog in NL (18°C)
+                      </span>
+                    </div>
+                    <div className="shrink-0 font-mono text-[8px] text-amber-400">
+                      NOS LIVE
+                    </div>
                   </div>
-                  <div className="flex-1 overflow-hidden mx-2 relative h-3 flex items-center text-slate-400 text-[8px] font-medium font-mono">
-                    <span className="animate-marquee whitespace-nowrap">
-                      ● [NOS Binnenland] Kabinet presenteert verduurzamingssubsidies voor de Nederlandse horeca ● [NOS Weer] Zonnig & droog in NL (18°C)
-                    </span>
-                  </div>
-                  <div className="shrink-0 font-mono text-[8px] text-amber-400">
-                    NOS LIVE
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -3226,13 +3726,14 @@ export const ManagerScreen: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  const txt = customBestelstopText.trim() || 'Beste gast, wegens extreme drukte in onze keuken hebben we tijdelijk een bestelstop ingelast.';
-                  await setOrderStopActiveWithText(true, txt);
-                  setShowBestelstopModal(false);
-                  showToast('⛔ Bestelstop kassa succesvol geactiveerd!', 'success');
-                }}
-                className="flex-1 py-3 rounded-xl font-black bg-rose-600 hover:bg-rose-500 text-white text-xs shadow-lg shadow-rose-600/35 transition flex items-center justify-center gap-1.5"
+                onClick={handleUpdateBestelstop}
+                className={`flex-1 py-3 rounded-xl font-black text-white text-xs shadow-lg transition flex items-center justify-center gap-1.5 ${
+                  stopTheme === 'amber' ? 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/35' :
+                  stopTheme === 'emerald' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/35' :
+                  stopTheme === 'blue' ? 'bg-blue-600 hover:bg-blue-500 shadow-blue-600/35' :
+                  stopTheme === 'slate' ? 'bg-slate-700 hover:bg-slate-600 shadow-slate-700/35' :
+                  'bg-rose-600 hover:bg-rose-500 shadow-rose-600/35'
+                }`}
               >
                 <span>⛔ Activeer Bestelstop</span>
               </button>

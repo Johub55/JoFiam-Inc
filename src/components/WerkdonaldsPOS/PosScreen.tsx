@@ -63,6 +63,8 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
     orderStopText,
     orderStopConfig,
     appliedDiscount,
+    customBranding,
+    managerOverride,
     applyCouponCode,
     removeCoupon,
     coupons,
@@ -72,6 +74,21 @@ export const PosScreen: React.FC<PosScreenProps> = ({ onOpenPaymentModal }) => {
   } = useApp();
 
   const isKoekploeg = activeBrand === 'koekploeg';
+  
+  const effectiveBranding = customBranding.useCustomBranding ? {
+    name: customBranding.storeName,
+    tagline: customBranding.tagline,
+    emoji: customBranding.logoEmoji,
+    gradient: customBranding.headerGradient,
+    color: customBranding.primaryColor
+  } : {
+    name: brandConfig.name,
+    tagline: brandConfig.tagline,
+    emoji: brandConfig.logoEmoji,
+    gradient: isKoekploeg ? 'from-amber-600 via-amber-500 to-yellow-400' : 'from-rose-600 via-red-500 to-orange-400',
+    color: isKoekploeg ? '#f59e0b' : '#e11d48'
+  };
+
   const displayProducts = brandProducts && brandProducts.length > 0 ? brandProducts : products;
 
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);

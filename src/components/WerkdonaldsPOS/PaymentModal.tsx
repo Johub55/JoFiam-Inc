@@ -59,7 +59,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
     coupons,
     applyCouponCode,
     removeCoupon,
-    posUsers
+    posUsers,
+    managerOverride
   } = useApp();
 
   const [paymentMethod, setPaymentMethod] = useState<'workpay' | 'cash' | 'giftcard'>('workpay');
@@ -155,9 +156,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
 
   // Cashier role check
   const isAuthorizedCashier = Boolean(
-    currentPosUser && 
+    managerOverride ||
+    (currentPosUser && 
     currentPosUser.username !== 'bestel_kassa' && 
-    canAccess('cash_pay')
+    canAccess('cash_pay'))
   );
 
   // Active user check for WerkPay quick mode
@@ -396,6 +398,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose }) => {
           <div>
             <h2 className="text-lg font-black text-white flex items-center gap-2">
               <span>Bestelling Afrekenen</span>
+              {managerOverride && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-[10px] text-emerald-400 border border-emerald-500/30 animate-pulse font-black">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span>OVERRIDE</span>
+                </span>
+              )}
               <span className="text-xs px-2.5 py-0.5 rounded-full font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
                 {cart.length} {cart.length === 1 ? 'item' : 'items'}
               </span>

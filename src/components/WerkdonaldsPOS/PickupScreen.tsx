@@ -198,7 +198,7 @@ const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, cla
 };
 
 export const PickupScreen: React.FC = () => {
-  const { orders, pickupClosed, orderStopActive, orderStopText, setTrackedOrderNo, activeBrand, brandProducts, products } = useApp();
+  const { orders, pickupClosed, orderStopActive, orderStopText, setTrackedOrderNo, activeBrand, brandProducts, products, customBranding } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
 
   useEffect(() => {
@@ -394,8 +394,10 @@ export const PickupScreen: React.FC = () => {
   const [diagnostics, setDiagnostics] = useState<AudioDiagnosticStatus>(() => AudioFX.getDiagnostics());
 
   const isKoekploeg = activeBrand === 'koekploeg';
-  const brandTitle = isKoekploeg ? 'De Koekploeg' : 'Werkdonalds';
-  const brandEmoji = isKoekploeg ? '🧇' : '🍔';
+  const brandTitle = customBranding.useCustomBranding ? customBranding.storeName : (isKoekploeg ? 'De Koekploeg' : 'Werkdonalds');
+  const brandEmoji = customBranding.useCustomBranding ? customBranding.logoEmoji : (isKoekploeg ? '🧇' : '🍔');
+  const brandTagline = customBranding.useCustomBranding ? customBranding.tagline : (isKoekploeg ? 'Vers Bereid • Snelle Service' : 'Vers Bereid • Snelle Kassa & Keuken');
+  const brandGradient = customBranding.useCustomBranding ? customBranding.headerGradient : (isKoekploeg ? 'from-amber-600 to-amber-400' : 'from-blue-700 to-blue-500');
 
   // Real-time clock for fastfood TV screen
   useEffect(() => {

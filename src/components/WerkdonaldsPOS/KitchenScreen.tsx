@@ -237,7 +237,8 @@ export const KitchenScreen: React.FC = () => {
     toggleOrderPrio,
     setAllOrderItemsDone, 
     deleteOrder, 
-    setTrackedOrderNo 
+    setTrackedOrderNo,
+    managerOverride
   } = useApp();
 
   const [now, setNow] = useState<number>(Date.now());
@@ -459,6 +460,12 @@ export const KitchenScreen: React.FC = () => {
           <div>
             <h1 className="text-xl font-black text-white flex items-center gap-2">
               <span>Keukenscherm (Live KDS)</span>
+              {managerOverride && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 text-[10px] text-emerald-400 border border-emerald-500/30 animate-pulse font-black shadow-lg">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>OVERRIDE</span>
+                </span>
+              )}
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                 {prepCount} in bereiding
               </span>

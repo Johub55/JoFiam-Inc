@@ -216,6 +216,15 @@ export interface OrderStopConfig {
   title: string;
 }
 
+export interface CustomBrandingConfig {
+  storeName: string;
+  tagline: string;
+  logoEmoji: string;
+  primaryColor: string;
+  headerGradient: string;
+  useCustomBranding: boolean;
+}
+
 export interface SupabaseConfig {
   unifiedUrl: string;
   unifiedKey: string;

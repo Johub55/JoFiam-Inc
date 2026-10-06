@@ -127,6 +127,11 @@ interface AppContextType {
   orderStopActive: boolean;
   orderStopText: string;
   orderStopConfig: OrderStopConfig;
+  customBranding: CustomBrandingConfig;
+  updateCustomBranding: (config: Partial<CustomBrandingConfig>) => Promise<void>;
+  managerOverride: boolean;
+  activateManagerOverride: (pin: string) => { success: boolean; message: string };
+  deactivateManagerOverride: () => void;
   pickupClosed: boolean;
   isSystemLocked: boolean;
   setIsSystemLocked: (locked: boolean) => void;
@@ -982,6 +987,37 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   });
 
+  const [customBranding, setCustomBranding] = useState<CustomBrandingConfig>(() => {
+    const saved = localStorage.getItem('wd_custom_branding');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      storeName: 'Werkdonalds',
+      tagline: 'Vers Bereid • Snelle Kassa & Keuken',
+      logoEmoji: '🍔',
+      primaryColor: '#2563eb', // blue-600
+      headerGradient: 'from-blue-600 via-blue-500 to-cyan-400',
+      useCustomBranding: false
+    };
+  });
+
+  const [managerOverride, setManagerOverride] = useState<boolean>(false);
+
+  const activateManagerOverride = (pin: string) => {
+    if (verifyMasterPin(pin)) {
+      setManagerOverride(true);
+      return { success: true, message: 'Manager Override Geactiveerd!' };
+    }
+    return { success: false, message: 'Onjuiste Master PIN!' };
+  };
+
+  const deactivateManagerOverride = () => {
+    setManagerOverride(false);
+  };
+
   const [isSystemLocked, setIsSystemLockedState] = useState<boolean>(() => {
     return localStorage.getItem('wd_system_locked') === 'true';
   });
@@ -1112,6 +1148,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     localStorage.setItem('wd_order_stop_text', orderStopText);
   }, [orderStopText]);
+
+  useEffect(() => {
+    localStorage.setItem('wd_custom_branding', JSON.stringify(customBranding));
+  }, [customBranding]);
 
   useEffect(() => {
     localStorage.setItem('wd_pickup_closed', String(pickupClosed));
@@ -1379,6 +1419,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         if (dbSettings.order_stop_config && typeof dbSettings.order_stop_config === 'object') {
           setOrderStopConfig(dbSettings.order_stop_config);
           localStorage.setItem('wd_order_stop_config', JSON.stringify(dbSettings.order_stop_config));
+        }
+
+        if (dbSettings.branding_config && typeof dbSettings.branding_config === 'object') {
+          setCustomBranding(dbSettings.branding_config);
+          localStorage.setItem('wd_custom_branding', JSON.stringify(dbSettings.branding_config));
         }
 
         if (dbSettings.master_security_pin) {
@@ -1884,6 +1929,15 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
                   localStorage.setItem('wd_order_stop_text', settings.news_config.orderStopText);
                 }
 
+                if (settings.order_stop_config && typeof settings.order_stop_config === 'object') {
+                  setOrderStopConfig(settings.order_stop_config);
+                  localStorage.setItem('wd_order_stop_config', JSON.stringify(settings.order_stop_config));
+                }
+                if (settings.branding_config && typeof settings.branding_config === 'object') {
+                  setCustomBranding(settings.branding_config);
+                  localStorage.setItem('wd_custom_branding', JSON.stringify(settings.branding_config));
+                }
+
                 if (settings.news_config && typeof settings.news_config === 'object') {
                   localStorage.setItem('wd_pickup_news_config_v2', JSON.stringify(settings.news_config));
                   window.dispatchEvent(new Event('wd_news_config_updated'));
@@ -2186,6 +2240,26 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
       };
 
       await posClient.from('pos_settings').upsert(updatePayload);
+    }
+  };
+
+  const updateCustomBranding = async (config: Partial<CustomBrandingConfig>) => {
+    const nextBranding = { ...customBranding, ...config };
+    setCustomBranding(nextBranding);
+    localStorage.setItem('wd_custom_branding', JSON.stringify(nextBranding));
+
+    if (posClient) {
+      try {
+        await posClient.from('pos_settings').upsert({
+          id: 'default',
+          branding_config: nextBranding,
+          updated_at: new Date().toISOString()
+        });
+        showToast('Branding instellingen succesvol opgeslagen!', 'success');
+      } catch (e) {
+        console.error('Fout bij opslaan branding_config:', e);
+        showToast('Fout bij opslaan branding in database.', 'error');
+      }
     }
   };
 
@@ -4154,6 +4228,11 @@ const formatDbCashRequest = (row: any): CashPaymentRequest => {
         isSystemLocked,
         setIsSystemLocked,
         setOrderStopActiveWithText,
+        customBranding,
+        updateCustomBranding,
+        managerOverride: managerOverride || canAccess('manager_override'),
+        activateManagerOverride,
+        deactivateManagerOverride,
         currentPosUser,
         setCurrentPosUser,
         appliedDiscount,

@@ -49,6 +49,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
     activeBrand,
     setActiveBrand,
     brandConfig,
+    customBranding,
+    managerOverride,
     currentPosUser, 
     canAccess,
     logoutPos,
@@ -113,6 +115,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
 
   const isKoekploeg = activeBrand === 'koekploeg';
 
+  const displayBranding = (customBranding && customBranding.useCustomBranding) ? {
+    name: customBranding.storeName,
+    tagline: customBranding.tagline,
+    logoEmoji: customBranding.logoEmoji,
+    themeColor: 'custom',
+    badgeText: customBranding.storeName.toUpperCase(),
+    accentBadgeClass: `bg-[${customBranding.primaryColor}]/20 text-[${customBranding.primaryColor}] border-[${customBranding.primaryColor}]/30`,
+    headerGradient: customBranding.headerGradient
+  } : brandConfig;
+
   // If logged in as RPI Kiosk account or locked terminal, hide the top header completely
   if (currentPosUser?.username === 'rpi' || currentPosUser?.is_terminal_locked) {
     return null;
@@ -127,18 +139,30 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
         <div className="flex items-center gap-3">
           <div 
             className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-2xl shadow-lg transition-all ${
-              isKoekploeg 
+              (customBranding && customBranding.useCustomBranding)
+                ? `bg-gradient-to-r ${customBranding.headerGradient} text-white shadow-lg`
+                : isKoekploeg 
                 ? 'bg-gradient-to-br from-amber-500 via-yellow-400 to-amber-600 text-slate-950 shadow-amber-500/30'
                 : 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 text-white shadow-blue-500/25'
             }`}
           >
-            {brandConfig.logoEmoji}
+            {displayBranding.logoEmoji}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-lg tracking-tight text-white">{brandConfig.name}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${brandConfig.accentBadgeClass}`}>
-                {brandConfig.badgeText}
+              <span className="font-extrabold text-lg tracking-tight text-white">{displayBranding.name}</span>
+              {managerOverride && (
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-[10px] text-emerald-400 border border-emerald-500/30 animate-pulse font-black">
+                  <ShieldCheck className="w-3 h-3" />
+                  <span className="hidden sm:inline">OVERRIDE ACTIEF</span>
+                </span>
+              )}
+              <span className={`text-xs px-2 py-0.5 rounded-full font-bold border ${
+                (customBranding && customBranding.useCustomBranding)
+                  ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                  : brandConfig.accentBadgeClass
+              }`}>
+                {displayBranding.badgeText}
               </span>
               <span className="text-slate-500">×</span>
               <span className="font-extrabold text-lg tracking-tight text-cyan-400">WerkPay</span>
@@ -147,7 +171,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
-              {brandConfig.tagline}
+              {displayBranding.tagline}
             </p>
           </div>
 
