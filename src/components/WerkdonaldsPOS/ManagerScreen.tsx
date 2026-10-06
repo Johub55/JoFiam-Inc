@@ -1771,7 +1771,19 @@ export const ManagerScreen: React.FC = () => {
                   </p>
                   
                   <button
-                    onClick={() => managerOverride ? deactivateManagerOverride() : activateManagerOverride()}
+                    onClick={() => {
+                      if (managerOverride && !canAccess('manager_override')) {
+                        deactivateManagerOverride();
+                      } else if (!managerOverride) {
+                        const pin = prompt('Voer de Master Security PIN in om globale override te activeren:');
+                        if (pin) {
+                          const res = activateManagerOverride(pin);
+                          if (!res.success) alert(res.message);
+                        }
+                      } else if (canAccess('manager_override')) {
+                        showToast('Manager Override is al actief via jouw gebruikersrechten.', 'info');
+                      }
+                    }}
                     className={`w-full py-3 px-4 rounded-xl font-black text-xs transition flex items-center justify-center gap-2 shadow-lg ${
                       managerOverride 
                         ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20' 
@@ -2064,12 +2076,15 @@ export const ManagerScreen: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-400">Icoontje (Emoji)</label>
-                  <input 
-                    value={stopIcon}
-                    onChange={e => setStopIcon(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
-                    placeholder="Bijv: 🛑 of 🛠️"
-                  />
+                  <div className="space-y-2">
+                    <input 
+                      value={stopIcon}
+                      onChange={e => setStopIcon(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 p-2 text-white rounded-lg text-xs"
+                      placeholder="Bijv: 🛑 of 🛠️"
+                    />
+                    <QuickEmojiSelector onSelect={setStopIcon} current={stopIcon} />
+                  </div>
                 </div>
                 <div className="flex flex-col justify-end">
                    <div className="flex items-center justify-between text-[11px] text-slate-300 mb-2">

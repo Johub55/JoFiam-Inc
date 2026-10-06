@@ -714,7 +714,7 @@ export const PickupScreen: React.FC = () => {
               </span>
               
               <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight uppercase bg-gradient-to-r from-white via-slate-300 to-slate-500 bg-clip-text text-transparent">
-                {orderStopActive ? "Tijdelijk Geen Bestellingen" : "Momenteel Gesloten"}
+                {orderStopActive ? (orderStopConfig?.title || "Tijdelijk Geen Bestellingen") : "Momenteel Gesloten"}
               </h1>
               
               <p className="text-base sm:text-lg lg:text-xl text-slate-300 font-medium leading-relaxed max-w-2xl mx-auto">
@@ -731,7 +731,7 @@ export const PickupScreen: React.FC = () => {
                 Met vriendelijke groet,
               </p>
               <div className="px-5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 text-sm font-black tracking-wider uppercase shadow-lg">
-                🍳 De Keukenploeg van JoFiam Restaurants
+                {brandEmoji} De Keukenploeg van {brandTitle}
               </div>
             </div>
           </div>
@@ -841,7 +841,7 @@ export const PickupScreen: React.FC = () => {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase truncate">
-                  JoFiam
+                  {brandTitle}
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black tracking-wider uppercase flex items-center gap-1 shrink-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
