@@ -1491,14 +1491,16 @@ export const ManagerScreen: React.FC = () => {
                 </div>
               </div>
               <button
-                onClick={() => updateCustomBranding({
-                  storeName: brandName,
-                  tagline: brandTagline,
-                  logoEmoji: brandEmoji,
-                  primaryColor: brandColor,
-                  headerGradient: brandGradient,
-                  useCustomBranding: useCustomBranding
-                })}
+                onClick={async () => {
+                  await updateCustomBranding({
+                    storeName: brandName,
+                    tagline: brandTagline,
+                    logoEmoji: brandEmoji,
+                    primaryColor: brandColor,
+                    headerGradient: brandGradient,
+                    useCustomBranding: useCustomBranding
+                  });
+                }}
                 className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm transition shadow-lg shadow-blue-600/25 flex items-center gap-2"
               >
                 <Database className="w-4 h-4" />
