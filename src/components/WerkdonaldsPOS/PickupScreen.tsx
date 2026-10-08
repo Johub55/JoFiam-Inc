@@ -198,7 +198,7 @@ const AutoScrollContainer: React.FC<AutoScrollContainerProps> = ({ children, cla
 };
 
 export const PickupScreen: React.FC = () => {
-  const { orders, pickupClosed, orderStopActive, orderStopText, setTrackedOrderNo, activeBrand, brandProducts, products, customBranding } = useApp();
+  const { orders, pickupClosed, orderStopActive, orderStopText, orderStopConfig, setTrackedOrderNo, activeBrand, brandProducts, products, customBranding } = useApp();
   const [isTvMode, setIsTvMode] = useState<boolean>(false);
 
   useEffect(() => {
