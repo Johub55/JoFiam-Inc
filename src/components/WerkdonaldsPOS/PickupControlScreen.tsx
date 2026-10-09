@@ -270,19 +270,19 @@ export const PickupControlScreen: React.FC = () => {
       {/* Main Grid: Control Panels */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Column 1: NOS News Feed & Category Settings */}
+        {/* Column 1: NOS News Feed & TV Layout Settings */}
         <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-5">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
             <Rss className="w-5 h-5 text-rose-500" />
             <h2 className="text-sm font-black text-white uppercase tracking-wider">
-              1. NOS Categorie &amp; Ticker Snelheid
+              1. TV Indeling &amp; Nieuws
             </h2>
           </div>
 
           {/* NOS Category Selector */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-300 block">
-              Selecteer NOS Nieuws Categorie op TV:
+              Selecteer NOS Nieuws Categorie:
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
@@ -306,6 +306,33 @@ export const PickupControlScreen: React.FC = () => {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="space-y-3 pt-2 border-t border-slate-800">
+             <label className="text-xs font-bold text-slate-300 block">TV Indeling & Widgets</label>
+             <select 
+               value={newsConfig.layout}
+               onChange={e => handleUpdateConfig({ layout: e.target.value as any })}
+               className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs"
+             >
+               <option value="split_50">Split 50/50</option>
+               <option value="menu_focus">Menu Focus</option>
+               <option value="pickup_focus">Pickup Focus</option>
+             </select>
+
+             <div className="grid grid-cols-2 gap-1 pt-1">
+               {Object.entries(newsConfig.widgets).map(([key, value]) => (
+                 <div key={key} className="flex items-center justify-between bg-slate-950 px-2 py-1 rounded-lg border border-slate-800">
+                   <span className="text-[9px] text-slate-500 uppercase">{key}</span>
+                   <input 
+                     type="checkbox" 
+                     className="toggle toggle-xs" 
+                     checked={value as boolean} 
+                     onChange={e => handleUpdateConfig({ widgets: { ...newsConfig.widgets, [key]: e.target.checked } })} 
+                   />
+                 </div>
+               ))}
+             </div>
           </div>
 
           {/* Speed & Pause Controls */}
@@ -346,12 +373,12 @@ export const PickupControlScreen: React.FC = () => {
               {newsConfig.paused ? (
                 <>
                   <Play className="w-4 h-4 fill-current" />
-                  <span>▶️ Hervat Ticker Afspelen op TV</span>
+                  <span>▶️ Hervat Ticker</span>
                 </>
               ) : (
                 <>
                   <Pause className="w-4 h-4 fill-current" />
-                  <span>⏸️ Pauzeer Ticker Afspelen</span>
+                  <span>⏸️ Pauzeer Ticker</span>
                 </>
               )}
             </button>

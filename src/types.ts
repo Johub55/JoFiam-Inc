@@ -223,6 +223,19 @@ export interface CustomBrandingConfig {
   primaryColor: string;
   headerGradient: string;
   useCustomBranding: boolean;
+  tvAutoStart: boolean;
+  tvStartTime: string;
+  tvWidgets: {
+    prep: boolean;
+    ready: boolean;
+    menu: boolean;
+    ticker: boolean;
+    deal: boolean;
+    waitTime: boolean;
+    stats: boolean;
+  };
+  tvLayout: 'split_50' | 'menu_focus' | 'pickup_focus';
+  nosCategory: 'general' | 'sport' | 'tech' | 'binnenland';
 }
 
 export interface SupabaseConfig {

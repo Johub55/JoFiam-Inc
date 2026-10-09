@@ -246,8 +246,21 @@ export const PickupScreen: React.FC = () => {
     return (typeof window !== 'undefined' ? localStorage.getItem('wd_tv_layout_ratio') || 'split_50' : 'split_50') as any;
   });
 
-  // Live NOS News Headlines & Articles State
   const [nosCategory, setNosCategory] = useState<'general' | 'sport' | 'tech' | 'binnenland'>('general');
+
+  // Sync with NewsConfig (TV Layout/Widgets)
+  useEffect(() => {
+    const handleSync = () => {
+      const cfg = getNewsConfig();
+      if (cfg.widgets) setActiveWidgets(cfg.widgets);
+      if (cfg.layout) setLayoutRatio(cfg.layout);
+      setNosCategory(cfg.category);
+    };
+
+    handleSync();
+    window.addEventListener('wd_news_config_updated', handleSync);
+    return () => window.removeEventListener('wd_news_config_updated', handleSync);
+  }, []);
   const [showNewsModal, setShowNewsModal] = useState<boolean>(false);
   const [newsArticles, setNewsArticles] = useState<Array<{ title: string; link: string; pubDate?: string; description?: string }>>([
     { title: 'Kabinet presenteert nieuwe plannen voor verduurzaming van de horeca', link: 'https://nos.nl' },

@@ -418,7 +418,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenGithub }) => {
               posScreen === 'afhaal' ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30' : 'text-slate-300 hover:bg-slate-800'
             }`}
           >
-            <Tv className="w-4 h-4" />
+            <Tv className="w-3.5 h-3.5 opacity-60" />
             <span>Afhaalscherm TV</span>
           </button>
 

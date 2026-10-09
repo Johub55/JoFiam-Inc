@@ -18,6 +18,11 @@ import {
   LoyaltyCustomer 
 } from '../../services/loyalty';
 import { 
+  getNewsConfig, 
+  saveNewsConfig, 
+  NewsTickerConfig 
+} from '../../services/newsService';
+import { 
   BarChart3, 
   FileText, 
   Download, 
@@ -49,7 +54,8 @@ import {
   Laptop,
   Smartphone,
   Unlock,
-  Zap
+  Zap,
+  Tv
 } from 'lucide-react';
 
 const COMMON_POS_EMOJIS = ['🍔', '🍟', '🥤', '🍦', '🍩', '🧇', '🍕', '🌮', '🥩', '🍱', '☕', '🧁', '🍪', '🍎', '🥗', '🥘', '🥡', '🍴', '🍳', '🛑', '⚠️', '🚨', '🚫', '⛔', '🔧', '⚙️', '💻', '📢', '🔥', '✨', '💎', '👑', '✅', '❌'];
@@ -158,6 +164,14 @@ export const ManagerScreen: React.FC = () => {
   const [brandColor, setBrandColor] = useState<string>(customBranding?.primaryColor || '#2563eb');
   const [brandGradient, setBrandGradient] = useState<string>(customBranding?.headerGradient || 'from-blue-600 via-blue-500 to-cyan-400');
   const [useCustomBranding, setUseCustomBranding] = useState<boolean>(customBranding?.useCustomBranding ?? false);
+  const [tvAutoStart, setTvAutoStart] = useState<boolean>(customBranding?.tvAutoStart ?? false);
+  const [tvStartTime, setTvStartTime] = useState<string>(customBranding?.tvStartTime || '08:00');
+  const [newsConfig, setNewsConfig] = useState<NewsTickerConfig>(getNewsConfig());
+  const [tvLayout, setTvLayout] = useState<'split_50' | 'menu_focus' | 'pickup_focus'>(customBranding?.tvLayout || 'split_50');
+  const [tvWidgets, setTvWidgets] = useState(customBranding?.tvWidgets || {
+    prep: true, ready: true, menu: true, ticker: true, deal: true, waitTime: true, stats: true
+  });
+  const [nosCategory, setNosCategory] = useState<'general' | 'sport' | 'tech' | 'binnenland'>(customBranding?.nosCategory || 'general');
 
   // Sync local states if global orderStopConfig changes
   useEffect(() => {
@@ -180,6 +194,8 @@ export const ManagerScreen: React.FC = () => {
       setBrandColor(customBranding.primaryColor);
       setBrandGradient(customBranding.headerGradient);
       setUseCustomBranding(customBranding.useCustomBranding);
+      setTvAutoStart(customBranding.tvAutoStart);
+      setTvStartTime(customBranding.tvStartTime);
     }
   }, [customBranding]);
 
@@ -897,6 +913,72 @@ export const ManagerScreen: React.FC = () => {
                 <span>Huidige status: {pickupClosed ? 'TV toont gesloten mededeling.' : 'TV toont nummers "In Bereiding" en "Gereed".'}</span>
               </div>
             </div>
+
+            {/* TV & Nieuws Beheer */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow space-y-3">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <Tv className="w-4 h-4 text-cyan-400" />
+                <span>TV & Nieuws Beheer</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Beheer live de TV-indeling, actieve widgets en nieuwscategorie voor het afhaalscherm.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                 <div className="space-y-1">
+                   <label className="text-xs font-bold text-slate-400">Indeling</label>
+                   <select 
+                     value={newsConfig.layout || 'split_50'}
+                     onChange={e => setNewsConfig(prev => ({ ...prev, layout: e.target.value as any }))}
+                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white text-[11px]"
+                   >
+                     <option value="split_50">Split 50/50</option>
+                     <option value="menu_focus">Menu Focus</option>
+                     <option value="pickup_focus">Pickup Focus</option>
+                   </select>
+                 </div>
+                 <div className="space-y-1">
+                   <label className="text-xs font-bold text-slate-400">Nieuwscategorie</label>
+                   <select 
+                     value={newsConfig.category}
+                     onChange={e => setNewsConfig(prev => ({ ...prev, category: e.target.value as any }))}
+                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2 py-1.5 text-white text-[11px]"
+                   >
+                     <option value="general">Algemeen</option>
+                     <option value="sport">Sport</option>
+                     <option value="tech">Tech</option>
+                     <option value="binnenland">Binnenland</option>
+                   </select>
+                 </div>
+              </div>
+
+              <div className="space-y-1 pt-1">
+                <label className="text-xs font-bold text-slate-400">Actieve Widgets</label>
+                <div className="grid grid-cols-2 gap-1">
+                  {Object.entries(newsConfig.widgets).map(([key, value]) => (
+                    <div key={key} className="flex items-center justify-between bg-slate-950 px-2 py-1 rounded-lg">
+                      <span className="text-[9px] text-slate-500 uppercase">{key}</span>
+                      <input 
+                        type="checkbox" 
+                        className="toggle toggle-xs" 
+                        checked={value as boolean} 
+                        onChange={e => setNewsConfig(prev => ({ ...prev, widgets: { ...prev.widgets, [key]: e.target.checked } }))} 
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <button
+                onClick={() => {
+                  saveNewsConfig(newsConfig);
+                  showToast('TV & Nieuws instellingen live bijgewerkt!', 'success');
+                }}
+                className="w-full mt-2 py-2 rounded-lg font-bold bg-cyan-600 hover:bg-cyan-500 text-white text-xs"
+              >
+                Live Instellingen Toepassen
+              </button>
+            </div>
           </div>
 
           {/* Hardware & Pinapparaat Terminal Card */}
@@ -1472,16 +1554,16 @@ export const ManagerScreen: React.FC = () => {
       ) : activeTab === 'branding' ? (
         /* Branding & Layout Customization Tab */
         <div className="space-y-6">
-          <div className="bg-gradient-to-r from-blue-900/40 via-slate-900 to-slate-900 border border-blue-500/30 rounded-2xl p-5 shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+                <div className="w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
                   <Sparkles className="w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-white flex items-center gap-2">
+                  <h2 className="text-lg font-black text-white flex items-center gap-3">
                     <span>Branding & Layout Customization</span>
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 font-bold border border-blue-500/30">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-bold border border-slate-700">
                       Live Preview
                     </span>
                   </h2>
@@ -1498,7 +1580,12 @@ export const ManagerScreen: React.FC = () => {
                     logoEmoji: brandEmoji,
                     primaryColor: brandColor,
                     headerGradient: brandGradient,
-                    useCustomBranding: useCustomBranding
+                    useCustomBranding: useCustomBranding,
+                    tvAutoStart: tvAutoStart,
+                    tvStartTime: tvStartTime,
+                    tvLayout: tvLayout,
+                    tvWidgets: tvWidgets,
+                    nosCategory: nosCategory
                   });
                 }}
                 className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-black text-sm transition shadow-lg shadow-blue-600/25 flex items-center gap-2"
@@ -1580,6 +1667,70 @@ export const ManagerScreen: React.FC = () => {
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 text-white font-mono text-xs focus:border-blue-500 outline-none transition"
                       placeholder="from-blue-600 via-blue-500 to-cyan-400"
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-800 pt-4">
+                  <label className="text-sm font-black text-white">TV Instellingen</label>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs text-slate-400">TV Auto-start bij opstart</span>
+                    <input 
+                      type="checkbox" 
+                      className="toggle toggle-sm" 
+                      checked={tvAutoStart} 
+                      onChange={e => setTvAutoStart(e.target.checked)} 
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-xs text-slate-400">Starttijd (24u)</span>
+                    <input 
+                      type="time" 
+                      className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-white text-xs"
+                      value={tvStartTime} 
+                      onChange={e => setTvStartTime(e.target.value)} 
+                    />
+                  </div>
+                  
+                  <div className="pt-2">
+                     <label className="text-xs font-bold text-slate-400">Nieuwscategorie</label>
+                     <select 
+                       value={nosCategory}
+                       onChange={e => setNosCategory(e.target.value as any)}
+                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs mt-1"
+                     >
+                       <option value="general">Algemeen</option>
+                       <option value="sport">Sport</option>
+                       <option value="tech">Tech</option>
+                       <option value="binnenland">Binnenland</option>
+                     </select>
+                  </div>
+                  
+                  <div className="pt-2">
+                     <label className="text-xs font-bold text-slate-400">Indeling</label>
+                     <select 
+                       value={tvLayout}
+                       onChange={e => setTvLayout(e.target.value as any)}
+                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-xs mt-1"
+                     >
+                       <option value="split_50">Split 50/50</option>
+                       <option value="menu_focus">Menu Focus</option>
+                       <option value="pickup_focus">Pickup Focus</option>
+                     </select>
+                  </div>
+
+                  <div className="pt-2 space-y-1">
+                    <label className="text-xs font-bold text-slate-400">Actieve Widgets</label>
+                    {Object.entries(tvWidgets).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between">
+                        <span className="text-[10px] text-slate-500 uppercase">{key}</span>
+                        <input 
+                          type="checkbox" 
+                          className="toggle toggle-xs" 
+                          checked={value} 
+                          onChange={e => setTvWidgets(prev => ({ ...prev, [key]: e.target.checked }))} 
+                        />
+                      </div>
+                    ))}
                   </div>
                 </div>
 

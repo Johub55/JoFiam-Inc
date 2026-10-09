@@ -18,6 +18,16 @@ export interface NewsTickerConfig {
   isCustomAlertActive: boolean;
   paused: boolean;
   lastUpdated: number;
+  layout: 'split_50' | 'menu_focus' | 'pickup_focus';
+  widgets: {
+    prep: boolean;
+    ready: boolean;
+    menu: boolean;
+    ticker: boolean;
+    deal: boolean;
+    waitTime: boolean;
+    stats: boolean;
+  };
 }
 
 const CONFIG_KEY = 'wd_pickup_news_config_v2';
@@ -29,7 +39,11 @@ export const DEFAULT_NEWS_CONFIG: NewsTickerConfig = {
   customAlertText: '🚨 AFHAALBERICHT: Laat uw bestelbon zien bij het afhaalloket!',
   isCustomAlertActive: false,
   paused: false,
-  lastUpdated: Date.now()
+  lastUpdated: Date.now(),
+  layout: 'split_50',
+  widgets: {
+    prep: true, ready: true, menu: true, ticker: true, deal: true, waitTime: true, stats: true
+  }
 };
 
 export function getNewsConfig(): NewsTickerConfig {
