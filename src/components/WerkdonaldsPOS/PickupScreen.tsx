@@ -705,7 +705,7 @@ export const PickupScreen: React.FC = () => {
           <div className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto text-center space-y-8">
             {/* Blinking alarm warning light */}
             <div className="mx-auto w-20 h-20 rounded-full bg-rose-500/10 border-4 border-rose-500 text-rose-500 flex items-center justify-center text-3xl shadow-2xl animate-pulse ring-8 ring-rose-500/20">
-              ⚠️
+              {orderStopConfig?.icon || '⚠️'}
             </div>
 
             <div className="space-y-4">

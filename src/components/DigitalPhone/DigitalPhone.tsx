@@ -53,6 +53,8 @@ interface SMSMessage {
   text: string;
   timestamp: string;
   read: boolean;
+  priority?: 'normal' | 'urgent' | 'emergency';
+  action?: { label: string; event: string };
 }
 
 interface SMSContact {
@@ -684,6 +686,33 @@ export const DigitalPhone: React.FC = () => {
   const [smsInput, setSmsInput] = useState<string>('');
   const [showNewChatList, setShowNewChatList] = useState<boolean>(false);
   const [contacts, setContacts] = useState<SMSContact[]>([]);
+  const phoneChannel = useRef<any>(null);
+
+  useEffect(() => {
+    if (posClient) {
+      phoneChannel.current = posClient.channel('phone_messages');
+      phoneChannel.current
+        .on('broadcast', { event: 'new_message' }, ({ payload }) => {
+          // Handle incoming message
+          setContacts(prev => prev.map(c => {
+            if (c.phone === payload.contactPhone) {
+              return {
+                ...c,
+                messages: [...c.messages, payload.message],
+                unread: true
+              };
+            }
+            return c;
+          }));
+        })
+        .subscribe();
+    }
+    return () => {
+      if (phoneChannel.current) {
+        posClient?.removeChannel(phoneChannel.current);
+      }
+    };
+  }, [posClient]);
   const [showGtaModal, setShowGtaModal] = useState<boolean>(false);
 
   // Initialize Contacts list, loading purely from localStorage but excluding any leftover mock profiles
@@ -1036,18 +1065,21 @@ export const DigitalPhone: React.FC = () => {
     };
   }, [payClient, posClient, myId, activeContactId, isOpen, activeApp]);
 
-  const sendSms = (contactId: string, overrideText?: string) => {
+  const sendSms = (contactId: string, overrideText?: string, priority: 'normal' | 'urgent' | 'emergency' = 'normal', action?: { label: string; event: string }) => {
     const text = overrideText || smsInput.trim();
     if (!text) return;
     playClick();
 
-    if (text.trim().toLowerCase() === 'gta') {
+    if (text.toLowerCase() === 'gta') {
       setShowGtaModal(true);
     }
 
     if (!overrideText) {
       setSmsInput('');
     }
+
+    const contact = contacts.find(c => c.id === contactId);
+    if (!contact) return;
 
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -1056,8 +1088,28 @@ export const DigitalPhone: React.FC = () => {
       sender: 'me',
       text,
       timestamp: timeStr,
-      read: true
+      read: true,
+      priority,
+      action
     };
+
+    setContacts(prev => prev.map(c => {
+      if (c.id === contactId) {
+        return {
+          ...c,
+          messages: [...c.messages, myMsg]
+        };
+      }
+      return c;
+    }));
+
+    if (phoneChannel.current) {
+      phoneChannel.current.send({
+        type: 'broadcast',
+        event: 'new_message',
+        payload: { contactPhone: contact.phone, message: myMsg }
+      });
+    }
 
     let updated = contacts.map(c => {
       if (c.id === contactId) {
